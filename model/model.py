@@ -1,0 +1,160 @@
+import torch
+import torch.nn as nn
+from evaluate import *
+
+class Time2Vec(nn.Module):
+    """Time2Vec embedding module combining linear and periodic components."""
+    
+    def __init__(self, d_model):
+        super().__init__()
+        self.linear = nn.Linear(1, 1)
+        self.periodic = nn.Linear(1, d_model - 1)
+
+    def forward(self, t):
+        """Args: t (B, T, 1), Returns: (B, T, D)"""
+        v_linear = self.linear(t)
+        v_periodic = torch.sin(self.periodic(t))
+        return torch.cat([v_linear, v_periodic], dim=-1)
+
+class NormaLight(nn.Module):
+    """NORMA light model for conditional prediction."""
+    def __init__(self, d_model, nhead, num_layers, num_lab_codes):
+        super().__init__()
+        self.value_emb = nn.Linear(1, d_model)
+        self.state_emb = nn.Embedding(2, d_model)
+        self.sex_emb = nn.Embedding(2, d_model)
+        self.lab_emb = nn.Embedding(num_lab_codes, d_model)
+        self.time_emb = Time2Vec(d_model)
+        layer = nn.TransformerEncoderLayer(d_model, nhead, batch_first=True)
+        self.decoder = nn.TransformerEncoder(layer, num_layers)
+        self.mean_head = nn.Linear(d_model, 1)  # Predicts mean
+        self.logvar_head = nn.Linear(d_model, 1)  # Predicts log variance
+
+    def _causal_mask(self, L, device):
+        m = torch.triu(torch.ones(L, L, device=device), 1)
+        return m.masked_fill(m == 1, float("-inf"))
+
+    def forward(
+        self,
+        x_h,      # (B,T,1)
+        s_h,      # (B,T) int {0,1}
+        t_h,      # (B,T,1)
+        sex,         # (B,) int {0,1}
+        lab,         # (B,) int
+        s_next,      # (B,) int {0,1}
+        t_next,      # (B,1)
+        pad_mask=None # (B,T) True for pad
+    ):
+        B, T = x_h.shape[:2]
+        sex_e = self.sex_emb(sex.squeeze(-1)).unsqueeze(1)  # (B, 1, d_model)
+        lab_e = self.lab_emb(lab.squeeze(-1)).unsqueeze(1)  # (B, 1, d_model)
+
+        hist = (
+            self.value_emb(x_h)
+            + self.state_emb(s_h)
+            + self.time_emb(t_h)
+            + sex_e.expand(B, T, -1)
+            + lab_e.expand(B, T, -1)
+        )
+
+        q = (
+            self.state_emb(s_next.squeeze(-1))
+            + self.time_emb(t_next)
+            + sex_e.squeeze(1)
+            + lab_e.squeeze(1)
+        ).unsqueeze(1) 
+
+        tokens = torch.cat([hist, q], dim=1)  
+        attn_mask = self._causal_mask(T + 1, tokens.device)
+
+        if pad_mask is not None:
+            pad_mask_ext = torch.cat([pad_mask, torch.zeros(B, 1, dtype=torch.bool, device=pad_mask.device)], dim=1)
+        else:
+            pad_mask_ext = None
+
+        H = self.decoder(tokens, mask=attn_mask, src_key_padding_mask=pad_mask_ext)
+        
+        # Extract features from the last token (the query token)
+        query_features = H[:, -1]  # (B, d_model)
+        
+        # Predict mean and log variance
+        mu = self.mean_head(query_features)  # (B, 1)
+        log_var = self.logvar_head(query_features)  # (B, 1)
+        
+        return mu, log_var
+    
+class NORMAEncoder(nn.Module):
+    """Shared base logic for NORMA transformer models."""
+    
+    def __init__(self, d_model, nhead, num_layers, num_lab_codes):
+        super().__init__()
+        self.value_emb = nn.Linear(1, d_model)
+        self.sex_emb = nn.Embedding(2, d_model)
+        self.lab_emb = nn.Embedding(num_lab_codes, d_model)
+        self.time_emb = Time2Vec(d_model)
+
+        encoder_layer = nn.TransformerEncoderLayer(d_model, nhead, batch_first=True)
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers)
+
+    def _causal_mask(self, seq_len, device):
+        """Generate causal attention mask."""
+        mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1)
+        return mask.masked_fill(mask == 1, float('-inf'))
+
+    def encode(self, x, t, sex, lab, pad_mask=None, causal=True):
+        """
+        Encode sequence of measurements.
+        Args: x(B,T,1), t(B,T,1), sex(B,1), lab(B,1)
+        Returns: (B, d_model)
+        """
+        B, T = x.shape[:2]
+        sex_emb = self.sex_emb(sex).squeeze(1).unsqueeze(1).expand(B, T, -1)
+        lab_emb = self.lab_emb(lab).squeeze(1).unsqueeze(1).expand(B, T, -1)
+        enc_input = self.value_emb(x) + self.time_emb(t) + sex_emb + lab_emb
+        
+        attn_mask = self._causal_mask(T, x.device) if causal else None
+        H = self.encoder(enc_input, mask=attn_mask, src_key_padding_mask=pad_mask)
+        if pad_mask is None:
+            return H[:, -1]
+        idx = (~pad_mask).sum(dim=1).clamp(min=1) - 1  # (B,)
+        batch_indices = torch.arange(B, device=H.device)  # Ensure indices are on same device
+        return H[batch_indices, idx] # last non-padded timestep instead of [:, -1]
+        #return H[:, -1]  # Last timestep
+
+class NORMADecoder(NORMAEncoder):
+    """NORMA decoder for conditional prediction."""
+    
+    def __init__(self, d_model=128, nhead=4, num_layers=4, num_lab_codes=2):
+        super().__init__(d_model, nhead, num_layers, num_lab_codes)
+
+        self.q_time_emb = Time2Vec(d_model)
+        self.q_cond_emb = nn.Embedding(2, d_model)
+        self.q_proj = nn.Linear(d_model * 2, d_model)
+
+        self.output_head = nn.Sequential(
+            nn.Linear(d_model, d_model),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(d_model, 2)  # mu, log_var
+        )
+
+    def _process_query(self, q_t, q_c):
+        """Process query time and condition into embedding."""
+        t_emb = self.q_time_emb(q_t).squeeze(1)
+        c_emb = self.q_cond_emb(q_c)
+        return self.q_proj(torch.cat([t_emb, c_emb], dim=-1))
+
+    def forward(self, x, t, sex, lab, q_t, q_c, pad_mask=None, causal=True):
+        """l
+        Forward pass for conditional prediction.
+        Returns: (mu, log_var)
+        """
+        # Encode sequence and process query
+        Z = self.encode(x, t, sex, lab, pad_mask, causal)
+        q = self._process_query(q_t, q_c)
+        
+        # Combine and predict   
+        combined = Z + q
+        output = self.output_head(combined)
+        
+        return output[:, 0], output[:, 1]  # mu, log_var
