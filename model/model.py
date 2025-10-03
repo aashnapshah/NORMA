@@ -79,7 +79,7 @@ class NormaLight(nn.Module):
         
         # Predict mean and log variance
         mu = self.mean_head(query_features)  # (B, 1)
-        log_var = self.logvar_head(query_features)  # (B, 1)
+        log_var = torch.clamp(self.logvar_head(query_features), min=-10)  # (B, 1)
         
         return mu, log_var
     
@@ -157,4 +157,5 @@ class NORMADecoder(NORMAEncoder):
         combined = Z + q
         output = self.output_head(combined)
         
-        return output[:, 0], output[:, 1]  # mu, log_var
+        # Clamp log variance to ensure positive variance
+        return output[:, 0], torch.clamp(output[:, 1], min=-10)  # mu, log_var

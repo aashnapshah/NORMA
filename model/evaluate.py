@@ -49,7 +49,6 @@ def get_predictions(model, loader, device, model_type='NormaLight'):
                 s_next_val = int(s_next[i].item() if hasattr(s_next[i], 'item') else s_next[i])
                 mu_val = float(mu[i].item() if hasattr(mu[i], 'item') else mu[i])
                 log_var_val = float(log_var[i].item() if hasattr(log_var[i], 'item') else log_var[i])
-                
                 predictions.append({
                     'subject_id': subject_ids[i],
                     'cid': cid_val,
@@ -59,7 +58,6 @@ def get_predictions(model, loader, device, model_type='NormaLight'):
                     's_next': s_next_val,
                     'mu': mu_val,
                     'log_var': log_var_val,
-                    'var': np.exp(log_var_val),
                 })
     
     return pd.DataFrame(predictions)
@@ -69,8 +67,8 @@ def get_metrics(predictions_df):
     metrics_list = []
     
     # Overall metrics
-    y_true = predictions_df['target'].values
-    y_pred = predictions_df['predicted_mu'].values
+    y_true = predictions_df['x_next'].values  # Fixed: use correct column name
+    y_pred = predictions_df['mu'].values        # Fixed: use correct column name
     
     overall_metrics = {
         'overall_mae': mean_absolute_error(y_true, y_pred),

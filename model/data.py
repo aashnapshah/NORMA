@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import WeightedRandomSampler
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 
@@ -69,7 +70,6 @@ def collate_fn(batch):
     for i, l in enumerate(lengths):
         pad_mask[i, :l] = False
 
-    # Return as dictionary for cleaner unpacking
     return {
         'x_h': x_h,
         't_h': t_h, 
@@ -85,27 +85,37 @@ def collate_fn(batch):
         'subject_ids': list(subject_id)
     }
 
-def create_dataloaders(df, batch_size=16, random_state=42):
-    """Create train/val/test dataloaders with stratified splitting."""
+def load_and_split_data(data_path='../SETPOINT/data/processed/lab_measurements.csv', num_patients=None, min_points=3, random_state=42):
+    print("Loading data...")
+    df = load_data(data_path, num_patients=num_patients, min_points=min_points)
+    drop = ['LDH', 'TGL', 'DBIL'] 
+    df = df.query("test_name not in @drop")
+
     sequences = create_sequences(df)
-    
+
     stratify_labels = get_stratify_labels(sequences)
     train_val_seq, test_seq = train_test_split(
         sequences, test_size=0.2, stratify=stratify_labels, random_state=random_state
     )
-    
+
     stratify_labels = get_stratify_labels(train_val_seq)
     train_seq, val_seq = train_test_split(
         train_val_seq, test_size=0.125, stratify=stratify_labels, random_state=random_state
     )
     
-    print(f"Split sizes - Train: {len(train_seq)}, Val: {len(val_seq)}, Test: {len(test_seq)}")
+    return train_seq, val_seq, test_seq
 
-    # Create DataLoaders
+
+def create_dataloaders(train_seq, val_seq, test_seq, batch_size=16, random_state=42):
+    """Create train/val/test dataloaders."""
+
+    print(f"Split sizes - Train: {len(train_seq)}, Val: {len(val_seq)}, Test: {len(test_seq)}")
+    print('Using weighted sampler for training')
+
     train_loader = DataLoader(
         TimeSeriesDataset(train_seq),
         batch_size=batch_size,
-        shuffle=True,
+        sampler=create_weighted_sampler(train_seq),
         collate_fn=collate_fn,
         num_workers=4,
         pin_memory=True,

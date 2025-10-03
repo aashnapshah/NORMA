@@ -3,6 +3,16 @@ import torch
 import torch.nn as nn
 from torch.distributions import Normal
 
+class MSELoss(nn.Module):
+    """Mean Squared Error Loss."""
+    
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, mu, y_true):
+        """Compute Mean Squared Error Loss."""
+        return nn.MSELoss()(mu, y_true)
+    
 class GaussianNLLLoss(nn.Module):
     """Gaussian Negative Log Likelihood Loss."""
     
