@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from evaluate import *
+import torch.nn.functional as F
 
 class Time2Vec(nn.Module):
     """Time2Vec embedding module combining linear and periodic components."""
@@ -29,7 +30,7 @@ class NormaLight(nn.Module):
         self.decoder = nn.TransformerEncoder(layer, num_layers)
         self.mean_head = nn.Linear(d_model, 1)  # Predicts mean
         self.logvar_head = nn.Linear(d_model, 1)  # Predicts log variance
-
+        
     def _causal_mask(self, L, device):
         m = torch.triu(torch.ones(L, L, device=device), 1)
         return m.masked_fill(m == 1, float("-inf"))
@@ -79,7 +80,103 @@ class NormaLight(nn.Module):
         
         # Predict mean and log variance
         mu = self.mean_head(query_features)  # (B, 1)
-        log_var = torch.clamp(self.logvar_head(query_features), min=-10)  # (B, 1)
+        log_var = self.logvar_head(query_features)  # (B, 1)    
+        #log_var = torch.clamp(log_var, min=-10)  # (B, 1)
+        eps = 1e-6
+        mu = F.softplus(mu) + eps                  # strictly positive mean
+        log_var = torch.log(F.softplus(log_var) + eps)  # log of positive variance
+        return mu, log_var
+
+class NormaLightDecoder(nn.Module):
+    """NORMA light model with decoder-only architecture for conditional prediction."""
+    
+    def __init__(self, d_model, nhead, num_layers, num_lab_codes):
+        super().__init__()
+        self.value_emb = nn.Linear(1, d_model)
+        self.state_emb = nn.Embedding(2, d_model)
+        self.sex_emb = nn.Embedding(2, d_model)
+        self.lab_emb = nn.Embedding(num_lab_codes, d_model)
+        self.time_emb = Time2Vec(d_model)
+        
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model, nhead, batch_first=True
+        )
+        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers)
+        
+        # Single output head for both mean and log variance
+        self.output_head = nn.Sequential(
+            nn.Linear(d_model, 128),
+            nn.ReLU(),
+            nn.Linear(128, 2)  # Outputs [mean, log_var]
+        )
+
+    def _causal_mask(self, L, device):
+        """Generate causal attention mask for decoder."""
+        mask = torch.triu(torch.ones(L, L, device=device), diagonal=1)
+        return mask.masked_fill(mask == 1, float("-inf"))
+
+    def forward(
+        self,
+        x_h,      # (B,T,1) - Historical values
+        s_h,      # (B,T) - Historical states
+        t_h,      # (B,T,1) - Historical times
+        sex,      # (B,) - Patient sex
+        lab,      # (B,) - Lab code
+        s_next,   # (B,) - Next state (condition)
+        t_next,   # (B,1) - Next time (condition)
+        pad_mask=None  # (B,T) - Padding mask
+    ):
+        B, T = x_h.shape[:2]
+        
+        # Embed patient-level features
+        sex_e = self.sex_emb(sex.squeeze(-1)).unsqueeze(1)  # (B, 1, d_model)
+        lab_e = self.lab_emb(lab.squeeze(-1)).unsqueeze(1)  # (B, 1, d_model)
+
+        # Create historical sequence embeddings
+        hist_emb = (
+            self.value_emb(x_h)
+            + self.state_emb(s_h)
+            + self.time_emb(t_h)
+            + sex_e.expand(B, T, -1)
+            + lab_e.expand(B, T, -1)
+        )
+
+        # Create query token embedding (what we want to predict)
+        query_emb = (
+            self.state_emb(s_next.squeeze(-1))
+            + self.time_emb(t_next)
+            + sex_e.squeeze(1)
+            + lab_e.squeeze(1)
+        ).unsqueeze(1)  # (B, 1, d_model)
+
+        # For decoder-only: query is the target, history is the memory
+        # The decoder will attend to historical context while generating the query
+        memory = hist_emb  # (B, T, d_model) - Historical context
+        tgt = query_emb    # (B, 1, d_model) - What we're predicting
+
+        # Create causal mask for target sequence (only 1 token, so no mask needed)
+        tgt_mask = None  # Single token doesn't need causal masking
+        
+        # Create padding mask for memory (historical sequence)
+        memory_key_padding_mask = pad_mask
+
+        # Decoder forward pass
+        # tgt: what we're generating (query token)
+        # memory: what we're attending to (historical sequence)
+        decoder_output = self.decoder(
+            tgt=tgt,
+            memory=memory,
+            tgt_mask=tgt_mask,
+            memory_key_padding_mask=memory_key_padding_mask
+        )  # (B, 1, d_model)
+
+        # Extract features from the generated token
+        query_features = decoder_output.squeeze(1)  # (B, d_model)
+        
+        # Predict mean and log variance
+        output = self.output_head(query_features)  # (B, 2)
+        mu = output[:, 0:1]  # (B, 1) - mean
+        log_var = output[:, 1:2]  # (B, 1) - log variance
         
         return mu, log_var
     

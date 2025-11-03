@@ -4,6 +4,7 @@ import time
 import json
 import uuid
 import warnings
+import subprocess
 from pathlib import Path
 
 import torch
@@ -14,16 +15,21 @@ from tqdm import tqdm
 import wandb
 import pandas as pd
 from sklearn.metrics import r2_score
+import torch.nn.functional as F
 
-from model import NORMADecoder, NormaLight
+from model import NORMADecoder, NormaLight, NormaLightDecoder
 from loss import *
-from utils import TEST_VOCAB
-from data import create_dataloaders, load_data
+from utils import TEST_VOCAB, sample_by_key
+from data import create_dataloaders, load_and_split_data
 from evaluate import get_predictions, get_metrics, save_predictions_and_metrics
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings('ignore', category=pd.errors.SettingWithCopyWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
+
+# Test vocabulary
+
+print(TEST_VOCAB)
 
 def create_model(model_type, d_model, nhead, num_layers, num_lab_codes):
     """Create model based on type."""
@@ -31,6 +37,8 @@ def create_model(model_type, d_model, nhead, num_layers, num_lab_codes):
         return NormaLight(d_model=d_model, nhead=nhead, num_layers=num_layers, num_lab_codes=num_lab_codes)
     elif model_type == 'NORMADecoder':
         return NORMADecoder(d_model=d_model, nhead=nhead, num_layers=num_layers, num_lab_codes=num_lab_codes)
+    elif model_type == 'NormaLightDecoder':
+        return NormaLightDecoder(d_model=d_model, nhead=nhead, num_layers=num_layers, num_lab_codes=num_lab_codes)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
@@ -95,9 +103,18 @@ class NORMATrainer:
         # Setup checkpointing
         self.log_dir = Path(self.args.log_dir) / self.run_id
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Enhanced hyperparameters file with run info
+        enhanced_config = vars(self.args).copy()
+        enhanced_config.update({
+            'run_id': self.run_id,
+            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'description': self.args.description
+        })
+        
         config_path = self.log_dir / 'hyperparameters.json'
         with open(config_path, 'w') as f:
-            json.dump(vars(self.args), f, indent=2)
+            json.dump(enhanced_config, f, indent=2)
         
         # Setup early stopping
         self.early_stopping = EarlyStopping(patience=self.args.patience)
@@ -186,6 +203,18 @@ class NORMATrainer:
         
         # Handle different loss function interfaces
         y_true = batch['x_next']  # Target values
+        
+        y_np = y_true.cpu().detach().numpy()
+        mu_np = mu.cpu().detach().numpy()
+
+        if np.isnan(y_np).any() or np.isnan(mu_np).any():
+            print("NaN detected in inputs to r2_score!")
+            print("NaN in y_true:", np.isnan(y_np).sum())
+            print("NaN in mu:", np.isnan(mu_np).sum())
+            print("y_true sample:", y_np[:5])
+            print("mu sample:", mu_np[:5])
+            raise ValueError("NaN found before computing R2.")
+
         r2 = r2_score(y_true.cpu().detach().numpy(), mu.cpu().detach().numpy())
         
         if isinstance(self.criterion, NORMALoss):
@@ -297,12 +326,17 @@ class NORMATrainer:
         
     def train(self):
         print("Loading data...")
-        train_seq, val_seq, test_seq = load_and_split_data(self.args.data_path, num_patients=self.args.num_patients, min_points=self.args.min_points)
+        train_seq, val_seq, test_seq = load_and_split_data(self.args.sequences_path) #, num_patients=100, min_points=3)
+        # train_seq, val_seq, test_seq = load_and_split_data(self.args.data_path) #, num_patients=self.args.num_patients, min_points=self.args.min_points)
+        if self.args.num_patients is not None:
+            train_seq = sample_by_key(train_seq, self.args.num_patients, key="cid", seed=self.args.seed, replace=False)
+            val_seq = sample_by_key(val_seq, self.args.num_patients, key="cid", seed=self.args.seed, replace=False)
+            test_seq = sample_by_key(test_seq, self.args.num_patients, key="cid", seed=self.args.seed, replace=False)
         
         train_loader, val_loader, test_loader = create_dataloaders(
-            df, batch_size=self.args.batch_size, random_state=self.args.seed
+            train_seq, val_seq, test_seq, batch_size=self.args.batch_size, random_state=self.args.seed
         )
-        num_lab_codes = len(TEST_VOCAB)  # Use TEST_VOCAB size instead of unique test names
+        num_lab_codes = len(TEST_VOCAB)  
         
         self._setup_model(num_lab_codes)
         
@@ -365,8 +399,6 @@ class NORMATrainer:
             print("-" * 60)
             
         print(f"\nTraining completed! Best validation loss: {best_val_loss:.4f}")
-        
-        # Run evaluation on all splits
         print("\n" + "="*60)
         print("RUNNING EVALUATION")
         print("="*60)
@@ -379,10 +411,6 @@ class NORMATrainer:
         """Evaluate model on all splits and save results."""
         print("Generating predictions and computing metrics...")
         
-        # Create predictions directory
-        predictions_dir = f'predictions/{self.run_id}'
-        os.makedirs(predictions_dir, exist_ok=True)
-    
         all_predictions = []
                 
         # Evaluate each split
@@ -397,12 +425,9 @@ class NORMATrainer:
         
         # Save ALL predictions in a single file
         combined_predictions = pd.concat(all_predictions, ignore_index=True)
-        predictions_file = f'{predictions_dir}/predictions_{self.run_id}.csv'
+        predictions_file = f'logs/{self.run_id}/predictions.csv'
         combined_predictions.to_csv(predictions_file, index=False)
         print(f"\nAll predictions saved to: {predictions_file}")
-        
-        print(f"\nEvaluation results summary:")
-        print(f"- Combined predictions: {predictions_file}")
             
 def parse_args():
     """Parse command line arguments."""
@@ -410,12 +435,13 @@ def parse_args():
     
     # Data arguments
     parser.add_argument('--data_path', type=str, default="../../SETPOINT/data/processed/lab_measurements.csv")
+    parser.add_argument('--sequences_path', type=str, default='../data/processed/sampled_sequences.pkl')
     parser.add_argument('--min_points', type=int, default=3)
-    parser.add_argument('--num_patients', type=int, default=None)
+    parser.add_argument('--num_patients', type=int, default=5000)
     
     # Model arguments
     parser.add_argument('--model_type', type=str, default='NormaLight',
-                        choices=['NormaLight', 'NORMADecoder'])
+                        choices=['NormaLight', 'NORMADecoder', 'NormaLightDecoder'])
     parser.add_argument('--loss_type', type=str, default='GaussianNLLLoss',
                         choices=['NORMALoss', 'GaussianNLLLoss', 'MSELoss'])
     parser.add_argument('--d_model', type=int, default=64)
@@ -424,8 +450,8 @@ def parse_args():
     
     # Training arguments
     parser.add_argument('--epochs', type=int, default=50)
-    parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--learning_rate', type=float, default=1e-3)
+    parser.add_argument('--batch_size', type=int, default=16)
+    parser.add_argument('--learning_rate', type=float, default=1e-4)
     parser.add_argument('--weight_decay', type=float, default=1e-4)
     parser.add_argument('--grad_clip', type=float, default=1.0)
     parser.add_argument('--lambda_align', type=float, default=0.01)
@@ -436,6 +462,8 @@ def parse_args():
     parser.add_argument('--resume', action='store_true')
     parser.add_argument('--wandb_project', type=str, default='norma-training')
     parser.add_argument('--wandb_name', type=str, default=None)
+    parser.add_argument('--description', type=str, default='', 
+                        help='Description of changes made for this experiment')
     
     # Reproducibility
     parser.add_argument('--seed', type=int, default=42)
