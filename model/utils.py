@@ -1,122 +1,147 @@
+import torch
+import wandb
 import numpy as np
-import pandas as pd
-import random
-from collections import defaultdict
-import sys
+import os
+from pathlib import Path
+import json
+import time
+import uuid
+from model import NORMADecoder, NormaLight, NormaLightDecoder
+from loss import NORMALoss, GaussianNLLLoss, MSELoss
+from data import TEST_VOCAB
 import warnings
-from torch.utils.data import WeightedRandomSampler
+warnings.filterwarnings('ignore')
 
-# Suppress pandas warnings
-warnings.filterwarnings('ignore', category=pd.errors.SettingWithCopyWarning)
-
-sys.path.append('../../SETPOINT/')
-from process.config import REFERENCE_INTERVALS
-
-# Test vocabulary
-TEST_VOCAB = {test_name: i for i, test_name in enumerate(REFERENCE_INTERVALS.keys())}
-INVERSE_TEST_VOCAB = {v: k for k, v in TEST_VOCAB.items()}
-
-def sample_by_key(seq_list, n, key="cid", seed=0, replace=False):
-    rng = random.Random(seed)
-    buckets = defaultdict(list)
-    for s in seq_list:
-        buckets[s[key]].append(s)
-    out = []
-    for cid, items in buckets.items():
-        k = n if replace else min(n, len(items))
-        if replace and len(items) > 0:
-            out.extend(rng.choices(items, k=k))
-        else:
-            out.extend(rng.sample(items, k))
-    return out
-
-def is_normal(row, code_col='test_name', pred_col='pred_mean', mu_col=None, var_col=None):
-    if mu_col is None and var_col is None:
-        """Check if measurement is within normal range."""
-        sex = 'F' if row['sex'] == 1 else 'M'
-        low, high, _ = REFERENCE_INTERVALS[row[code_col]][sex]
-    else:
-        low = row[mu_col] - 2 * np.sqrt(row[var_col])
-        high = row[mu_col] + 2 * np.sqrt(row[var_col])
-        row['range'] = f"{low} - {high}"
-    return low < row[pred_col] < high
-
-def get_ref_stats(test_name, sex):
-    """Get reference mean and variance."""
-    sex_key = 'F' if sex == 1 else 'M'
-    low, high, _ = REFERENCE_INTERVALS[test_name][sex_key]
-    return (low + high) / 2, ((high - low) / 4) ** 2
-
-def get_stratify_labels(sequences):
-    stratify_labels = []
-    for i, seq in enumerate(sequences):
-        cid = seq["cid"] 
-        #s_next = seq["s"][-1]
-        source = seq["source"]
-        stratify_labels.append(f"{cid}_{source}")
-    return stratify_labels
-
-def load_data(filename, num_patients=None, min_points=3):
-    """Load and filter data."""
-    df = pd.read_csv(filename)
-    
-    counts = df.groupby(['subject_id', 'test_name']).size()
-    valid = counts[counts >= min_points].reset_index()
-    df = df.merge(valid, on=['subject_id', 'test_name']).drop(columns=[0])
-    
-    if num_patients:
-        patients = df['subject_id'].unique()
-        sample_size = min(num_patients, len(patients))
-        sampled = np.random.choice(patients, sample_size, replace=False)
-        df = df[df['subject_id'].isin(sampled)]
-    
-    return df
-
-def create_sequences(df, min_context=2):
-    """Create training sequences."""
-    df['test_name'] = df['test_name'].fillna('NA')
-    df['condition'] = df.apply(lambda row: is_normal(row, pred_col='numeric_value'), axis=1)
-    sequences = []
-    
-    for (source, pid, test_name), group in df.groupby(['source', 'subject_id', 'test_name']):
-        if len(group) < min_context + 1:
-            continue
-        source = group['source'].iloc[0]
-        group = group.sort_values('time')
-        times = pd.to_datetime(group['time'], errors='coerce')
-        t = ((times - times.iloc[0]).dt.total_seconds() / 86400).astype(np.float32).values
-        x = group['numeric_value'].astype(np.float32).values
-        s = group['condition'].astype(np.int32).values
+def set_seed(seed: int = 42):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
         
-        # replace F with 1 and M with 0
-        sex = 1 if group['sex'].iloc[0] == 'F' else 0
-        
-        cid = TEST_VOCAB[test_name]
-        ref_mu, ref_var = get_ref_stats(test_name, sex)
-        
-        sequences.append({
-            "source": source,
-            "x": x,  # Historical measurements (all but last)
-            "t": t,  # Historical timestamps
-            "s": s,  # Historical condition states
-            "sex": sex,        # Gender
-            "cid": cid,        # Lab code ID
-            "ref_mu": np.array([ref_mu], dtype=np.float32),
-            "ref_var": np.array([ref_var], dtype=np.float32),
-            "subject_id": pid,
-        })
-    
-    return sequences
+def setup_logging(args, run_id):
+    wandb.init(
+        project='NORMA',
+        name=run_id, 
+        config=vars(args), 
+        resume = True
+    )
+    log_dir = Path(args.log_dir) / run_id
+    log_dir.mkdir(parents=True, exist_ok=True)
+    hyperparams = {
+        **vars(args),
+        'run_id': run_id,
+        'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+    }
+    hyperparams_path = Path(args.log_dir) / 'hyperparameters.json'
+    with open(hyperparams_path, 'w') as f:
+        json.dump(hyperparams, f, indent=2)
+    pass 
 
-def create_weighted_sampler(sequences):
-    cid_counts = {}
-    for seq in sequences:
-        cid = seq['cid']
-        cid_counts[cid] = cid_counts.get(cid, 0) + 1
+def save_checkpoint(model, optimizer, scheduler, args, run_id, epoch, metrics, is_best=False):
+        checkpoint = {
+            'epoch': epoch,
+            'run_id': run_id,
+            'hyperparameters': vars(args),
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(),
+            'metrics': metrics
+        }
+        torch.save(checkpoint, Path(args.log_dir)/ run_id / 'checkpoint_latest.pth')
+        if is_best:
+            torch.save(checkpoint, Path(args.log_dir)/ run_id / 'checkpoint_best.pth')
+
+def load_checkpoint(args, best=False, device='cpu'):
+    run_dir = Path(args.log_dir) / args.run_id
+    latest_path = run_dir / 'checkpoint_latest.pth'
+    best_path = run_dir / 'checkpoint_best.pth'
+    ckp_path = best_path if best else latest_path
     
-    weights = []
-    for seq in sequences:
-        cid = seq['cid']
-        weights.append(1.0 / cid_counts[cid])
+    checkpoint = torch.load(ckp_path, map_location=device)
+    hparams = checkpoint['hyperparameters']
+    
+    print(f"Loading Model with Run ID: {args.run_id} ({ckp_path})")
+    print(f"Epoch: {checkpoint['epoch']}, Validation Loss: {checkpoint['metrics']['val']['loss']:.4f}")
+    print("=" * 90)
+    return checkpoint, hparams
+    
+# def load_checkpoint(args, best=False, device='cpu'):
+#     run_dir = Path(args.log_dir) / args.run_id
+#     latest_path = run_dir / 'checkpoint_latest.pth'
+#     best_path = run_dir / 'checkpoint_best.pth'
+#     ckp_path = best_path if best else latest_path
+
+#     checkpoint = torch.load(ckp_path, map_location=device)
+#     model = create_model(args, len(TEST_VOCAB)).to(device)
+#     model.load_state_dict(checkpoint['model_state_dict'])
+#     optimizer = torch.optim.AdamW(model.parameters(), lr=checkpoint['hyperparameters']['lr'], weight_decay=checkpoint['hyperparameters']['weight_decay'])
+#     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
+#     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+#     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+#     epoch = checkpoint.get('epoch', -1)
+#     metrics = checkpoint.get('metrics', {})
+#     best_val_loss = metrics.get('val', {}).get('loss', float('inf'))
+    
+    # return model, optimizer, scheduler, epoch, metrics, best_val_loss
+
+def to_device_batch(batch, device):
+    """Move tensors to device and fix dtype for embedding indices if present."""
+    batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
+    for key in ('sex', 'cid', 's_next', 's_h'):
+        if key in batch and isinstance(batch[key], torch.Tensor):
+            batch[key] = batch[key].long()
+    return batch
+
+def create_model(args, num_lab_codes):
+    if args.model == 'NormaLight':
+        return NormaLight(d_model=args.d_model, nhead=args.nhead, num_layers=args.nlayers, num_lab_codes=num_lab_codes)
+    if args.model == 'NORMADecoder':
+        return NORMADecoder(d_model=args.d_model, nhead=args.nhead, num_layers=args.nlayers, num_lab_codes=num_lab_codes)
+    if args.model == 'NormaLightDecoder':
+        return NormaLightDecoder(d_model=args.d_model, nhead=args.nhead, num_layers=args.nlayers, num_lab_codes=num_lab_codes)
+    raise ValueError(f"Unknown model type: {args.model}")
         
-    return WeightedRandomSampler(weights, len(weights))
+def initialize_weights_small(module):
+    """Initialize weights to small values: Linear/Embedding ~ N(0, 0.02), biases zero, LN to 1/0."""
+    if isinstance(module, torch.nn.Linear):
+        torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+        if module.bias is not None:
+            torch.nn.init.zeros_(module.bias)
+    elif isinstance(module, torch.nn.Embedding):
+        torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+    elif isinstance(module, torch.nn.LayerNorm):
+        if module.weight is not None:
+            torch.nn.init.ones_(module.weight)
+        if module.bias is not None:
+            torch.nn.init.zeros_(module.bias)
+            
+def create_loss(loss, lambda_align=None):
+    if loss == 'NORMALoss':
+        return NORMALoss(lambda_align=lambda_align)
+    if loss == 'GaussianNLLLoss':
+        return GaussianNLLLoss()
+    if loss == 'MSELoss':
+        return MSELoss()
+    raise ValueError(f"Unknown loss type: {loss}")
+
+def compute_loss(mu, log_var, y_true, criterion, extra: dict = None):
+    if isinstance(criterion, NORMALoss):
+        if extra is None or not all(k in extra for k in ('s_next', 'ref_mu', 'ref_var')):
+            raise ValueError('NORMALoss requires extra keys: s_next, ref_mu, ref_var')
+        return criterion(mu, log_var, y_true, extra['s_next'], extra['ref_mu'], torch.sqrt(extra['ref_var']))
+    if isinstance(criterion, GaussianNLLLoss):
+        return criterion(mu, log_var, y_true)
+    if isinstance(criterion, MSELoss):
+        return criterion(mu, y_true)
+    raise ValueError('Unknown loss type')
+
+def log_epoch(metrics, epoch_index: int, total_epochs: int, lr: float, epoch_time: float, is_best: bool):
+    """Log metrics to wandb and print a concise console summary."""
+    metrics['epoch'] = epoch_index + 1
+    metrics['lr'] = lr
+    wandb.log(metrics)
+    s = f"Epoch {epoch_index + 1}/{total_epochs} ({epoch_time:.1f}s), LR: {lr:.0e}, Train Loss: {metrics['train']['loss']:.2f}, Val Loss: {metrics['val']['loss']:.2f}, Train R2: {metrics['train']['r2']:.2f}, Val R2: {metrics['val']['r2']:.2f}"
+    if is_best:
+        s += " (Best Model)"
+    print(s)
+    

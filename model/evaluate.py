@@ -2,11 +2,22 @@ import torch
 import pandas as pd
 import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from utils import TEST_VOCAB
+from data import TEST_VOCAB
+from utils import *
 
 CODE_TO_TEST_NAME = {i: test_name for test_name, i in TEST_VOCAB.items()}
 
-def get_predictions(model, loader, device, model_type='NormaLight'):
+def predict(model, device, train_loader, val_loader, test_loader):
+    print('Generating predictions and computing metrics...')
+    all_predictions = []
+    for split_name, loader in [('train', train_loader), ('val', val_loader), ('test', test_loader)]:
+        print(f"Evaluating {split_name} set...")
+        predictions_df = get_predictions(model, device, loader)
+        predictions_df['split'] = split_name
+        all_predictions.append(predictions_df)
+    return pd.concat(all_predictions)
+        
+def get_predictions(model, device, loader):
     """Get predictions from model for a given dataloader."""
     model.eval()
     model.to(device)
@@ -15,34 +26,22 @@ def get_predictions(model, loader, device, model_type='NormaLight'):
     
     with torch.no_grad():
         for batch in loader:
-            # Move batch to device
-            batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v 
-                    for k, v in batch.items()}
+            batch = to_device_batch(batch, device)
             
-            # Ensure categorical variables are long tensors for embeddings
-            batch['sex'] = batch['sex'].long()
-            batch['cid'] = batch['cid'].long()
-            batch['s_next'] = batch['s_next'].long()
-            batch['s_h'] = batch['s_h'].long()
-            
-            # Get model predictions (correct parameter order for NormaLight)
             mu, log_var = model(
                 batch['x_h'], batch['s_h'], batch['t_h'], batch['sex'], 
                 batch['cid'], batch['s_next'], batch['t_next'], batch['pad_mask']
             )
             
-            # Convert to numpy
             cid = batch['cid'].cpu().numpy()
-            subject_ids = batch['subject_ids']
+            pids = batch['pids'] #.cpu().numpy()
             mu = mu.cpu().numpy()
             log_var = log_var.cpu().numpy()
             x_next = batch['x_next'].cpu().numpy()
             t_next = batch['t_next'].cpu().numpy()
             s_next = batch['s_next'].cpu().numpy()
             
-            # Store predictions
             for i in range(len(mu)):
-                # Convert numpy arrays to scalar values
                 cid_val = int(cid[i].item() if hasattr(cid[i], 'item') else cid[i])
                 x_next_val = float(x_next[i].item() if hasattr(x_next[i], 'item') else x_next[i])
                 t_next_val = float(t_next[i].item() if hasattr(t_next[i], 'item') else t_next[i])
@@ -50,7 +49,7 @@ def get_predictions(model, loader, device, model_type='NormaLight'):
                 mu_val = float(mu[i].item() if hasattr(mu[i], 'item') else mu[i])
                 log_var_val = float(log_var[i].item() if hasattr(log_var[i], 'item') else log_var[i])
                 predictions.append({
-                    'subject_id': subject_ids[i],
+                    'pid': pids[i],
                     'cid': cid_val,
                     'code': CODE_TO_TEST_NAME[cid_val],
                     'x_next': x_next_val,
@@ -67,8 +66,8 @@ def get_metrics(predictions_df):
     metrics_list = []
     
     # Overall metrics
-    y_true = predictions_df['x_next'].values  # Fixed: use correct column name
-    y_pred = predictions_df['mu'].values        # Fixed: use correct column name
+    y_true = predictions_df['x_next'].values
+    y_pred = predictions_df['mu'].values
     
     overall_metrics = {
         'overall_mae': mean_absolute_error(y_true, y_pred),

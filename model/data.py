@@ -1,13 +1,24 @@
-import numpy as np
-import pandas as pd
+import os
 import torch
 import pickle
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import WeightedRandomSampler
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
+from collections import Counter, defaultdict
+import numpy as np
+import pandas as pd
+import random
+import sys
+import warnings
 
-from utils import *
+warnings.filterwarnings('ignore', category=pd.errors.SettingWithCopyWarning)
+sys.path.append('../../SETPOINT/')
+from process.config import REFERENCE_INTERVALS
+
+# Test vocabulary
+TEST_VOCAB = {test_name: i for i, test_name in enumerate(REFERENCE_INTERVALS.keys())}
+INVERSE_TEST_VOCAB = {v: k for k, v in TEST_VOCAB.items()}
 
 class TimeSeriesDataset(Dataset):
     """Dataset for time series forecasting."""
@@ -21,43 +32,66 @@ class TimeSeriesDataset(Dataset):
     def __getitem__(self, idx):
         seq = self.sequences[idx]
         
-        # Get complete sequences
         x = torch.from_numpy(seq["x"]).float().unsqueeze(-1)
         t = torch.from_numpy(seq["t"]).float().unsqueeze(-1)
         s = torch.from_numpy(seq["s"]).long()
         
-        # Split into historical and query parts
-        x_h = x[:-1]  # All but last measurement
-        t_h = t[:-1]  # All but last timestamp
-        s_h = s[:-1]  # All but last condition state
+        x_h = x[:-1]   
+        t_h = t[:-1]    
+        s_h = s[:-1]    
         
-        # Query/next step data
-        t_next = t[-1]  # Last timestamp (keep as tensor)
-        s_next = torch.tensor([s[-1]], dtype=torch.long)   # Last condition state
-        x_next = x[-1]   # Last measurement value (for target)
+        t_next = t[-1]  
+        s_next = torch.tensor([s[-1]], dtype=torch.long)   
+        x_next = x[-1]   
         
-        seq['sex'] = 1 if seq['sex'] == 'F' or seq['sex'] == 1 else 0
+        seq['sex'] = 1 if seq['sex'] == 'F' or seq['sex'] == 1 else seq['sex']
         sex = torch.tensor([seq["sex"]], dtype=torch.long)
         cid = torch.tensor([seq["cid"]], dtype=torch.long)
+        pids = seq["pid"] 
+        
+        return x_h, s_h, t_h, sex, cid, s_next, t_next, x_next, pids
+
+def sample_by_key(seq_list, n, key="cid", seed=0, replace=False):
+    rng = random.Random(seed)
+    buckets = defaultdict(list)
+    for s in seq_list:
+        buckets[s[key]].append(s)
+    out = []
+    for cid, items in buckets.items():
+        k = n if replace else min(n, len(items))
+        if replace and len(items) > 0:
+            out.extend(rng.choices(items, k=k))
+        else:
+            out.extend(rng.sample(items, k))
+    return out
+
+def get_stratify_labels(sequences):
+    stratify_labels = []
+    for i, seq in enumerate(sequences):
+        cid = seq["cid"] 
+        #s_next = seq["s"][-1]
+        source = seq["source"]
+        stratify_labels.append(f"{cid}_{source}")
+    return stratify_labels
+
+def create_weighted_sampler(sequences):
+    cid_counts = {}
+    for seq in sequences:
+        cid = seq['cid']
+        cid_counts[cid] = cid_counts.get(cid, 0) + 1
     
-        # Reference statistics
-        #ref_mu = torch.tensor(seq["ref_mu"][0], dtype=torch.float32)
-        #ref_var = torch.tensor(seq["ref_var"][0], dtype=torch.float32)
-        subject_id = seq["subject_id"]
+    weights = []
+    for seq in sequences:
+        cid = seq['cid']
+        weights.append(1.0 / cid_counts[cid])
         
-        # can you check if there are nan values in the sequence
-        if torch.isnan(x_h).any() or torch.isnan(s_h).any() or torch.isnan(t_h).any() or torch.isnan(x_next).any():
-            print('nan values in the sequence')
-            print(seq)
-            raise ValueError('nan values in the sequence')
-        
-        return x_h, s_h, t_h, sex, cid, s_next, t_next, x_next, subject_id
+    return WeightedRandomSampler(weights, len(weights))
 
 def collate_fn(batch):
     """Collate function for DataLoader."""
-    x_h, s_h, t_h, sex, cid, s_next, t_next, x_next, subject_id = zip(*batch)
+    x_h, s_h, t_h, sex, cid, s_next, t_next, x_next, pids = zip(*batch)
 
-    # Pad sequences and stack tensors
+    lengths = [xh.shape[0] for xh in x_h]
     x_h = pad_sequence(x_h, batch_first=True)
     t_h = pad_sequence(t_h, batch_first=True)
     s_h = pad_sequence(s_h, batch_first=True)
@@ -68,8 +102,6 @@ def collate_fn(batch):
     t_next = torch.stack(t_next)
     x_next = torch.stack(x_next)
 
-    # Create padding mask
-    lengths = [seq.shape[0] for seq in x_h]
     max_len = x_h.shape[1]
     pad_mask = torch.ones(len(lengths), max_len, dtype=torch.bool)
     for i, l in enumerate(lengths):
@@ -87,26 +119,18 @@ def collate_fn(batch):
         # 'ref_mu': ref_mu,
         # 'ref_var': ref_var,
         'pad_mask': pad_mask,
-        'subject_ids': list(subject_id)
+        'pids': list(pids)
     }
 
-def load_and_split_data(sequences_path, random_state=42):
-    print("Loading sequences...")
+def load_and_split_data(sequences_path, source, num_patients=None, random_state=42, print_info=True):
+    sequences_path = os.path.join(sequences_path, f'{source}_sequences.pkl')
     with open(sequences_path, 'rb') as f:
         sequences = pickle.load(f)
-    print(f"Loaded {len(sequences)} sequences")
-    print(sequences[0:2])
-    #print if there are any nan values in the sequences
-    
-    print("Splitting data...")
-    stratify_labels = get_stratify_labels(sequences)
-    from collections import Counter
-    label_counts = Counter(stratify_labels)
-    print(f"Number of unique stratify labels: {len(label_counts)}")
-    # print("Stratify label value counts (top 20):")
-    # for label, count in sorted(label_counts.items(), key=lambda x: x[0]):  # Sort by label
-    #     print(f"{label}: {count}")
-
+        
+    if num_patients is not None:
+        sequences = sample_by_key(sequences, num_patients, key="cid", seed=random_state, replace=False)
+  
+    stratify_labels = get_stratify_labels(sequences)    
     train_val_seq, test_seq = train_test_split(
         sequences, test_size=0.2, stratify=stratify_labels, random_state=random_state
     )
@@ -115,22 +139,33 @@ def load_and_split_data(sequences_path, random_state=42):
     train_seq, val_seq = train_test_split(
         train_val_seq, test_size=0.125, stratify=stratify_labels, random_state=random_state
     )
+    sequences_ids = set([seq['pid'] for seq in sequences])
+    train_ids = set([seq['pid'] for seq in train_seq])
+    val_ids = set([seq['pid'] for seq in val_seq])
+    test_ids = set([seq['pid'] for seq in test_seq])
     
+    if print_info:
+        print(f"{source} Dataset Split Summary")
+        if num_patients:
+            print(f"{'Sampled Set':<18}: {len(sequences):>4} sequences, {len(sequences_ids):>4} patients")
+        else:
+            print(f"{'Total Set':<18}: {len(sequences):>4} sequences, {len(sequences_ids):>4} patients")
+        print(f"{'Training Set':<18}: {len(train_seq):>4} sequences, {len(train_ids):>4} patients")
+        print(f"{'Validation Set':<18}: {len(val_seq):>4} sequences, {len(val_ids):>4} patients")
+        print(f"{'Test Set':<18}: {len(test_seq):>4} sequences, {len(test_ids):>4} patients")
+        print('=' * 90)
     return train_seq, val_seq, test_seq
 
 
 def create_dataloaders(train_seq, val_seq, test_seq, batch_size=16, random_state=42):
     """Create train/val/test dataloaders."""
 
-    print(f"Split sizes - Train: {len(train_seq)}, Val: {len(val_seq)}, Test: {len(test_seq)}")
-    print('Using weighted sampler for training')
-
     train_loader = DataLoader(
         TimeSeriesDataset(train_seq),
         batch_size=batch_size,
         sampler=create_weighted_sampler(train_seq),
         collate_fn=collate_fn,
-        num_workers=4,
+        num_workers=1,
         pin_memory=True,
         persistent_workers=True
     )
@@ -150,33 +185,3 @@ def create_dataloaders(train_seq, val_seq, test_seq, batch_size=16, random_state
     )
 
     return train_loader, val_loader, test_loader
-
-def main():
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
-
-    sequences_path = '../data/processed/sequences.pkl'
-    train_seq, val_seq, test_seq = load_and_split_data(sequences_path) #, num_patients=100, min_points=3)
-
-    train_loader, val_loader, test_loader = create_dataloaders(
-        train_seq, val_seq, test_seq, batch_size=16, random_state=42
-    )
-
-    print(f"Training samples: {len(train_loader.dataset)}")
-    print(f"Validation samples: {len(val_loader.dataset)}")
-    print(f"Test samples: {len(test_loader.dataset)}")
-    
-    for batch in train_loader:
-        batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
-
-        print("Shapes:")
-        for key, value in batch.items():
-            if isinstance(value, torch.Tensor):
-                print(f"{key}: {value.shape}")
-            else:
-                print(f"{key}: {len(value)} items")
-        print(f"Device: {batch['x_h'].device}")
-        break
-
-if __name__ == "__main__":
-    main()
