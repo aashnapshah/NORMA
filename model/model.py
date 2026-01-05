@@ -18,7 +18,7 @@ class Time2Vec(nn.Module):
 
 class NormaLight(nn.Module):
     """NORMA light model for conditional prediction, with shared MLP for output heads."""
-    def __init__(self, d_model, nhead, num_layers, num_lab_codes, mlp_dropout=0.1):
+    def __init__(self, d_model, nhead, num_layers, num_lab_codes, shared_mlp=False, mlp_dropout=0.1):
         super().__init__()
         self.value_emb = nn.Linear(1, d_model)
         self.state_emb = nn.Embedding(2, d_model)
@@ -27,14 +27,19 @@ class NormaLight(nn.Module):
         self.time_emb = Time2Vec(d_model)
         layer = nn.TransformerEncoderLayer(d_model, nhead, batch_first=True)
         self.decoder = nn.TransformerEncoder(layer, num_layers)
-        self.output_mlp = nn.Sequential(
-            nn.Linear(d_model, 128),
-            nn.GELU(),
-            nn.Dropout(mlp_dropout)
-        )
-        self.mean_head = nn.Linear(128, 1)
-        self.logvar_head = nn.Linear(128, 1)
-        
+        self.shared_mlp = shared_mlp
+        if self.shared_mlp:
+            self.output_mlp = nn.Sequential(
+                nn.Linear(d_model, 128),
+                nn.GELU(),
+                nn.Dropout(mlp_dropout)
+            )
+            self.mean_head = nn.Linear(128, 1)
+            self.logvar_head = nn.Linear(128, 1)
+        else:
+            self.mean_head = nn.Linear(d_model, 1)
+            self.logvar_head = nn.Linear(d_model, 1)
+           
     def _causal_mask(self, L, device):
         return torch.triu(torch.ones(L, L, device=device), 1).bool()
 
@@ -77,16 +82,18 @@ class NormaLight(nn.Module):
             pad_mask_ext = None
 
         H = self.decoder(tokens, mask=attn_mask, src_key_padding_mask=pad_mask_ext)
-        if pad_mask_ext is not None:
-            idx = (~pad_mask_ext).sum(dim=1).clamp(min=1) - 1  # (B,)
-            batch_indices = torch.arange(B, device=H.device)  # Ensure indices are on same device
-            query_features = H[batch_indices, idx]
+        if self.shared_mlp:
+            if pad_mask_ext is not None:
+                idx = (~pad_mask_ext).sum(dim=1).clamp(min=1) - 1  # (B,)
+                batch_indices = torch.arange(B, device=H.device)  # Ensure indices are on same device
+                query_features = H[batch_indices, idx]
+            else:
+                query_features = H[:, -1]  # (B, d_model)
         else:
             query_features = H[:, -1]  # (B, d_model)
-
-        shared = self.output_mlp(query_features)  # (B, 128)
-        mu = self.mean_head(shared)               # (B, 1)
-        raw_log_var = self.logvar_head(shared)    # (B, 1)
+        
+        mu = self.mean_head(query_features)               # (B, 1)
+        raw_log_var = self.logvar_head(query_features)    # (B, 1)    
         log_var = torch.clamp(raw_log_var, min=-10.0) #, max=5.0)
         return mu, log_var
 

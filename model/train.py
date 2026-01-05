@@ -18,6 +18,7 @@ from data import TEST_VOCAB, create_dataloaders, load_and_split_data
 from evaluate import predict
 from utils import *
 from pathlib import Path
+from edit import predict_cf
 
 class EarlyStopping:
     """Early stopping utility to prevent overfitting."""
@@ -82,38 +83,45 @@ class NORMATrainer:
         }
 
     def _predict(self):
-        print('Performing Prediction and Evaluation...')
-        print('=' * 90)
         train_seq, val_seq, test_seq = load_and_split_data(self.args.data_dir, self.args.test, self.args.sample, print_info=False)
         train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, batch_size=self.args.batch_size, random_state=self.args.seed)
+        print(f'Performing Prediction and Evaluation on {self.args.test.title()}...')
         predictions_df = predict(self.model, self.device, train_loader, val_loader, test_loader)
         predictions_df.to_csv(os.path.join(self.args.log_dir, self.run_id, f"predictions_{self.args.test.lower()}.csv"), index=False)
         print(f"Predictions saved to {os.path.join(self.args.log_dir, self.run_id, f'predictions_{self.args.test.lower()}.csv')}")
         print('=' * 90)
+        # if self.args.edit:
+        #     print(f'Performing Counterfactual Prediction on {self.args.test.title()}...')
+        #     counterfactual_predictions_df = predict_cf(self.model, self.device, train_loader, val_loader, test_loader)
+        #     counterfactual_predictions_df.to_csv(os.path.join(self.args.log_dir, self.run_id, f"counterfactual_predictions_{self.args.test.lower()}.csv"), index=False)
+        #     print(f"Counterfactual predictions saved to {os.path.join(self.args.log_dir, self.run_id, f'counterfactual_predictions_{self.args.test.lower()}.csv')}")
+        #     print('=' * 90)
         
     def _load_model(self, best=False):
         # Load checkpoint and hyperparameters efficiently, minimize redundant code/objects
-        checkpoint, hparams = load_checkpoint(self.args, best=best, device=self.device)
+        checkpoint, self.args = load_checkpoint(self.args.log_dir, self.args.run_id, self.args, best=best, device=self.device)
         self.run_id = self.args.run_id
-
-        self.model = create_model(self.args, len(TEST_VOCAB)).to(self.device)
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=hparams['lr'], weight_decay=hparams['weight_decay'])
-        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=5)
-        self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-
+        self.model = create_model(self.args, len(TEST_VOCAB), checkpoint).to(self.device)
         self.epoch = checkpoint.get('epoch') + 1
         self.metrics = checkpoint.get('metrics', {})
-        self.best_val_loss = self.metrics['best_val_loss']
-        
+
+        if self.args.resume:
+            self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay)
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            
+            self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=5)
+            self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+
+            self.epoch = checkpoint.get('epoch') + 1
+            self.metrics = checkpoint.get('metrics', {})
+            self.best_val_loss = self.metrics['best_val_loss'] if 'best_val_loss' in self.metrics else self.metrics['val']['loss']
+    
     def _set_up_model(self):
         if self.args.run_id and self.args.resume:
             self._load_model(best=False)
         elif self.args.run_id and not self.args.resume:
             self._load_model(best=True)
+            self.args.resume = False
         else:
             self.run_id = str(uuid.uuid4())[:8]
             self.args.resume = True
@@ -128,19 +136,41 @@ class NORMATrainer:
         self.criterion = create_loss(self.args.loss) 
         num_params = sum(p.numel() for p in self.model.parameters())
         print(f"Model Summary:")
+        print(f"  Run ID          : {self.run_id}")
         print(f"  Model Type      : {self.args.model}")
         print(f"  Num Parameters  : {num_params:,}")
         print(f"  Embedding Dim   : {self.args.d_model}")
         print(f"  Num Heads       : {self.args.nhead}")
         print(f"  Num Layers      : {self.args.nlayers}")
         print(f"  Loss Function   : {self.args.loss}")
+        print(f"  Learning Rate   : {self.args.lr}")
         print(f"  Lab Codes       : {len(TEST_VOCAB)}")
         print("=" * 90)
-        
+    
+    def _save_model(self):
+        import torch
+        from safetensors.torch import save_file
+        import base64, os, io
+        import tempfile
+
+        # Save model weights to SafeTensors format using a temp file
+        with tempfile.NamedTemporaryFile(suffix=".safetensors", delete=True) as tmpfile:
+            save_file(self.model.state_dict(), tmpfile.name)
+            tmpfile.seek(0)
+            b64_data = base64.b64encode(tmpfile.read()).decode('utf-8')
+
+        # Write the .safetensors.b64 file
+        output_path = os.path.join(self.args.log_dir, self.run_id, 'model.safetensors.b64')
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, 'w') as f:
+            f.write(b64_data)
+            print(f"Model saved to {output_path}")
+            print('=' * 90)
+            
     def train(self):
         train_seq, val_seq, test_seq = load_and_split_data(self.args.data_dir, self.args.train, self.args.sample)
         train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, batch_size=self.args.batch_size, random_state=self.args.seed)
-        
+
         self._set_up_model()
         if self.args.resume: 
             setup_logging(self.args, self.run_id)
@@ -170,29 +200,40 @@ class NORMATrainer:
 
                 print('-' * 90)
                 
-        print(f"\nTraining Completed! Best Validation Loss: {self.best_val_loss:.4f}")
-        print('\n' + '=' * 90)
+            print(f"\nTraining Completed! Best Validation Loss: {self.best_val_loss:.4f}")
+            print('\n' + '=' * 90)
+        # save the model as a model.safetensors.b64 file
+        self._save_model()
         self._predict()
+        
+        # for best in [True, False]:
+        #     save_checkpoint(self.model, self.optimizer, self.scheduler, self.args, self.run_id, self.epoch, self.metrics, is_best=best)
+        #     checkpoint_name = f'checkpoint_{"best" if best else "latest"}.json'
+        #     print(f"Model saved to {os.path.join(self.args.log_dir, self.run_id, checkpoint_name)}")
+        #     print('=' * 90)
+            
         wandb.finish()
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train NORMA model (clean version)')
-    parser.add_argument('--data_dir', type=str, default='../data/processed/sequences/')
+    parser.add_argument('--data_dir', type=str, default='../data/processed/')
     parser.add_argument('--log_dir', type=str, default='./logs')
-    parser.add_argument('--train', type=str, default='merged', choices=['EHRSHOT', 'MIMIC-IV', 'merged'])
-    parser.add_argument('--test', type=str, default='merged', choices=['EHRSHOT', 'MIMIC-IV', 'merged'])
+    parser.add_argument('--train', type=str, default='combined', choices=['EHRSHOT', 'MIMIC-IV', 'combined'])
+    parser.add_argument('--test', type=str, default='combined', choices=['EHRSHOT', 'MIMIC-IV', 'combined'])
     parser.add_argument('--sample', type=int, default=None)
     parser.add_argument('--model', type=str, default='NormaLight', choices=['NormaLight', 'NORMADecoder', 'NormaLightDecoder'])
     parser.add_argument('--loss', type=str, default='GaussianNLLLoss', choices=['NORMALoss', 'GaussianNLLLoss', 'MSELoss'])
     parser.add_argument('--d_model', type=int, default=64)
-    parser.add_argument('--nhead', type=int, default=4)
-    parser.add_argument('--nlayers', type=int, default=8)
+    parser.add_argument('--nhead', type=int, default=4) # 4 for original, 2 for smaller model
+    parser.add_argument('--nlayers', type=int, default=8) # 8 for original, 2 for smaller model
     parser.add_argument('--epochs', type=int, default=50)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--lr', type=float, default=0.0001)
-    parser.add_argument('--weight_decay', type=float, default=1e-4)
-    parser.add_argument('--patience', type=int, default=5)
+    parser.add_argument('--weight_decay', type=float, default=1e-3)
+    parser.add_argument('--patience', type=int, default=10)
     parser.add_argument('--run_id', type=str, default=None) 
+    parser.add_argument('--edit', dest='edit', action='store_true', default=False)
+    parser.add_argument('--predict', dest='predict', action='store_true', default=True)
     parser.add_argument('--resume', dest='resume', action='store_true', default=False)
     parser.add_argument('--description', type=str, default='')
     parser.add_argument('--seed', type=int, default=42)

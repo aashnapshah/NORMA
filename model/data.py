@@ -13,8 +13,9 @@ import sys
 import warnings
 
 warnings.filterwarnings('ignore', category=pd.errors.SettingWithCopyWarning)
-sys.path.append('../../SETPOINT/')
-from process.config import REFERENCE_INTERVALS
+
+sys.path.append('../../NORMA/process/')
+from config import REFERENCE_INTERVALS
 
 # Test vocabulary
 TEST_VOCAB = {test_name: i for i, test_name in enumerate(REFERENCE_INTERVALS.keys())}
@@ -24,13 +25,13 @@ class TimeSeriesDataset(Dataset):
     """Dataset for time series forecasting."""
     
     def __init__(self, sequences):
-        self.sequences = sequences
+        self.seq = sequences
     
     def __len__(self):
-        return len(self.sequences)
+        return len(self.seq)
     
     def __getitem__(self, idx):
-        seq = self.sequences[idx]
+        seq = self.seq[idx]
         
         x = torch.from_numpy(seq["x"]).float().unsqueeze(-1)
         t = torch.from_numpy(seq["t"]).float().unsqueeze(-1)
@@ -66,12 +67,34 @@ def sample_by_key(seq_list, n, key="cid", seed=0, replace=False):
     return out
 
 def get_stratify_labels(sequences):
+    """
+    For each code (cid), get count of instances where s_next == 1 and s_next == 0.
+    If either count is less than 2, use only source and code for stratification.
+    Otherwise, use source, code, and s_next.
+    """
+    from collections import defaultdict
+
+    # First, gather counts for s_next==1 and s_next==0 per cid
+    code_snext_counts = defaultdict(lambda: {0: 0, 1: 0})
+    for seq in sequences:
+        cid = seq['cid']
+        s_next = seq['s'][-1].astype(int)
+        code_snext_counts[cid][s_next] += 1
+    
+    # Make the stratification label
     stratify_labels = []
-    for i, seq in enumerate(sequences):
-        cid = seq["cid"] 
-        #s_next = seq["s"][-1]
-        source = seq["source"]
-        stratify_labels.append(f"{cid}_{source}")
+    for seq in sequences:
+        cid = seq['cid']
+        source = seq['source']
+        s_next = seq['s'][-1]
+
+        c0_count = code_snext_counts[cid][0]
+        c1_count = code_snext_counts[cid][1]
+        if c0_count < 2 or c1_count < 2:
+            label = f"{cid}_{source}"
+        else:
+            label = f"{cid}_{source}_{s_next}"
+        stratify_labels.append(label)
     return stratify_labels
 
 def create_weighted_sampler(sequences):
@@ -122,23 +145,45 @@ def collate_fn(batch):
         'pids': list(pids)
     }
 
+def partial_stratified_split(X, y, **kwargs):
+    counts = Counter(y)
+    y = np.array(y)
+
+    stratifiable = np.array([counts[label] >= 2 for label in y])
+    X_strat = [x for x, s in zip(X, stratifiable) if s]
+    y_strat = y[stratifiable]
+
+    X_rare = [x for x, s in zip(X, stratifiable) if not s]
+
+    if len(X_strat) > 0:
+        X1, X2 = train_test_split(
+            X_strat,
+            stratify=y_strat,
+            **kwargs
+        )
+    else:
+        X1, X2 = [], []
+
+    return X1, X2
+
 def load_and_split_data(sequences_path, source, num_patients=None, random_state=42, print_info=True):
-    sequences_path = os.path.join(sequences_path, f'{source}_sequences.pkl')
+    sequences_path = os.path.join(sequences_path, f'{source}_sequences_v2.pkl')
     with open(sequences_path, 'rb') as f:
         sequences = pickle.load(f)
         
     if num_patients is not None:
         sequences = sample_by_key(sequences, num_patients, key="cid", seed=random_state, replace=False)
-  
-    stratify_labels = get_stratify_labels(sequences)    
-    train_val_seq, test_seq = train_test_split(
-        sequences, test_size=0.2, stratify=stratify_labels, random_state=random_state
+    
+    stratify_labels = get_stratify_labels(sequences)
+    
+    train_val_seq, test_seq = partial_stratified_split(
+        sequences, stratify_labels, test_size=0.2, random_state=random_state
     )
 
-    stratify_labels = get_stratify_labels(train_val_seq)
-    train_seq, val_seq = train_test_split(
-        train_val_seq, test_size=0.125, stratify=stratify_labels, random_state=random_state
+    train_seq, val_seq = partial_stratified_split(
+        train_val_seq, get_stratify_labels(train_val_seq), test_size=0.125, random_state=random_state
     )
+    
     sequences_ids = set([seq['pid'] for seq in sequences])
     train_ids = set([seq['pid'] for seq in train_seq])
     val_ids = set([seq['pid'] for seq in val_seq])
