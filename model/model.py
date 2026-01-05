@@ -16,7 +16,7 @@ class Time2Vec(nn.Module):
         v_periodic = torch.sin(self.periodic(t))
         return torch.cat([v_linear, v_periodic], dim=-1)
     
-class NormaLight(nn.Module):
+class NORMA(nn.Module):
     def __init__(self, d_model, nhead, num_layers, num_lab_codes, shared_mlp=False, mlp_dropout=0.1):
         super().__init__()
         self.value_emb = nn.Linear(1, d_model)

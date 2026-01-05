@@ -221,7 +221,7 @@ def parse_args():
     parser.add_argument('--train', type=str, default='combined', choices=['EHRSHOT', 'MIMIC-IV', 'combined'])
     parser.add_argument('--test', type=str, default='combined', choices=['EHRSHOT', 'MIMIC-IV', 'combined'])
     parser.add_argument('--sample', type=int, default=None)
-    parser.add_argument('--model', type=str, default='NormaLight', choices=['NormaLight', 'NORMADecoder', 'NormaLightDecoder'])
+    parser.add_argument('--model', type=str, default='NORMA', choices=['NORMA'])
     parser.add_argument('--loss', type=str, default='GaussianNLLLoss', choices=['NORMALoss', 'GaussianNLLLoss', 'MSELoss'])
     parser.add_argument('--d_model', type=int, default=64)
     parser.add_argument('--nhead', type=int, default=4) # 4 for original, 2 for smaller model
