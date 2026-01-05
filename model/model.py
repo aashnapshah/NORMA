@@ -15,9 +15,7 @@ class Time2Vec(nn.Module):
         v_linear = self.linear(t)
         v_periodic = torch.sin(self.periodic(t))
         return torch.cat([v_linear, v_periodic], dim=-1)
-
 class NormaLight(nn.Module):
-    """NORMA light model for conditional prediction, with shared MLP for output heads."""
     def __init__(self, d_model, nhead, num_layers, num_lab_codes, shared_mlp=False, mlp_dropout=0.1):
         super().__init__()
         self.value_emb = nn.Linear(1, d_model)
@@ -25,78 +23,72 @@ class NormaLight(nn.Module):
         self.sex_emb = nn.Embedding(2, d_model)
         self.lab_emb = nn.Embedding(num_lab_codes, d_model)
         self.time_emb = Time2Vec(d_model)
+
         layer = nn.TransformerEncoderLayer(d_model, nhead, batch_first=True)
-        self.decoder = nn.TransformerEncoder(layer, num_layers)
+        self.encoder = nn.TransformerEncoder(layer, num_layers)
+
         self.shared_mlp = shared_mlp
-        if self.shared_mlp:
+        if shared_mlp:
             self.output_mlp = nn.Sequential(
                 nn.Linear(d_model, 128),
                 nn.GELU(),
-                nn.Dropout(mlp_dropout)
+                nn.Dropout(mlp_dropout),
             )
             self.mean_head = nn.Linear(128, 1)
             self.logvar_head = nn.Linear(128, 1)
         else:
             self.mean_head = nn.Linear(d_model, 1)
             self.logvar_head = nn.Linear(d_model, 1)
-           
+
     def _causal_mask(self, L, device):
         return torch.triu(torch.ones(L, L, device=device), 1).bool()
 
-    def forward(
-        self,
-        x_h,      # (B,T,1)
-        s_h,      # (B,T) int {0,1}
-        t_h,      # (B,T,1)
-        sex,         # (B,) int {0,1}
-        lab,         # (B,) int
-        s_next,      # (B,) int {0,1}
-        t_next,      # (B,1)
-        pad_mask=None # (B,T) True for pad
-    ):
+    def forward(self, x_h, s_h, t_h, sex, lab, s_next, t_next, pad_mask=None):
         B, T = x_h.shape[:2]
-        sex_e = self.sex_emb(sex.squeeze(-1)).unsqueeze(1)  # (B, 1, d_model)
-        lab_e = self.lab_emb(lab.squeeze(-1)).unsqueeze(1)  # (B, 1, d_model)
+        sex = sex.view(-1).long()
+        lab = lab.view(-1).long()
+        s_h = s_h.long()
+        s_next = s_next.view(-1).long()
+
+        sex_e = self.sex_emb(sex)
+        lab_e = self.lab_emb(lab)
 
         hist = (
             self.value_emb(x_h)
             + self.state_emb(s_h)
             + self.time_emb(t_h)
-            + sex_e.expand(B, T, -1)
-            + lab_e.expand(B, T, -1)
+            + sex_e.unsqueeze(1).expand(B, T, -1)
+            + lab_e.unsqueeze(1).expand(B, T, -1)
         )
 
+        t_next = t_next.view(B, 1, 1)
         q = (
-            self.state_emb(s_next.squeeze(-1))
-            + self.time_emb(t_next)
-            + sex_e.squeeze(1)
-            + lab_e.squeeze(1)
-        ).unsqueeze(1) 
+            self.state_emb(s_next)
+            + self.time_emb(t_next).squeeze(1)
+            + sex_e
+            + lab_e
+        ).unsqueeze(1)
 
-        tokens = torch.cat([hist, q], dim=1)  
+        tokens = torch.cat([hist, q], dim=1)
         attn_mask = self._causal_mask(T + 1, tokens.device)
 
+        pad_mask_ext = None
         if pad_mask is not None:
-            pad_mask_ext = torch.cat([pad_mask, torch.zeros(B, 1, dtype=torch.bool, device=pad_mask.device)], dim=1)
-        else:
-            pad_mask_ext = None
+            pad_mask_ext = torch.cat(
+                [pad_mask, torch.zeros(B, 1, dtype=torch.bool, device=pad_mask.device)],
+                dim=1,
+            )
 
-        H = self.decoder(tokens, mask=attn_mask, src_key_padding_mask=pad_mask_ext)
+        H = self.encoder(tokens, mask=attn_mask, src_key_padding_mask=pad_mask_ext)
+
+        query_features = H[:, -1]
         if self.shared_mlp:
-            if pad_mask_ext is not None:
-                idx = (~pad_mask_ext).sum(dim=1).clamp(min=1) - 1  # (B,)
-                batch_indices = torch.arange(B, device=H.device)  # Ensure indices are on same device
-                query_features = H[batch_indices, idx]
-            else:
-                query_features = H[:, -1]  # (B, d_model)
-        else:
-            query_features = H[:, -1]  # (B, d_model)
-        
-        mu = self.mean_head(query_features)               # (B, 1)
-        raw_log_var = self.logvar_head(query_features)    # (B, 1)    
-        log_var = torch.clamp(raw_log_var, min=-10.0) #, max=5.0)
-        return mu, log_var
+            query_features = self.output_mlp(query_features)
 
+        mu = self.mean_head(query_features)
+        raw_log_var = self.logvar_head(query_features)
+        log_var = torch.clamp(raw_log_var, min=-10.0)
+        return mu, log_var
 
 class NormaLightDecoder(nn.Module):
     """NORMA light model with decoder-only architecture for conditional prediction."""
