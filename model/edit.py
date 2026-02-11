@@ -28,14 +28,13 @@ FILE_PATH = os.path.join(DATA_DIR, DATA_PATH)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-
 def sample_seq(df, pid=None, data_dir=DATA_DIR, csv_name=DATA_PATH):
     if pid is None:
         pid = df['subject_id'].sample(1).values[0]
     return df.query('subject_id == @pid')
 
-def pred(model, seq, normal=False):
-    batch = TimeSeriesDataset([seq])[0]
+def pred(model, seq, nstates, normal=False):
+    batch = TimeSeriesDataset([seq], nstates)[0]
     batch = collate_fn([batch])
     batch = to_device_batch(batch, device)
     if normal:
@@ -45,8 +44,7 @@ def pred(model, seq, normal=False):
         
     model.eval()
     with torch.no_grad():
-        mu, log_var = model(batch['x_h'], batch['s_h'], batch['t_h'], batch['sex'],
-                    batch['cid'], batch['s_next'], batch['t_next'], batch['pad_mask'])
+        mu, log_var = forward_model(model, batch)
         mu = float(mu.cpu().numpy().squeeze())
         log_var = float(log_var.cpu().numpy().squeeze())
         var = np.exp(log_var)
@@ -63,11 +61,6 @@ def predict_cf(model, device, train_loader, val_loader, test_loader):
     return pd.concat(all_predictions)
 
 def get_predictions_cf(model, device, loader, split_name):
-    """
-    Get counterfactual and normal predictions for a given dataloader. 
-    Each prediction row will have a 'state' column: True for normal, False for abnormal.
-    Optimized to avoid unnecessary transfer to cpu within inner loop.
-    """
     model.eval()
     model.to(device)
 
@@ -77,19 +70,13 @@ def get_predictions_cf(model, device, loader, split_name):
         from tqdm import tqdm
         for batch in tqdm(loader, desc=f"{split_name} (CF predict)", leave=False):
             batch = to_device_batch(batch, device)
-            pids = batch['pids']  # list, not tensor
-            # s_next for states
+            pids = batch['pids']  
             ones_snext = torch.ones_like(batch['s_next'])
             zeros_snext = torch.zeros_like(batch['s_next'])
 
             out = {}
             for state, snext in zip([True, False], [ones_snext, zeros_snext]):
-                mu, log_var = model(
-                    batch['x_h'], batch['s_h'], batch['t_h'], batch['sex'], 
-                    batch['cid'], snext, batch['t_next'], batch['pad_mask']
-                )
-                # Everything here is still on device (GPU/CPU as available)
-                # Don't move all to cpu until needed (just once per batch)
+                mu, log_var = forward_model(model, batch, s_next=snext)
                 mu = mu.detach()
                 log_var = log_var.detach()
                 std = torch.exp(0.5 * log_var)  # numerically stable std
@@ -164,6 +151,7 @@ def predict_intervals(seqs, run_ids, LOG_DIR, device, add_baselines=True):
             'pid': seq['pid'],
             'cid': seq['cid'],
             'sex': seq['sex'],
+            'age': seq['age'],
             'state': True,
         }
 
@@ -200,6 +188,27 @@ def predict_intervals(seqs, run_ids, LOG_DIR, device, add_baselines=True):
             data_records.append(row)
 
     return pd.DataFrame(data_records)
+
+def load_counterfactual_predictions(run_ids, log_dir, split='test'):
+    results = []
+    for id in run_ids:
+        counterfactual_path = os.path.join(log_dir, id, "counterfactual_predictions_combined.csv") 
+        predictions_path = os.path.join(log_dir, id, "predictions_combined.csv") 
+        path = counterfactual_path if os.path.exists(counterfactual_path) else predictions_path
+        state_col = 'state' if 'state' in pd.read_csv(path).columns else 's_next'
+
+        subresults = pd.read_csv(path).query(f"split == '{split}'")
+        if 'log_var' not in subresults.columns:
+            subresults['std_pred'] = np.exp(subresults['std'])
+            subresults['var_pred'] = subresults['std']**2
+            subresults['log_var'] = np.log(subresults['var_pred'])
+            
+        subresults['var_pred'] = np.exp(subresults['log_var']).fillna(0)
+        subresults['std_pred'] = np.sqrt(subresults['var_pred'])
+        subresults['code'] = subresults['code'].fillna('NA') 
+        subresults['Run ID'] = id
+        results.append(subresults)
+    return pd.concat(results), state_col
 
 def _gaussian_pdf(y, mu, sigma):
     s = max(float(sigma), 1e-6)
@@ -310,8 +319,8 @@ def plot_sequence_and_intervals(code, seq, df):
 
 def plot_reference_intervals(results, reference_intervals, n_cols=9, figsize=(18, 2), dpi=300):
     unique_codes = results['code'].sort_values().unique()
-    n_codes = len(unique_codes)
-    n_rows = (n_codes + n_cols - 1) // n_cols
+    ncodes = len(unique_codes)
+    n_rows = (ncodes + n_cols - 1) // n_cols
     fig_height = figsize[1] * n_rows
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(figsize[0], fig_height), dpi=dpi)
     axes = axes.flatten()
