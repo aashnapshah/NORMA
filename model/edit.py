@@ -9,17 +9,13 @@ from math import sqrt, pi
 import matplotlib as mpl
 mpl.rcParams['animation.ffmpeg_path'] = '/home/aas926/miniconda3/envs/normal/bin/ffmpeg'
 
-sys.path.append('../../NORMA/process/')
-from process_data import create_sequences
-
-sys.path.append('../../NORMA/ARIMA/')
-from setpoints import *
-
+sys.path.append('../../NORMA/')
+from process.config import REFERENCE_INTERVALS 
+from ARIMA.setpoints import *
+from helpers.plots import *
 from data import *
 from utils import *
-from evaluate import *
 from model import *
-from helpers.plots import *
 
 DATA_DIR = '../../NORMA/data/processed/'
 LOG_DIR = '../../NORMA/model/logs/'
@@ -406,7 +402,6 @@ def animate_sequence_and_intervals(code, seq, df, axes, *, intermediate=None):
     for i, (_, r) in enumerate(sub.iterrows()):
         mu, std = float(r["mu"]), float(r["std"])
         if r["run_id"] == "Population":
-            # add only one Population handle, for -std line
             h1 = ax.hlines(mu - std, x.min(), x.max(), linestyles=(0, (2, 2)), color=scheme_colors["Population"], linewidth=1.1)
             h2 = ax.hlines(mu + std, x.min(), x.max(), linestyles=(0, (2, 2)), color=scheme_colors["Population"], linewidth=1.1)
             if population_handle is None:

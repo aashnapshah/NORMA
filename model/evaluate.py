@@ -7,30 +7,18 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 warnings.filterwarnings('ignore')
 
-# ------------------------
-# Paths & Module Imports
-# ------------------------
-LOG_DIR = '/n/data1/hms/dbmi/manrai/aashna/NORMA/model/logs/'
 ROOTDIR = '/n/data1/hms/dbmi/manrai/aashna/NORMA/'
 
 sys.path.append(ROOTDIR)
 sys.path.append('../model/')
 
-from process.config import REFERENCE_INTERVALS, INVERSE_TEST_VOCAB
-from data import TEST_VOCAB, INVERSE_TEST_VOCAB
+from process.config import REFERENCE_INTERVALS 
+from data import TEST_VOCAB, INVERSE_TEST_VOCAB, CODE_TO_TEST_NAME
 from utils import *
 from predict import *
 from edit import *
 from model import *
 from helpers.plots import *
-
-MODEL = 'e4fdacb7'
-RUN_IDS = ['ARIMA', 'Mean', 'last', MODEL]
-BASE = SOURCE = 'combined'
-METRICS = ['MAE', 'MAPE', 'R2', 'MSE']
-EXCLUDE = ['CRP', 'GGT', 'LDH']
-
-CODE_TO_TEST_NAME = {i: test_name for test_name, i in TEST_VOCAB.items()}
 
 METRIC_FUNCTIONS = {
         'MAE': lambda y_true, y_pred: mean_absolute_error(y_true, y_pred),
@@ -148,16 +136,15 @@ def print_formatted_metrics(all_metrics, metrics_to_agg):
         print(f"\nMetrics for {split} split:")
         print(formatted)
 
-def evaluate_and_save_metrics():
-    preds = load_predictions(RUN_IDS, BASE, SOURCE)
+def evaluate_and_save_metrics(preds, model, exclude_codes=None, metrics_to_agg=['MAE', 'MAPE', 'R2', 'MSE'], log_dir='../model/logs/'):
     gm = bootstrap_metrics(
         preds,
         code_level=True,
-        exclude_codes=EXCLUDE,
-        metrics_to_agg=METRICS,
+        exclude_codes=exclude,
+        metrics_to_agg=metrics,
         bootstrap_samples=2,
     )
-    gm.to_csv(f'../model/logs/{MODEL}/bootstrap_metrics_by_code.csv', index=False)
+    gm.to_csv(f'{log_dir}/{model}/bootstrap_metrics_by_code.csv', index=False)
     print('bootstrap_metrics_by_code.csv saved')
     gm = (
         gm.query('Metric == "R2"')
@@ -168,20 +155,39 @@ def evaluate_and_save_metrics():
     om = bootstrap_metrics(
         preds,
         code_level=False,
-        exclude_codes=EXCLUDE,
-        metrics_to_agg=METRICS,
+        exclude_codes=exclude,
+        metrics_to_agg=metrics,
         bootstrap_samples=2,
     )
     om = om.query('Metric != "R2"')[['Split', 'Model', 'Metric', 'mean', 'std']]
     metrics_df = pd.concat([gm, om]).replace(MODEL, 'NORMA')
-    save_path = f'../model/logs/{MODEL}/bootstrap_metrics.csv'
+    save_path = f'{log_dir}/{model}/bootstrap_metrics.csv'
     metrics_df.to_csv(save_path, index=False)
     print(f"\nMetrics saved to: {save_path}")
     return metrics_df
 
-
-def main():
-    metrics_df = evaluate_and_save_metrics()
+def main(args):
+    preds = load_predictions(args.run_ids, args.base, args.source)
+    metrics_df = evaluate_and_save_metrics(preds, args.exclude, args.metrics, args.model, args.log_dir)
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--log_dir', type=str, default='/n/data1/hms/dbmi/manrai/aashna/NORMA/model/logs/', help='Directory for log files')
+    parser.add_argument('--model', type=str, default='e4fdacb7', help='Model identifier')
+    parser.add_argument('--run_ids', nargs='+', default=['ARIMA', 'Mean', 'last', 'e4fdacb7'], help='List of run IDs')
+    parser.add_argument('--base', type=str, default='combined', help='Base dataset name')
+    parser.add_argument('--source', type=str, default='combined', help='Source dataset name')
+    parser.add_argument('--metrics', nargs='+', default=['MAE', 'MAPE', 'R2', 'MSE'], help='Metrics to use')
+    parser.add_argument('--exclude', nargs='+', default=['CRP', 'GGT', 'LDH'], help='Codes to exclude')
+    args = parser.parse_args()
+
+    # assign arguments to variables, maintaining backwards compatibility
+    LOG_DIR = args.log_dir
+    MODEL = args.model
+    RUN_IDS = args.run_ids
+    BASE = args.base
+    SOURCE = args.source
+    METRICS = args.metrics
+    EXCLUDE = args.exclude
+
+    main(args)

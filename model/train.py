@@ -11,6 +11,8 @@ import torch.optim as optim
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import tempfile
+import base64
 from sklearn.metrics import r2_score
 import wandb
 
@@ -90,6 +92,7 @@ class NORMATrainer:
         train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, getattr(self.args, 'nstates', 2), batch_size=self.args.batch_size, random_state=self.args.seed)
         print(f'Performing Prediction and Evaluation on {self.args.test.title()}...')
         predictions_df = predict(self.model, self.device, train_loader, val_loader, test_loader)
+        self.predictions_df = predictions_df
         predictions_df.to_csv(os.path.join(self.args.log_dir, self.run_id, f"predictions_{self.args.test.lower()}.csv"), index=False)
         print(f"Predictions saved to {os.path.join(self.args.log_dir, self.run_id, f'predictions_{self.args.test.lower()}.csv')}")
         print('=' * 90)
@@ -103,7 +106,7 @@ class NORMATrainer:
         
     def _evaluate(self):
         print(f'Performing Evaluation on {self.args.test.title()}...')
-        evaluate(self.model, self.device, train_loader, val_loader, test_loader)
+        evaluate_and_save_metrics(self.predictions_df, self.run_id, self.args.log_dir)
         print(f"Evaluation saved to {os.path.join(self.args.log_dir, self.run_id, f'evaluation_{self.args.test.lower()}.csv')}")
         print('=' * 90)
         

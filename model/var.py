@@ -1,3 +1,31 @@
+import os
+import sys
+import warnings
+import pandas as pd
+import numpy as np
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+warnings.filterwarnings('ignore')
+
+LOG_DIR = '/n/data1/hms/dbmi/manrai/aashna/NORMA/model/logs/'
+ROOTDIR = '/n/data1/hms/dbmi/manrai/aashna/NORMA/'
+
+sys.path.append(ROOTDIR)
+sys.path.append('../model/')
+
+from process.config import REFERENCE_INTERVALS 
+from data import TEST_VOCAB, INVERSE_TEST_VOCAB, CODE_TO_TEST_NAME
+from utils import *
+from predict import *
+from edit import *
+from model import *
+from helpers.plots import *
+
+MODEL = 'e4fdacb7'
+RUN_IDS = ['ARIMA', 'Mean', 'last', MODEL]
+BASE = SOURCE = 'combined'
+METRICS = ['MAE', 'MAPE', 'R2', 'MSE']
+EXCLUDE = ['CRP', 'GGT', 'LDH']
 
 def get_features(records):
     def extract(record):

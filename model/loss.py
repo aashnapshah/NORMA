@@ -32,6 +32,24 @@ class GaussianNLLLoss(nn.Module):
     def forward(self, mu, log_var, y_true):
         """Compute Gaussian Negative Log Likelihood Loss."""
         return nn.GaussianNLLLoss()(mu, y_true, torch.exp(log_var))
+
+class studentNLLLoss(nn.Module):
+    """Student's t-distribution Negative Log Likelihood Loss."""
+    
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, mu, logsig, lnu, y_true):
+        """Compute Student's t-distribution Negative Log Likelihood Loss."""
+        sigma = F.softplus(logsig) + 1e-6
+        nu = F.softplus(lnu) + 2.0   # ensures nu > 2 for finite variance
+        z = (y_true - mu) / sigma
+        term1 = torch.lgamma((nu + 1) / 2) - torch.lgamma(nu / 2)
+        term2 = -0.5 * (torch.log(nu * torch.pi) + 2 * torch.log(sigma))
+        term3 = - ((nu + 1) / 2) * torch.log1p((z * z) / nu)
+        nll = -(term1 + term2 + term3)     # shape (B,1)
+        loss = nll.mean()
+        return loss
     
 class NORMALoss(nn.Module):
     """Loss function for NORMA conditional transformer."""
