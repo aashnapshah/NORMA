@@ -15,18 +15,19 @@ class Time2Vec(nn.Module):
         v_linear = self.linear(t)
         v_periodic = torch.sin(self.periodic(t))
         return torch.cat([v_linear, v_periodic], dim=-1)
-    
-class NORMA(nn.Module):
-    def __init__(self, d_model, nhead, num_layers, num_lab_codes, shared_mlp=False, mlp_dropout=0.1):
+
+class NormaLight(nn.Module):
+    def __init__(self, d_model, nhead, nlayers, ncodes, nstates=2, shared_mlp=False, mlp_dropout=0.1):
         super().__init__()
         self.value_emb = nn.Linear(1, d_model)
-        self.state_emb = nn.Embedding(2, d_model)
+        self.state_emb = nn.Embedding(nstates, d_model)
         self.sex_emb = nn.Embedding(2, d_model)
-        self.lab_emb = nn.Embedding(num_lab_codes, d_model)
+        self.lab_emb = nn.Embedding(ncodes, d_model)
+        self.age_emb = nn.Linear(1, d_model)
         self.time_emb = Time2Vec(d_model)
 
         layer = nn.TransformerEncoderLayer(d_model, nhead, batch_first=True)
-        self.encoder = nn.TransformerEncoder(layer, num_layers)
+        self.encoder = nn.TransformerEncoder(layer, nlayers)
 
         self.shared_mlp = shared_mlp
         if shared_mlp:
@@ -44,20 +45,104 @@ class NORMA(nn.Module):
     def _causal_mask(self, L, device):
         return torch.triu(torch.ones(L, L, device=device), 1).bool()
 
-    def forward(self, x_h, s_h, t_h, sex, lab, s_next, t_next, pad_mask=None):
+    def forward(self, x_h, s_h, t_h, sex, age, lab, s_next, t_next, pad_mask=None):
         B, T = x_h.shape[:2]
         sex = sex.view(-1).long()
+        age = age.view(-1, 1).float()  # Fix: ensure age is (B, 1) for passing to nn.Linear(1, d_model)
         lab = lab.view(-1).long()
         s_h = s_h.long()
         s_next = s_next.view(-1).long()
 
         sex_e = self.sex_emb(sex)
         lab_e = self.lab_emb(lab)
+        age_e = self.age_emb(age)  # compute age embedding with correct shape
 
         hist = (
             self.value_emb(x_h)
             + self.state_emb(s_h)
             + self.time_emb(t_h)
+            + sex_e.unsqueeze(1).expand(B, T, -1)
+            + age_e.unsqueeze(1).expand(B, T, -1)
+            + lab_e.unsqueeze(1).expand(B, T, -1)
+        )
+
+        t_next_reshaped = t_next.view(B, 1, 1)
+        q = (
+            self.state_emb(s_next)
+            + self.time_emb(t_next_reshaped).squeeze(1)
+            + sex_e
+            + age_e
+            + lab_e
+        ).unsqueeze(1)
+
+        tokens = torch.cat([hist, q], dim=1)
+        attn_mask = self._causal_mask(T + 1, tokens.device)
+
+        pad_mask_ext = None
+        if pad_mask is not None:
+            pad_mask_ext = torch.cat(
+                [pad_mask, torch.zeros(B, 1, dtype=torch.bool, device=pad_mask.device)],
+                dim=1,
+            )
+
+        H = self.encoder(tokens, mask=attn_mask, src_key_padding_mask=pad_mask_ext)
+
+        query_features = H[:, -1]
+        if self.shared_mlp:
+            query_features = self.output_mlp(query_features)
+
+        mu = self.mean_head(query_features)
+        raw_log_var = self.logvar_head(query_features)
+        log_var = torch.clamp(raw_log_var, min=-10.0)
+        return mu, log_var
+
+
+class NORMA(nn.Module):
+    def __init__(self, d_model, nhead, nlayers, nstates, ncodes, shared_mlp=False, mlp_dropout=0.1):
+        super().__init__()
+        self.value_emb = nn.Linear(1, d_model)
+        self.state_emb = nn.Embedding(nstates, d_model)
+        self.sex_emb = nn.Embedding(2, d_model)
+        self.lab_emb = nn.Embedding(ncodes, d_model)
+        self.age_emb = nn.Linear(1, d_model)
+        self.time_emb = Time2Vec(d_model)
+
+        layer = nn.TransformerEncoderLayer(d_model, nhead, batch_first=True)
+        self.encoder = nn.TransformerEncoder(layer, nlayers)
+
+        self.shared_mlp = shared_mlp
+        if shared_mlp:
+            self.output_mlp = nn.Sequential(
+                nn.Linear(d_model, 128),
+                nn.GELU(),
+                nn.Dropout(mlp_dropout),
+            )
+            self.mean_head = nn.Linear(128, 1)
+            self.logvar_head = nn.Linear(128, 1)
+        else:
+            self.mean_head = nn.Linear(d_model, 1)
+            self.logvar_head = nn.Linear(d_model, 1)
+
+    def _causal_mask(self, L, device):
+        return torch.triu(torch.ones(L, L, device=device), 1).bool()
+
+    def forward(self, x_h, s_h, t_h, sex, age, lab, s_next, t_next, pad_mask=None):
+        B, T = x_h.shape[:2]
+        sex = sex.view(-1).long()
+        age = age.view(-1).float()
+        lab = lab.view(-1).long()
+        s_h = s_h.long()
+        s_next = s_next.view(-1).long()
+
+        sex_e = self.sex_emb(sex)
+        lab_e = self.lab_emb(lab)
+        age_e = self.age_emb(age)
+        
+        hist = (
+            self.value_emb(x_h)
+            + self.state_emb(s_h)
+            + self.time_emb(t_h)
+            + age_e.unsqueeze(1).expand(B, T, -1)
             + sex_e.unsqueeze(1).expand(B, T, -1)
             + lab_e.unsqueeze(1).expand(B, T, -1)
         )
@@ -67,6 +152,7 @@ class NORMA(nn.Module):
             self.state_emb(s_next)
             + self.time_emb(t_next).squeeze(1)
             + sex_e
+            + age_e
             + lab_e
         ).unsqueeze(1)
 
@@ -94,7 +180,7 @@ class NORMA(nn.Module):
 # class NormaLightDecoder(nn.Module):
 #     """NORMA light model with decoder-only architecture for conditional prediction."""
     
-#     def __init__(self, d_model, nhead, num_layers, num_lab_codes):
+#     def __init__(self, d_model, nhead, nlayers, num_lab_codes):
 #         super().__init__()
 #         self.value_emb = nn.Linear(1, d_model)
 #         self.state_emb = nn.Embedding(2, d_model)
@@ -105,7 +191,7 @@ class NORMA(nn.Module):
 #         decoder_layer = nn.TransformerDecoderLayer(
 #             d_model, nhead, batch_first=True
 #         )
-#         self.decoder = nn.TransformerDecoder(decoder_layer, num_layers)
+#         self.decoder = nn.TransformerDecoder(decoder_layer, nlayers)
         
 #         # Single output head for both mean and log variance
 #         self.output_head = nn.Sequential(
@@ -188,7 +274,7 @@ class NORMA(nn.Module):
 # class NORMAEncoder(nn.Module):
 #     """Shared base logic for NORMA transformer models."""
     
-#     def __init__(self, d_model, nhead, num_layers, num_lab_codes):
+#     def __init__(self, d_model, nhead, nlayers, num_lab_codes):
 #         super().__init__()
 #         self.value_emb = nn.Linear(1, d_model)
 #         self.sex_emb = nn.Embedding(2, d_model)
@@ -196,7 +282,7 @@ class NORMA(nn.Module):
 #         self.time_emb = Time2Vec(d_model)
 
 #         encoder_layer = nn.TransformerEncoderLayer(d_model, nhead, batch_first=True)
-#         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers)
+#         self.encoder = nn.TransformerEncoder(encoder_layer, nlayers)
 
 #     def _causal_mask(self, seq_len, device):
 #         """Generate causal attention mask (boolean: True indicates masked)."""
@@ -225,8 +311,8 @@ class NORMA(nn.Module):
 # class NORMADecoder(NORMAEncoder):
 #     """NORMA decoder for conditional prediction."""
     
-#     def __init__(self, d_model=128, nhead=4, num_layers=4, num_lab_codes=2):
-#         super().__init__(d_model, nhead, num_layers, num_lab_codes)
+#     def __init__(self, d_model=128, nhead=4, nlayers=4, num_lab_codes=2):
+#         super().__init__(d_model, nhead, nlayers, num_lab_codes)
 
 #         self.q_time_emb = Time2Vec(d_model)
 #         self.q_cond_emb = nn.Embedding(2, d_model)
