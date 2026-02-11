@@ -1,24 +1,27 @@
-import argparse
+import os
 import time
+import uuid
+import argparse
+from pathlib import Path
 
+# Third-party imports
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import os
 import numpy as np
-from tqdm import tqdm
-import wandb
 import pandas as pd
+from tqdm import tqdm
 from sklearn.metrics import r2_score
-import uuid
+import wandb
 
+# Project/module imports
 from model import *
 from loss import *
-from data import TEST_VOCAB, create_dataloaders, load_and_split_data
-from evaluate import predict
+from data import *
+from predict import *
+from evaluate import *
+from edit import *
 from utils import *
-from pathlib import Path
-from edit import predict_cf
 
 class EarlyStopping:
     """Early stopping utility to prevent overfitting."""
@@ -60,7 +63,7 @@ class NORMATrainer:
             with torch.set_grad_enabled(is_training):
                 mu, log_var = self.model(
                     batch['x_h'], batch['s_h'], batch['t_h'], batch['sex'],
-                    batch['cid'], batch['s_next'], batch['t_next'], batch['pad_mask']
+                    batch['age'], batch['cid'], batch['s_next'], batch['t_next'], batch['pad_mask']
                 )
                 loss = compute_loss(mu, log_var, batch['x_next'], self.criterion)
 
@@ -83,25 +86,31 @@ class NORMATrainer:
         }
 
     def _predict(self):
-        train_seq, val_seq, test_seq = load_and_split_data(self.args.data_dir, self.args.test, self.args.sample, print_info=False)
-        train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, batch_size=self.args.batch_size, random_state=self.args.seed)
+        train_seq, val_seq, test_seq = load_and_split_data(self.args.data_dir, self.args.test, self.args.sample, print_info=False, nstates=getattr(self.args, 'nstates', 2))
+        train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, getattr(self.args, 'nstates', 2), batch_size=self.args.batch_size, random_state=self.args.seed)
         print(f'Performing Prediction and Evaluation on {self.args.test.title()}...')
         predictions_df = predict(self.model, self.device, train_loader, val_loader, test_loader)
         predictions_df.to_csv(os.path.join(self.args.log_dir, self.run_id, f"predictions_{self.args.test.lower()}.csv"), index=False)
         print(f"Predictions saved to {os.path.join(self.args.log_dir, self.run_id, f'predictions_{self.args.test.lower()}.csv')}")
         print('=' * 90)
-        # if self.args.edit:
-        #     print(f'Performing Counterfactual Prediction on {self.args.test.title()}...')
-        #     counterfactual_predictions_df = predict_cf(self.model, self.device, train_loader, val_loader, test_loader)
-        #     counterfactual_predictions_df.to_csv(os.path.join(self.args.log_dir, self.run_id, f"counterfactual_predictions_{self.args.test.lower()}.csv"), index=False)
-        #     print(f"Counterfactual predictions saved to {os.path.join(self.args.log_dir, self.run_id, f'counterfactual_predictions_{self.args.test.lower()}.csv')}")
-        #     print('=' * 90)
+  
+    def _edit(self):
+        print(f'Performing Counterfactual Prediction on {self.args.test.title()}...')
+        counterfactual_predictions_df = predict_cf(self.model, self.device, train_loader, val_loader, test_loader)
+        counterfactual_predictions_df.to_csv(os.path.join(self.args.log_dir, self.run_id, f"counterfactual_predictions_{self.args.test.lower()}.csv"), index=False)
+        print(f"Counterfactual predictions saved to {os.path.join(self.args.log_dir, self.run_id, f'counterfactual_predictions_{self.args.test.lower()}.csv')}")
+        print('=' * 90)
+        
+    def _evaluate(self):
+        print(f'Performing Evaluation on {self.args.test.title()}...')
+        evaluate(self.model, self.device, train_loader, val_loader, test_loader)
+        print(f"Evaluation saved to {os.path.join(self.args.log_dir, self.run_id, f'evaluation_{self.args.test.lower()}.csv')}")
+        print('=' * 90)
         
     def _load_model(self, best=False):
-        # Load checkpoint and hyperparameters efficiently, minimize redundant code/objects
         checkpoint, self.args = load_checkpoint(self.args.log_dir, self.args.run_id, self.args, best=best, device=self.device)
         self.run_id = self.args.run_id
-        self.model = create_model(self.args, len(TEST_VOCAB), checkpoint).to(self.device)
+        self.model = create_model(self.args, ncodes=len(TEST_VOCAB), checkpoint=checkpoint).to(self.device)
         self.epoch = checkpoint.get('epoch') + 1
         self.metrics = checkpoint.get('metrics', {})
 
@@ -150,16 +159,12 @@ class NORMATrainer:
     def _save_model(self):
         import torch
         from safetensors.torch import save_file
-        import base64, os, io
-        import tempfile
 
-        # Save model weights to SafeTensors format using a temp file
         with tempfile.NamedTemporaryFile(suffix=".safetensors", delete=True) as tmpfile:
             save_file(self.model.state_dict(), tmpfile.name)
             tmpfile.seek(0)
             b64_data = base64.b64encode(tmpfile.read()).decode('utf-8')
 
-        # Write the .safetensors.b64 file
         output_path = os.path.join(self.args.log_dir, self.run_id, 'model.safetensors.b64')
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, 'w') as f:
@@ -168,8 +173,8 @@ class NORMATrainer:
             print('=' * 90)
             
     def train(self):
-        train_seq, val_seq, test_seq = load_and_split_data(self.args.data_dir, self.args.train, self.args.sample)
-        train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, batch_size=self.args.batch_size, random_state=self.args.seed)
+        train_seq, val_seq, test_seq = load_and_split_data(self.args.data_dir, self.args.train, self.args.sample, nstates=getattr(self.args, 'nstates', 2))
+        train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, getattr(self.args, 'nstates', 2), batch_size=self.args.batch_size, random_state=self.args.seed)
 
         self._set_up_model()
         if self.args.resume: 
@@ -202,26 +207,23 @@ class NORMATrainer:
                 
             print(f"\nTraining Completed! Best Validation Loss: {self.best_val_loss:.4f}")
             print('\n' + '=' * 90)
-        # save the model as a model.safetensors.b64 file
+            
         self._save_model()
         self._predict()
-        
-        # for best in [True, False]:
-        #     save_checkpoint(self.model, self.optimizer, self.scheduler, self.args, self.run_id, self.epoch, self.metrics, is_best=best)
-        #     checkpoint_name = f'checkpoint_{"best" if best else "latest"}.json'
-        #     print(f"Model saved to {os.path.join(self.args.log_dir, self.run_id, checkpoint_name)}")
-        #     print('=' * 90)
+        self._edit()
+        self._evaluate()
             
         wandb.finish()
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train NORMA model (clean version)')
+    parser.add_argument('--sample', type=int, default=None)
+    parser.add_argument('--num_patients', type=int, default=None)
     parser.add_argument('--data_dir', type=str, default='../data/processed/')
     parser.add_argument('--log_dir', type=str, default='./logs')
     parser.add_argument('--train', type=str, default='combined', choices=['EHRSHOT', 'MIMIC-IV', 'combined'])
     parser.add_argument('--test', type=str, default='combined', choices=['EHRSHOT', 'MIMIC-IV', 'combined'])
-    parser.add_argument('--sample', type=int, default=None)
-    parser.add_argument('--model', type=str, default='NORMA', choices=['NORMA'])
+    parser.add_argument('--model', type=str, default='NormaLight', choices=['NormaLight', 'NORMA'])
     parser.add_argument('--loss', type=str, default='GaussianNLLLoss', choices=['NORMALoss', 'GaussianNLLLoss', 'MSELoss'])
     parser.add_argument('--d_model', type=int, default=64)
     parser.add_argument('--nhead', type=int, default=4) # 4 for original, 2 for smaller model
@@ -232,6 +234,7 @@ def parse_args():
     parser.add_argument('--weight_decay', type=float, default=1e-3)
     parser.add_argument('--patience', type=int, default=10)
     parser.add_argument('--run_id', type=str, default=None) 
+    parser.add_argument('--nstates', type=int, default=3)
     parser.add_argument('--edit', dest='edit', action='store_true', default=False)
     parser.add_argument('--predict', dest='predict', action='store_true', default=True)
     parser.add_argument('--resume', dest='resume', action='store_true', default=False)
@@ -248,5 +251,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-
 

@@ -8,7 +8,7 @@ import time
 import uuid
 import argparse
 
-from model import NORMADecoder, NormaLight, NormaLightDecoder
+from model import NORMA, NormaLight #NORMADecoder, NormaLight, NormaLightDecoder
 from loss import NORMALoss, GaussianNLLLoss, MSELoss
 import warnings
 warnings.filterwarnings('ignore')
@@ -86,7 +86,7 @@ def load_checkpoint(log_dir, run_id, args=None, best=False, device='cpu', quiet=
     hparams['run_id'] = run_id
     if not hasattr(hparams, 'model'): # or not hasattr(hparams, 'best_val_loss'):
         for old_key, new_key in {'model_type': 'model', 
-                                 'num_layers': 'nlayers', 
+                                 'nlayers': 'nlayers', 
                                  'source': 'train', 
                                  'learning_rate': 'lr', 
                                  'loss_type': 'loss'}.items():
@@ -127,18 +127,21 @@ def load_checkpoint(log_dir, run_id, args=None, best=False, device='cpu', quiet=
 def to_device_batch(batch, device):
     """Move tensors to device and fix dtype for embedding indices if present."""
     batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
-    for key in ('sex', 'cid', 's_next', 's_h'):
+    for key in ('sex', 'age', 'cid', 's_next', 's_h'):
         if key in batch and isinstance(batch[key], torch.Tensor):
             batch[key] = batch[key].long()
     return batch
 
-def create_model(args, num_lab_codes, checkpoint=None):
-    if args.model == 'NormaLight':
-        model = NormaLight(d_model=args.d_model, nhead=args.nhead, num_layers=args.nlayers, num_lab_codes=num_lab_codes)
-    elif args.model == 'NORMADecoder':
-        model = NORMADecoder(d_model=args.d_model, nhead=args.nhead, num_layers=args.nlayers, num_lab_codes=num_lab_codes)
-    elif args.model == 'NormaLightDecoder':
-        model = NormaLightDecoder(d_model=args.d_model, nhead=args.nhead, num_layers=args.nlayers, num_lab_codes=num_lab_codes)
+def create_model(args, ncodes, checkpoint=None):
+    nstates = getattr(args, 'nstates', getattr(args, 'num_states', 2))
+    if args.model == 'NORMA':
+        model = NORMA(d_model=args.d_model, nhead=args.nhead, nlayers=args.nlayers, nstates=nstates, ncodes=ncodes)
+    elif args.model == 'NormaLight':
+        model = NormaLight(d_model=args.d_model, nhead=args.nhead, nlayers=args.nlayers, nstates=nstates, ncodes=ncodes)
+    # elif args.model == 'NORMADecoder':
+    #     model = NORMADecoder(d_model=args.d_model, nhead=args.nhead, nlayers=args.nlayers, num_lab_codes=num_lab_codes)
+    # elif args.model == 'NormaLightDecoder':
+    #     model = NormaLightDecoder(d_model=args.d_model, nhead=args.nhead, nlayers=args.nlayers, num_lab_codes=num_lab_codes)
     else:
         raise ValueError(f"Unknown model type: {args.model}")
     if checkpoint is not None:
