@@ -26,8 +26,6 @@ from edit import *
 from utils import *
 
 class EarlyStopping:
-    """Early stopping utility to prevent overfitting."""
-
     def __init__(self, patience: int = 10, min_delta: float = 0.001):
         self.patience = patience
         self.min_delta = min_delta
@@ -88,21 +86,32 @@ class NORMATrainer:
         }
 
     def _predict(self):
-        train_seq, val_seq, test_seq = load_and_split_data(self.args.data_dir, self.args.test, self.args.sample, print_info=False, nstates=getattr(self.args, 'nstates', 2))
-        train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, getattr(self.args, 'nstates', 2), batch_size=self.args.batch_size, random_state=self.args.seed)
+        train_seq, val_seq, test_seq = load_and_split_data(self.args.data_dir, self.args.test, self.args.sample, print_info=False, nstates=self.args.nstates)
+        train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, self.args.nstates, batch_size=self.args.batch_size, random_state=self.args.seed)
         print(f'Performing Prediction and Evaluation on {self.args.test.title()}...')
+        
         predictions_df = predict(self.model, self.device, train_loader, val_loader, test_loader)
         self.predictions_df = predictions_df
         predictions_df.to_csv(os.path.join(self.args.log_dir, self.run_id, f"predictions_{self.args.test.lower()}.csv"), index=False)
+        
         print(f"Predictions saved to {os.path.join(self.args.log_dir, self.run_id, f'predictions_{self.args.test.lower()}.csv')}")
         print('=' * 90)
-  
-    def _edit(self):
+        
         print(f'Performing Counterfactual Prediction on {self.args.test.title()}...')
         counterfactual_predictions_df = predict_cf(self.model, self.device, train_loader, val_loader, test_loader)
         counterfactual_predictions_df.to_csv(os.path.join(self.args.log_dir, self.run_id, f"counterfactual_predictions_{self.args.test.lower()}.csv"), index=False)
         print(f"Counterfactual predictions saved to {os.path.join(self.args.log_dir, self.run_id, f'counterfactual_predictions_{self.args.test.lower()}.csv')}")
         print('=' * 90)
+  
+    # def _edit(self):
+    #     train_seq, val_seq, test_seq = load_and_split_data(self.args.data_dir, self.args.test, self.args.sample, print_info=False, nstates=getattr(self.args, 'nstates', 2))
+    #     train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, getattr(self.args, 'nstates', 2), batch_size=self.args.batch_size, random_state=self.args.seed)
+        
+    #     print(f'Performing Counterfactual Prediction on {self.args.test.title()}...')
+    #     counterfactual_predictions_df = predict_cf(self.model, self.device, train_loader, val_loader, test_loader)
+    #     counterfactual_predictions_df.to_csv(os.path.join(self.args.log_dir, self.run_id, f"counterfactual_predictions_{self.args.test.lower()}.csv"), index=False)
+    #     print(f"Counterfactual predictions saved to {os.path.join(self.args.log_dir, self.run_id, f'counterfactual_predictions_{self.args.test.lower()}.csv')}")
+    #     print('=' * 90)
         
     def _evaluate(self):
         print(f'Performing Evaluation on {self.args.test.title()}...')
@@ -176,8 +185,8 @@ class NORMATrainer:
             print('=' * 90)
             
     def train(self):
-        train_seq, val_seq, test_seq = load_and_split_data(self.args.data_dir, self.args.train, self.args.sample, nstates=getattr(self.args, 'nstates', 2))
-        train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, getattr(self.args, 'nstates', 2), batch_size=self.args.batch_size, random_state=self.args.seed)
+        train_seq, val_seq, test_seq = load_and_split_data(self.args.data_dir, self.args.train, self.args.sample, nstates=self.args.nstates)
+        train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, self.args.nstates, batch_size=self.args.batch_size, random_state=self.args.seed)
 
         self._set_up_model()
         if self.args.resume: 
@@ -213,7 +222,7 @@ class NORMATrainer:
             
         self._save_model()
         self._predict()
-        self._edit()
+        # self._edit()
         self._evaluate()
             
         wandb.finish()
@@ -232,7 +241,7 @@ def parse_args():
     parser.add_argument('--nhead', type=int, default=4) # 4 for original, 2 for smaller model
     parser.add_argument('--nlayers', type=int, default=8) # 8 for original, 2 for smaller model
     parser.add_argument('--epochs', type=int, default=50)
-    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--lr', type=float, default=0.0001)
     parser.add_argument('--weight_decay', type=float, default=1e-3)
     parser.add_argument('--patience', type=int, default=10)

@@ -1,4 +1,4 @@
-import torch
+simport torch
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -31,9 +31,9 @@ def get_predictions(model, device, loader, split_name):
             batch = to_device_batch(batch, device)
             
             mu, log_var = model(
-                batch['x_h'], batch['s_h'], batch['t_h'], batch['sex'], 
-                batch['cid'], batch['s_next'], batch['t_next'], batch['pad_mask']
-            )
+                    batch['x_h'], batch['s_h'], batch['t_h'], batch['sex'],
+                    batch['age'], batch['cid'], batch['s_next'], batch['t_next'], batch['pad_mask']
+                )
             
             cid = batch['cid'].cpu().numpy()
             pids = batch['pids'] 
@@ -64,10 +64,6 @@ def get_predictions(model, device, loader, split_name):
     return pd.DataFrame(predictions)
 
 def load_predictions(run_ids, base, source):
-    """
-    Build dictionary of model configs for evaluation.
-    Returns dict: {run_id: (path, true_col, pred_col)}
-    """
     outputs = {}
     for run_id in run_ids:
         if run_id in ['Mean', 'ARIMA', 'last']:

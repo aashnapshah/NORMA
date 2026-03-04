@@ -216,7 +216,7 @@ def create_dataloaders(train_seq, val_seq, test_seq, nstates, batch_size=16, ran
         batch_size=batch_size,
         sampler=create_weighted_sampler(train_seq),
         collate_fn=collate_fn,
-        num_workers=1,
+        num_workers=4,
         pin_memory=True,
         persistent_workers=True
     )
