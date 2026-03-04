@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NORMA — Lab Value Predictor</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <!-- Plotly -->
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+  <style>
+    :root {
+      --norma-blue:   #1d4ed8;
+      --norma-light:  #eff6ff;
+      --low-color:    #e74c3c;
+      --normal-color: #27ae60;
+      --high-color:   #e67e22;
+      --ref-band:     rgba(148, 163, 184, 0.15);
+      --sidebar-w:    360px;
+    }
+
+    body {
+      background: #f8fafc;
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 0.875rem;
+    }
+
+    /* ── Navbar ── */
+    .navbar { background: var(--norma-blue); padding: 0.6rem 1.5rem; }
+    .navbar-brand { font-weight: 700; font-size: 1.1rem; color: #fff !important; letter-spacing: 0.03em; }
+    .model-badge {
+      background: rgba(255,255,255,0.18); color: #fff;
+      font-size: 0.72rem; padding: 0.2rem 0.6rem; border-radius: 999px;
+      font-family: monospace;
+    }
+    .stat-chip {
+      background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.85);
+      font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 4px; margin-left: 0.4rem;
+    }
+
+    /* ── Layout ── */
+    .main-layout { display: flex; height: calc(100vh - 52px); overflow: hidden; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: var(--sidebar-w); min-width: var(--sidebar-w);
+      background: #fff; border-right: 1px solid #e2e8f0;
+      overflow-y: auto; padding: 1.25rem 1rem;
+      display: flex; flex-direction: column; gap: 1rem;
+    }
+    .sidebar-section {
+      background: #f8fafc; border: 1px solid #e2e8f0;
+      border-radius: 8px; padding: 0.85rem;
+    }
+    .sidebar-section h6 {
+      font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: #64748b; margin-bottom: 0.65rem;
+    }
+    .form-label { font-weight: 500; color: #374151; margin-bottom: 0.25rem; }
+    .form-control, .form-select {
+      font-size: 0.85rem; border-color: #d1d5db;
+    }
+    .form-control:focus, .form-select:focus {
+      border-color: var(--norma-blue); box-shadow: 0 0 0 3px rgba(29,78,216,0.12);
+    }
+
+    /* ── History table ── */
+    #history-table { font-size: 0.82rem; }
+    #history-table th { font-size: 0.7rem; font-weight: 600; color: #6b7280; text-transform: uppercase; }
+    #history-table td { vertical-align: middle; padding: 0.3rem 0.4rem; }
+    #history-table input {
+      font-size: 0.82rem; padding: 0.25rem 0.4rem;
+      border: 1px solid #d1d5db; border-radius: 4px; width: 100%;
+    }
+    #history-table input:focus { outline: none; border-color: var(--norma-blue); }
+    .btn-delete-row {
+      background: none; border: none; color: #94a3b8; padding: 0.1rem 0.3rem;
+      cursor: pointer; font-size: 1rem; line-height: 1;
+    }
+    .btn-delete-row:hover { color: var(--low-color); }
+
+    /* ── Buttons ── */
+    .btn-predict {
+      background: var(--norma-blue); color: #fff; border: none;
+      font-weight: 600; font-size: 0.9rem; padding: 0.55rem 1rem;
+      border-radius: 6px; width: 100%; transition: background 0.15s;
+    }
+    .btn-predict:hover { background: #1e40af; }
+    .btn-predict:disabled { background: #94a3b8; cursor: not-allowed; }
+    .btn-outline-sm {
+      font-size: 0.78rem; padding: 0.2rem 0.6rem; border-radius: 4px;
+      border: 1px solid #d1d5db; background: #fff; cursor: pointer; color: #374151;
+    }
+    .btn-outline-sm:hover { background: #f1f5f9; }
+
+    /* ── Main content ── */
+    .main-content { flex: 1; overflow-y: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+
+    /* ── Chart card ── */
+    .chart-card {
+      background: #fff; border: 1px solid #e2e8f0;
+      border-radius: 10px; padding: 1rem;
+      flex: 1; min-height: 340px;
+    }
+    #main-chart { width: 100%; height: 100%; min-height: 320px; }
+
+    /* ── Prediction results ── */
+    .results-row { display: flex; gap: 0.75rem; }
+    .pred-card {
+      flex: 1; border-radius: 8px; padding: 0.85rem 1rem;
+      border: 1.5px solid; background: #fff;
+    }
+    .pred-card.state-Low    { border-color: var(--low-color); }
+    .pred-card.state-Normal { border-color: var(--normal-color); }
+    .pred-card.state-High   { border-color: var(--high-color); }
+    .pred-card .state-label {
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; margin-bottom: 0.3rem;
+    }
+    .pred-card.state-Low    .state-label { color: var(--low-color); }
+    .pred-card.state-Normal .state-label { color: var(--normal-color); }
+    .pred-card.state-High   .state-label { color: var(--high-color); }
+    .pred-card .mu-value  { font-size: 1.5rem; font-weight: 700; color: #111827; }
+    .pred-card .mu-unit   { font-size: 0.75rem; color: #6b7280; margin-left: 0.2rem; }
+    .pred-card .ci-text   { font-size: 0.78rem; color: #6b7280; margin-top: 0.15rem; }
+    .pred-card .sigma-text { font-size: 0.78rem; color: #9ca3af; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      height: 100%; min-height: 280px; color: #94a3b8;
+    }
+    .empty-state i { font-size: 2.5rem; margin-bottom: 0.5rem; }
+    .empty-state p { font-size: 0.85rem; margin: 0; }
+
+    /* ── Ref range pill ── */
+    .ref-pill {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      font-size: 0.72rem; color: #4b5563; background: #f1f5f9;
+      border: 1px solid #e2e8f0; border-radius: 999px;
+      padding: 0.15rem 0.6rem; margin-top: 0.4rem;
+    }
+
+    /* ── Spinner ── */
+    .spinner-wrap { display: none; align-items: center; gap: 0.5rem; color: #6b7280; font-size: 0.82rem; }
+    .spinner-wrap.active { display: flex; }
+
+    /* ── Toast ── */
+    #toast-container { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999; }
+    .toast-msg {
+      background: #1e293b; color: #f1f5f9; border-radius: 8px;
+      padding: 0.6rem 1rem; font-size: 0.82rem; margin-top: 0.4rem;
+      animation: fadeInUp 0.2s ease;
+    }
+    .toast-msg.error { background: #7f1d1d; }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════
+     Navbar
+══════════════════════════════════════════════════ -->
+<nav class="navbar d-flex align-items-center gap-3">
+  <span class="navbar-brand"><i class="bi bi-activity me-2"></i>NORMA</span>
+  <span id="model-badge" class="model-badge">loading…</span>
+  <span id="stat-r2"   class="stat-chip d-none"></span>
+  <span id="stat-loss" class="stat-chip d-none"></span>
+</nav>
+
+<!-- ══════════════════════════════════════════════════
+     Main layout
+══════════════════════════════════════════════════ -->
+<div class="main-layout">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+
+    <!-- Lab test -->
+    <div class="sidebar-section">
+      <h6>Lab Test</h6>
+      <select id="sel-test" class="form-select form-select-sm">
+        {% for t in tests %}
+        <option value="{{ t }}" {% if t == 'PLT' %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+      <div id="ref-pill" class="ref-pill mt-2">
+        <i class="bi bi-rulers"></i>
+        <span id="ref-text">—</span>
+      </div>
+    </div>
+
+    <!-- Demographics -->
+    <div class="sidebar-section">
+      <h6>Patient Demographics</h6>
+      <div class="d-flex gap-2 align-items-end">
+        <div style="flex:1">
+          <label class="form-label">Sex</label>
+          <div class="btn-group w-100" role="group">
+            <input type="radio" class="btn-check" name="sex" id="sex-m" value="0" autocomplete="off" checked>
+            <label class="btn btn-outline-secondary btn-sm" for="sex-m">M</label>
+            <input type="radio" class="btn-check" name="sex" id="sex-f" value="1" autocomplete="off">
+            <label class="btn btn-outline-secondary btn-sm" for="sex-f">F</label>
+          </div>
+        </div>
+        <div style="flex:1">
+          <label class="form-label">Age</label>
+          <input type="number" id="inp-age" class="form-control form-control-sm"
+                 value="45" min="13" max="100" step="1">
+        </div>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div class="sidebar-section" style="flex:1">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="mb-0">History</h6>
+        <div class="d-flex gap-1">
+          <button class="btn-outline-sm" onclick="loadExample()" title="Load real patient">
+            <i class="bi bi-person-lines-fill"></i> Example
+          </button>
+          <button class="btn-outline-sm" onclick="addRow()" title="Add measurement">
+            <i class="bi bi-plus-lg"></i> Add
+          </button>
+        </div>
+      </div>
+      <table class="table table-sm table-hover mb-0" id="history-table">
+        <thead><tr>
+          <th>Day</th>
+          <th>Value</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="history-body"></tbody>
+      </table>
+      <div id="example-pid" class="mt-1" style="font-size:0.7rem;color:#9ca3af;display:none;">
+        <i class="bi bi-person"></i> <span id="pid-text"></span>
+      </div>
+    </div>
+
+    <!-- Prediction settings -->
+    <div class="sidebar-section">
+      <h6>Next Measurement</h6>
+      <label class="form-label">Days from start</label>
+      <input type="number" id="inp-tnext" class="form-control form-control-sm"
+             value="365" min="1" step="1">
+      <div class="mt-2 d-flex align-items-center gap-2">
+        <div class="spinner-wrap" id="spinner">
+          <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+          <span>Predicting…</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Predict button -->
+    <button class="btn-predict" id="btn-predict" onclick="runPredict()">
+      <i class="bi bi-lightning-charge-fill me-1"></i>Predict
+    </button>
+
+  </aside>
+
+  <!-- ── Main content ── -->
+  <main class="main-content">
+
+    <!-- Chart -->
+    <div class="chart-card">
+      <div id="main-chart">
+        <div class="empty-state">
+          <i class="bi bi-graph-up"></i>
+          <p>Add history and click <strong>Predict</strong> to visualise</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Result cards -->
+    <div class="results-row" id="result-cards">
+      <!-- filled by JS -->
+    </div>
+
+  </main>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- ══════════════════════════════════════════════════
+     JS
+══════════════════════════════════════════════════ -->
+<script>
+const REF   = {{ ref_json | safe }};
+const MINFO = {{ model_info | safe }};
+
+// ── Initialise navbar ──
+document.getElementById('model-badge').textContent = MINFO.run_id;
+document.getElementById('stat-r2').textContent   = `Val R² ${MINFO.val_r2}`;
+document.getElementById('stat-loss').textContent = `Val Loss ${MINFO.val_loss}`;
+document.getElementById('stat-r2').classList.remove('d-none');
+document.getElementById('stat-loss').classList.remove('d-none');
+
+// ── Reference range pill ──
+function updateRefPill() {
+  const test  = document.getElementById('sel-test').value;
+  const sex   = document.querySelector('input[name="sex"]:checked').value;
+  const sexK  = sex === '1' ? 'F' : 'M';
+  if (!REF[test]) return;
+  const r     = REF[test][sexK];
+  document.getElementById('ref-text').textContent =
+    `Ref: ${r.low} – ${r.high} ${r.unit}`;
+}
+
+document.getElementById('sel-test').addEventListener('change', updateRefPill);
+document.querySelectorAll('input[name="sex"]').forEach(r => r.addEventListener('change', updateRefPill));
+updateRefPill();
+
+// ── History table ──
+let rowId = 0;
+function addRow(day = '', value = '') {
+  const id   = rowId++;
+  const body = document.getElementById('history-body');
+  const tr   = document.createElement('tr');
+  tr.id      = `row-${id}`;
+  tr.innerHTML = `
+    <td><input type="number" step="any" placeholder="0" value="${day}" class="day-input"></td>
+    <td><input type="number" step="any" placeholder="value" value="${value}" class="val-input"></td>
+    <td><button class="btn-delete-row" onclick="deleteRow(${id})">×</button></td>`;
+  body.appendChild(tr);
+}
+
+function deleteRow(id) {
+  const row = document.getElementById(`row-${id}`);
+  if (row) row.remove();
+}
+
+function getHistory() {
+  const rows = document.querySelectorAll('#history-body tr');
+  const hist = [];
+  rows.forEach(r => {
+    const d = parseFloat(r.querySelector('.day-input').value);
+    const v = parseFloat(r.querySelector('.val-input').value);
+    if (!isNaN(d) && !isNaN(v)) hist.push({ day: d, value: v });
+  });
+  return hist.sort((a, b) => a.day - b.day);
+}
+
+function clearHistory() {
+  document.getElementById('history-body').innerHTML = '';
+  rowId = 0;
+}
+
+// seed some default PLT values
+function seedDefaults() {
+  clearHistory();
+  const defaults = { PLT:[{d:0,v:240},{d:45,v:220},{d:120,v:235},{d:200,v:210},{d:300,v:225}],
+    HGB:[{d:0,v:14.2},{d:45,v:13.8},{d:120,v:14.0},{d:200,v:13.5},{d:300,v:13.9}] };
+  const test = document.getElementById('sel-test').value;
+  const pts  = defaults[test] || [];
+  if (pts.length) {
+    pts.forEach(p => addRow(p.d, p.v));
+    document.getElementById('inp-tnext').value = 365;
+  } else {
+    addRow(0, '');
+  }
+}
+document.getElementById('sel-test').addEventListener('change', () => {
+  seedDefaults(); updateRefPill();
+});
+
+// ── Load example patient ──
+async function loadExample() {
+  const test = document.getElementById('sel-test').value;
+  showToast(`Loading example for ${test}…`);
+  try {
+    const resp = await fetch(`/api/example/${test}`);
+    const data = await resp.json();
+    if (data.error) { showToast(data.error, true); return; }
+    clearHistory();
+    data.history.forEach(h => addRow(h.day, h.value));
+    document.getElementById('inp-tnext').value = Math.round(data.t_next);
+    document.getElementById('example-pid').style.display = 'block';
+    document.getElementById('pid-text').textContent = `Patient ${data.pid}`;
+    showToast('Example loaded');
+  } catch(e) { showToast('Failed to load example', true); }
+}
+
+// ── Predict ──
+let chartDrawn = false;
+
+async function runPredict() {
+  const history = getHistory();
+  if (history.length < 1) { showToast('Add at least 1 history point', true); return; }
+
+  const payload = {
+    test_name: document.getElementById('sel-test').value,
+    sex:       parseInt(document.querySelector('input[name="sex"]:checked').value),
+    age:       parseFloat(document.getElementById('inp-age').value),
+    history,
+    t_next:    parseFloat(document.getElementById('inp-tnext').value),
+  };
+
+  setLoading(true);
+  try {
+    const resp = await fetch('/api/predict', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    if (data.error) { showToast(data.error, true); return; }
+    drawChart(payload, data);
+    drawCards(data);
+  } catch(e) {
+    showToast('Prediction failed: ' + e.message, true);
+  } finally {
+    setLoading(false);
+  }
+}
+
+// ── Chart ──
+function gaussianPdf(x, mu, sigma) {
+  return x.map(xi =>
+    (1 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * ((xi - mu) / sigma) ** 2)
+  );
+}
+
+function linspace(a, b, n) {
+  return Array.from({length: n}, (_, i) => a + (b - a) * i / (n - 1));
+}
+
+function drawChart(payload, data) {
+  const history = payload.history;
+  const test    = payload.test_name;
+  const t_next  = data.t_next;
+  const ref_low = data.ref_low;
+  const ref_high= data.ref_high;
+  const unit    = data.unit;
+  const preds   = data.predictions;
+
+  const histX  = history.map(h => h.day);
+  const histY  = history.map(h => h.value);
+
+  // Determine y range
+  const allMu    = Object.values(preds).filter(p => !p.error).map(p => p.mu);
+  const allSigma = Object.values(preds).filter(p => !p.error).map(p => p.sigma);
+  const allY     = [...histY, ...allMu.map((m, i) => m + 2*allSigma[i]),
+                             ...allMu.map((m, i) => m - 2*allSigma[i])];
+  const yPad = (Math.max(...allY) - Math.min(...allY)) * 0.15;
+  const yLo  = Math.min(ref_low * 0.85, Math.min(...allY) - yPad);
+  const yHi  = Math.max(ref_high * 1.12, Math.max(...allY) + yPad);
+
+  const traces = [];
+
+  // Reference range band
+  traces.push({
+    x: [Math.min(...histX, t_next) - 20, Math.max(...histX, t_next) + 20,
+        Math.max(...histX, t_next) + 20, Math.min(...histX, t_next) - 20],
+    y: [ref_high, ref_high, ref_low, ref_low],
+    fill: 'toself', fillcolor: 'rgba(148,163,184,0.12)',
+    line: {color: 'transparent'}, mode: 'lines',
+    name: `Ref range (${ref_low}–${ref_high} ${unit})`, hoverinfo: 'none',
+    showlegend: true,
+  });
+
+  // Reference range borders
+  traces.push({
+    x: [Math.min(...histX, t_next) - 20, Math.max(...histX, t_next) + 20],
+    y: [ref_high, ref_high],
+    mode: 'lines', line: {color: 'rgba(148,163,184,0.5)', width: 1, dash: 'dot'},
+    showlegend: false, hoverinfo: 'none',
+  });
+  traces.push({
+    x: [Math.min(...histX, t_next) - 20, Math.max(...histX, t_next) + 20],
+    y: [ref_low, ref_low],
+    mode: 'lines', line: {color: 'rgba(148,163,184,0.5)', width: 1, dash: 'dot'},
+    showlegend: false, hoverinfo: 'none',
+  });
+
+  // History line + points
+  traces.push({
+    x: histX, y: histY,
+    mode: 'lines+markers',
+    line:   {color: '#1e293b', width: 2},
+    marker: {color: '#1e293b', size: 7, symbol: 'circle'},
+    name: 'History',
+    hovertemplate: 'Day %{x}<br>Value: %{y}<extra></extra>',
+  });
+
+  // Prediction Gaussian density traces + mean points per state
+  const stateColors = {Low: '#e74c3c', Normal: '#27ae60', High: '#e67e22'};
+  const densityWidth = (Math.max(...histX, t_next) - Math.min(...histX)) * 0.06;
+
+  Object.entries(preds).forEach(([label, p]) => {
+    if (p.error) return;
+    const color = stateColors[label];
+
+    // Rotated Gaussian density at t_next
+    const yGrid = linspace(Math.max(yLo, p.mu - 3.5*p.sigma),
+                           Math.min(yHi, p.mu + 3.5*p.sigma), 120);
+    const pdf   = gaussianPdf(yGrid, p.mu, p.sigma);
+    const pdfMax = Math.max(...pdf);
+    const xLeft = yGrid.map(() => t_next);
+    const xRight= pdf.map(pv => t_next + (pv / pdfMax) * densityWidth);
+
+    traces.push({
+      x: [...xRight, ...xLeft.reverse()],
+      y: [...yGrid, ...yGrid.slice().reverse()],
+      fill: 'toself', fillcolor: hexToRgba(color, 0.18),
+      line: {color: hexToRgba(color, 0.6), width: 1.2},
+      mode: 'lines', name: `${label} dist.`,
+      hoverinfo: 'none', showlegend: false,
+    });
+
+    // Mean point with error bar
+    traces.push({
+      x: [t_next], y: [p.mu],
+      mode: 'markers',
+      marker: {color, size: 11, symbol: 'diamond',
+               line: {color: '#fff', width: 1.5}},
+      error_y: {
+        type: 'data', symmetric: false,
+        array:       [p.ci_upper - p.mu],
+        arrayminus:  [p.mu - p.ci_lower],
+        color, thickness: 2, width: 6,
+      },
+      name: `${label} (μ=${p.mu.toFixed(1)})`,
+      hovertemplate: `<b>${label}</b><br>μ = %{y:.2f}<br>95% CI: ${p.ci_lower.toFixed(1)}–${p.ci_upper.toFixed(1)}<extra></extra>`,
+    });
+  });
+
+  const layout = {
+    margin: {l: 50, r: 20, t: 30, b: 50},
+    xaxis: {
+      title: 'Days from first measurement',
+      showgrid: true, gridcolor: '#f1f5f9', zeroline: false,
+    },
+    yaxis: {
+      title: `${test} (${unit})`,
+      range: [yLo, yHi],
+      showgrid: true, gridcolor: '#f1f5f9', zeroline: false,
+    },
+    legend: {orientation: 'h', y: -0.18, font: {size: 11}},
+    hovermode: 'closest',
+    plot_bgcolor: '#fff', paper_bgcolor: '#fff',
+    shapes: [{
+      type: 'line', x0: t_next, x1: t_next, y0: yLo, y1: yHi,
+      line: {color: '#94a3b8', width: 1.5, dash: 'dash'},
+    }],
+    annotations: [{
+      x: t_next, y: yHi, xanchor: 'left', yanchor: 'top',
+      text: `  t=${t_next}d`, showarrow: false,
+      font: {size: 10, color: '#94a3b8'},
+    }],
+  };
+
+  const el = document.getElementById('main-chart');
+  el.innerHTML = '';
+  Plotly.newPlot(el, traces, layout, {responsive: true, displayModeBar: false});
+  chartDrawn = true;
+}
+
+// ── Result cards ──
+function drawCards(data) {
+  const preds   = data.predictions;
+  const unit    = data.unit;
+  const container = document.getElementById('result-cards');
+  container.innerHTML = '';
+  ['Low', 'Normal', 'High'].forEach(label => {
+    const p   = preds[label];
+    const div = document.createElement('div');
+    div.className = `pred-card state-${label}`;
+    if (p && !p.error) {
+      div.innerHTML = `
+        <div class="state-label">${label}</div>
+        <div><span class="mu-value">${p.mu.toFixed(1)}</span><span class="mu-unit">${unit}</span></div>
+        <div class="ci-text">95% CI: ${p.ci_lower.toFixed(1)} – ${p.ci_upper.toFixed(1)}</div>
+        <div class="sigma-text">σ = ${p.sigma.toFixed(2)}</div>`;
+    } else {
+      div.innerHTML = `<div class="state-label">${label}</div><div class="text-muted">—</div>`;
+    }
+    container.appendChild(div);
+  });
+}
+
+// ── Utilities ──
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function setLoading(on) {
+  document.getElementById('spinner').classList.toggle('active', on);
+  document.getElementById('btn-predict').disabled = on;
+}
+
+function showToast(msg, isError = false) {
+  const c   = document.getElementById('toast-container');
+  const div = document.createElement('div');
+  div.className = 'toast-msg' + (isError ? ' error' : '');
+  div.textContent = msg;
+  c.appendChild(div);
+  setTimeout(() => div.remove(), 3000);
+}
+
+// ── Init ──
+seedDefaults();
+updateRefPill();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
