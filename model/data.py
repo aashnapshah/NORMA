@@ -12,7 +12,8 @@ import random
 import sys
 import warnings
 
-warnings.filterwarnings('ignore', category=pd.errors.SettingWithCopyWarning)
+if hasattr(pd.errors, 'SettingWithCopyWarning'):
+    warnings.filterwarnings('ignore', category=pd.errors.SettingWithCopyWarning)
 
 sys.path.append('../../NORMA/process/')
 from config import REFERENCE_INTERVALS
