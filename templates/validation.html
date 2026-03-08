@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NORMA — Clinical Validation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <style>
+    :root {
+      --bg: #f5f5f7; --surface: #ffffff; --text-1: #1d1d1f; --text-2: #6e6e73; --text-3: #aeaeb2;
+      --border: rgba(0,0,0,0.08); --accent: #0071e3; --accent-h: #0077ed; --purple: #bf5af2; --normal: #30d158;
+      --dark-bg: #0a0a0f; --dark-border: rgba(255,255,255,0.08); --r-xl: 20px; --r-md: 10px; --r-sm: 7px; --shadow: 0 1px 0 rgba(0,0,0,0.04), 0 2px 20px rgba(0,0,0,0.07); --max-w: 1160px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: var(--text-1); font-size: 0.9375rem; line-height: 1.6; }
+    .navbar { height: 52px; background: rgba(255,255,255,0.88); backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid var(--border); padding: 0 2.5rem; display: flex; align-items: center; gap: 1rem; position: sticky; top: 0; z-index: 100; }
+    .nav-brand { font-weight: 800; font-size: 1rem; color: var(--text-1); display: flex; align-items: center; gap: 0.45rem; text-decoration: none; }
+    .nav-dot { width: 7px; height: 7px; background: var(--accent); border-radius: 50%; }
+    .nav-spacer { flex: 1; }
+    .nav-links { display: flex; gap: 0.2rem; }
+    .nav-link { font-size: 0.8rem; font-weight: 500; color: var(--text-2); text-decoration: none; padding: 0.3rem 0.75rem; border-radius: var(--r-md); transition: all 0.15s; }
+    .nav-link:hover { background: var(--bg); color: var(--text-1); }
+    .nav-link.active { color: var(--accent); font-weight: 600; }
+    .btn-nav { background: var(--accent); color: #fff; border: none; border-radius: var(--r-md); padding: 0.35rem 1rem; font-size: 0.8rem; font-weight: 600; text-decoration: none; transition: background 0.15s; }
+    .btn-nav:hover { background: var(--accent-h); color: #fff; }
+    .page-header { background: var(--dark-bg); border-bottom: 1px solid var(--dark-border); padding: 3rem 2.5rem 2.5rem; position: relative; overflow: hidden; }
+    .page-header::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent) 0%, var(--purple) 50%, var(--normal) 100%); }
+    .page-header-inner { max-width: var(--max-w); margin: 0 auto; }
+    .eyebrow { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: var(--accent); margin-bottom: 0.6rem; }
+    h1.page-title { font-size: clamp(1.8rem, 3vw, 2.6rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1.15; color: #fff; margin-bottom: 0.75rem; }
+    .page-lead { font-size: 0.975rem; line-height: 1.7; color: rgba(255,255,255,0.5); max-width: 620px; }
+    .toc-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1.75rem; }
+    .toc-pill { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); border-radius: 999px; font-size: 0.72rem; font-weight: 500; color: rgba(255,255,255,0.5); padding: 0.25rem 0.85rem; text-decoration: none; transition: all 0.15s; }
+    .toc-pill:hover { background: rgba(255,255,255,0.12); color: #fff; }
+    .section { padding: 4rem 2.5rem; }
+    .section.white { background: var(--surface); border-top: 1px solid var(--border); }
+    .section.cream { background: var(--bg); border-top: 1px solid var(--border); }
+    .section-inner, .section-inner.wide { max-width: var(--max-w); margin: 0 auto; }
+    h2.section-title { font-size: clamp(1.3rem, 2.5vw, 1.9rem); font-weight: 800; letter-spacing: -0.035em; line-height: 1.2; color: var(--text-1); margin-bottom: 0.5rem; }
+    .section-sub { font-size: 0.875rem; color: var(--text-2); line-height: 1.7; max-width: 640px; margin-bottom: 2rem; }
+    .ms-btn { background: none; border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text-3); font-size: 0.68rem; font-weight: 600; padding: 0.22rem 0.6rem; cursor: pointer; transition: all 0.12s; }
+    .ms-btn:hover { color: var(--text-1); border-color: rgba(0,0,0,0.15); }
+    .ms-btn.ms-active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .compare-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; margin-top: 1.25rem; }
+    .compare-table th { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); padding: 0.5rem 0.85rem; border-bottom: 2px solid var(--border); text-align: left; }
+    .compare-table td { padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .compare-table tr:last-child td { border-bottom: none; }
+    .compare-table tr.norma-row td { background: rgba(48,209,88,0.04); }
+    .badge-norma { display: inline-flex; align-items: center; gap: 0.25rem; background: rgba(48,209,88,0.1); color: #1a7a37; border-radius: 999px; font-size: 0.68rem; font-weight: 700; padding: 0.15rem 0.55rem; border: 1px solid rgba(48,209,88,0.2); }
+    .sens-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 1.5rem; margin-top: 1.5rem; box-shadow: var(--shadow); }
+    .sens-card-header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem; }
+    .sens-card-title { font-size: 0.92rem; font-weight: 700; color: var(--text-1); margin-bottom: 0.2rem; }
+    .sens-card-sub { font-size: 0.8rem; color: var(--text-3); }
+    .sens-btn-row { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .sens-btn { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text-2); font-size: 0.72rem; font-weight: 500; padding: 0.22rem 0.65rem; cursor: pointer; transition: all 0.15s; }
+    .sens-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .test-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.25rem; }
+    .test-chip { background: var(--surface); color: var(--text-2); border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 0.72rem; font-weight: 500; padding: 0.22rem 0.65rem; }
+    .cta-section { background: var(--dark-bg); padding: 5rem 2.5rem; text-align: center; border-top: 1px solid var(--dark-border); }
+    .cta-inner { max-width: 520px; margin: 0 auto; }
+    .btn-cta-primary { display: inline-flex; align-items: center; gap: 0.45rem; background: var(--accent); color: #fff; border: none; border-radius: 12px; padding: 0.8rem 1.6rem; font-size: 0.9rem; font-weight: 700; text-decoration: none; box-shadow: 0 4px 20px rgba(0,113,227,0.35); transition: background 0.15s; }
+    .btn-cta-primary:hover { background: var(--accent-h); color: #fff; }
+    .btn-cta-outline { display: inline-flex; align-items: center; gap: 0.45rem; background: transparent; color: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; padding: 0.8rem 1.6rem; font-size: 0.9rem; font-weight: 600; text-decoration: none; transition: all 0.15s; }
+    .btn-cta-outline:hover { border-color: rgba(255,255,255,0.4); color: #fff; }
+    .chart-loading { display: flex; align-items: center; justify-content: center; height: 240px; gap: 0.5rem; color: var(--text-3); font-size: 0.85rem; }
+    .spinner-sm { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    [id] { scroll-margin-top: 110px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="/" class="nav-brand"><span class="nav-dot"></span>NORMA</a>
+  <div class="nav-spacer"></div>
+  <div class="nav-links">
+    <a href="/#demo" class="nav-link">Example</a>
+    <a href="/training" class="nav-link">Training</a>
+    <a href="/validation" class="nav-link active">Validation</a>
+  </div>
+  <a href="/app" class="btn-nav"><i class="bi bi-lightning-charge-fill"></i> Try NORMA</a>
+</nav>
+
+<div class="page-header">
+  <div class="page-header-inner">
+    <div class="eyebrow">Clinical Validation</div>
+    <h1 class="page-title">Benchmark, per-test performance,<br>and sensitivity analysis</h1>
+    <p class="page-lead">Held-out test metrics, R² by biomarker, and how predictions vary with age, sex, and horizon.</p>
+    <div class="toc-row">
+      <a href="#benchmark" class="toc-pill"><i class="bi bi-table"></i> Benchmark</a>
+      <a href="#per-test" class="toc-pill"><i class="bi bi-bar-chart"></i> Per-test R²</a>
+      <a href="#eval-sens" class="toc-pill"><i class="bi bi-sliders"></i> Sensitivity</a>
+      <a href="#tests" class="toc-pill"><i class="bi bi-list-check"></i> Covered tests</a>
+      <a href="/training" class="toc-pill"><i class="bi bi-cpu"></i> Training &amp; Performance</a>
+    </div>
+  </div>
+</div>
+
+<section class="section cream" id="benchmark">
+  <div class="section-inner wide">
+    <div class="eyebrow">Benchmark</div>
+    <h2 class="section-title">Model comparison on held-out test data</h2>
+    <p class="section-sub">
+      Bootstrap-estimated metrics on the held-out test split.
+      NORMA is compared against Last-value and Population-mean baselines.
+    </p>
+    <div id="benchmark-table-wrap">
+      <div class="chart-loading"><div class="spinner-sm"></div><span>Loading metrics…</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="section white" id="per-test">
+  <div class="section-inner wide">
+    <div class="eyebrow">Per-test Performance</div>
+    <h2 class="section-title">R² by laboratory test</h2>
+    <p class="section-sub">
+      Per-biomarker R² on the test split, comparing NORMA against all baselines.
+      Use the split toggle to explore train / validation / test performance.
+    </p>
+    <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap">
+      <span style="font-size:0.72rem;color:var(--text-3);font-weight:500">Split:</span>
+      <button class="ms-btn ms-active" id="bc-test" onclick="setByCodeSplit('test')">Test</button>
+      <button class="ms-btn" id="bc-val" onclick="setByCodeSplit('val')">Validation</button>
+      <button class="ms-btn" id="bc-train" onclick="setByCodeSplit('train')">Train</button>
+    </div>
+    <div id="bycode-chart" style="width:100%;height:360px">
+      <div class="chart-loading"><div class="spinner-sm"></div><span>Loading chart…</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="section cream" id="eval-sens">
+  <div class="section-inner">
+    <div class="eyebrow">Evaluation Sensitivity</div>
+    <h2 class="section-title">How predictions shift with patient characteristics</h2>
+    <p class="section-sub">
+      Using a reference patient (Female, age 50, HGB history), these charts show how
+      NORMA's predicted value and 95% CI change as we sweep age, sex, or prediction horizon.
+      Dotted lines mark the population reference range.
+    </p>
+    <div class="sens-card" id="sens-age-card">
+      <div class="sens-card-header">
+        <div>
+          <div class="sens-card-title">Age sensitivity</div>
+          <div class="sens-card-sub">Prediction as patient age varies from 20 to 80 years</div>
+        </div>
+        <div class="sens-btn-row">
+          {% for t in ['HGB','PLT','CRE','GLU','TC'] %}
+          <button class="sens-btn{% if loop.first %} active{% endif %}" id="age-btn-{{ t }}" onclick="setAgeSensTest('{{ t }}')">{{ t }}</button>
+          {% endfor %}
+        </div>
+      </div>
+      <div id="sens-age-chart" style="width:100%;height:220px"><div class="chart-loading"><div class="spinner-sm"></div><span>Loading…</span></div></div>
+    </div>
+    <div class="sens-card" id="sens-sex-card">
+      <div class="sens-card-header">
+        <div>
+          <div class="sens-card-title">Sex-stratified prediction</div>
+          <div class="sens-card-sub">Male vs Female predicted values at age 50, 90-day horizon</div>
+        </div>
+        <div class="sens-btn-row">
+          {% for t in ['HGB','PLT','CRE','GLU','TC'] %}
+          <button class="sens-btn{% if loop.first %} active{% endif %}" id="sex-btn-{{ t }}" onclick="setSexSensTest('{{ t }}')">{{ t }}</button>
+          {% endfor %}
+        </div>
+      </div>
+      <div id="sens-sex-chart" style="width:100%;height:220px"><div class="chart-loading"><div class="spinner-sm"></div><span>Loading…</span></div></div>
+    </div>
+    <div class="sens-card" id="sens-horizon-card">
+      <div class="sens-card-header">
+        <div>
+          <div class="sens-card-title">Prediction horizon sensitivity</div>
+          <div class="sens-card-sub">Prediction uncertainty grows as the forecast horizon extends from 1 week to 2 years</div>
+        </div>
+        <div class="sens-btn-row">
+          {% for t in ['HGB','PLT','CRE','GLU','TC'] %}
+          <button class="sens-btn{% if loop.first %} active{% endif %}" id="hor-btn-{{ t }}" onclick="setHorizonSensTest('{{ t }}')">{{ t }}</button>
+          {% endfor %}
+        </div>
+      </div>
+      <div id="sens-horizon-chart" style="width:100%;height:220px"><div class="chart-loading"><div class="spinner-sm"></div><span>Loading…</span></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="section white" id="tests">
+  <div class="section-inner">
+    <div class="eyebrow">Coverage</div>
+    <h2 class="section-title">Covered laboratory tests</h2>
+    <p class="section-sub">{{ model_info.n_tests }} biomarkers modeled jointly across hematology, metabolic, hepatic, and lipid panels.</p>
+    <div class="test-chips">
+      {% for t in tests %}<span class="test-chip">{{ t }}</span>{% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="cta-section">
+  <div class="cta-inner">
+    <div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:rgba(255,255,255,0.3);margin-bottom:0.75rem">Next</div>
+    <h2 style="font-size:clamp(1.5rem,3vw,2rem);font-weight:800;letter-spacing:-0.04em;color:#fff;margin-bottom:0.75rem">Training and Performance</h2>
+    <p style="font-size:0.88rem;color:rgba(255,255,255,0.45);line-height:1.65;margin-bottom:2rem">Model architecture, comparison to baselines, and training-split metrics.</p>
+    <div style="display:flex;gap:0.65rem;justify-content:center;flex-wrap:wrap">
+      <a href="/training" class="btn-cta-primary"><i class="bi bi-cpu"></i> Training &amp; Performance</a>
+      <a href="/app" class="btn-cta-outline"><i class="bi bi-lightning-charge-fill"></i> Try NORMA</a>
+      <a href="/" class="btn-cta-outline"><i class="bi bi-house"></i> Home</a>
+    </div>
+  </div>
+</section>
+
+<script>
+let _metricsData = null;
+let _byCodeSplit = 'test';
+
+async function loadMetrics() {
+  try {
+    const resp = await fetch('/api/metrics');
+    _metricsData = await resp.json();
+    renderBenchmarkTable();
+    renderByCodeChart();
+  } catch(e) {
+    document.getElementById('benchmark-table-wrap').innerHTML =
+      '<p style="color:var(--text-3);font-size:0.85rem">Could not load metrics.</p>';
+  }
+}
+
+function setByCodeSplit(split) {
+  _byCodeSplit = split;
+  ['test','val','train'].forEach(s => {
+    document.getElementById('bc-' + s).classList.toggle('ms-active', s === split);
+  });
+  if (_metricsData) renderByCodeChart();
+}
+
+function makeMetricTable(rows, containerId, highlightModel) {
+  highlightModel = highlightModel || 'NORMA';
+  const metricCols = ['R2','MAE','MAPE'];
+  const models = [...new Set(rows.map(r => r.Model))];
+  let html = `<div style="overflow-x:auto"><table class="compare-table"><thead><tr><th>Model</th>${metricCols.map(m=>`<th>${m}</th>`).join('')}</tr></thead><tbody>`;
+  models.forEach(m => {
+    const row = rows.find(r => r.Model === m) || {};
+    const isN = m === highlightModel;
+    html += `<tr${isN ? ' class="norma-row"' : ''}><td>${isN ? `<span class="badge-norma"><i class="bi bi-stars"></i> ${m}</span>` : m}</td>${metricCols.map(met => {
+      const v = row[met];
+      return `<td>${v != null ? (typeof v === 'number' ? v.toFixed(3) : v) : '—'}</td>`;
+    }).join('')}</tr>`;
+  });
+  html += '</tbody></table></div>';
+  document.getElementById(containerId).innerHTML = html;
+}
+
+function renderBenchmarkTable() {
+  const rows = (_metricsData.overall || []).filter(r =>
+    (r.split || r.Split || '').toLowerCase() === 'test' && (r.Model || '') !== 'ARIMA'
+  );
+  makeMetricTable(rows, 'benchmark-table-wrap');
+}
+
+function renderByCodeChart() {
+  const byCode = (_metricsData.by_code || []).filter(r =>
+    (r.split || r.Split || '').toLowerCase() === _byCodeSplit
+  );
+  if (!byCode.length) return;
+  const tests = [...new Set(byCode.map(r => r.test_name))].sort();
+  const modelColors = { NORMA:'#30d158', last:'#ff9f0a', Mean:'#aeaeb2' };
+  const modelNames = [...new Set(byCode.map(r => r.Model))].filter(m => m !== 'ARIMA');
+  const traces = modelNames.map(model => ({
+    x: tests,
+    y: tests.map(t => { const r = byCode.find(x => x.test_name===t && x.Model===model); return r ? (r.R2 ?? null) : null; }),
+    type: 'bar', name: model,
+    marker: { color: modelColors[model] || '#a0a0a0', opacity: model === 'NORMA' ? 1 : 0.6 },
+    hovertemplate: '%{x}<br>R²: %{y:.3f}<extra>' + model + '</extra>',
+  }));
+  Plotly.newPlot('bycode-chart', traces, {
+    barmode: 'group',
+    margin: { l: 44, r: 16, t: 10, b: 80 },
+    font: { family: 'DM Sans,sans-serif', size: 11, color: '#5c5c5c' },
+    xaxis: { tickangle: -40, showgrid: false, zeroline: false },
+    yaxis: { title: 'R²', showgrid: true, gridcolor: 'rgba(0,0,0,0.05)', zeroline: true, zerolinecolor: 'rgba(0,0,0,0.1)' },
+    legend: { orientation: 'h', y: -0.38, font: { size: 11 } },
+    plot_bgcolor: '#fff', paper_bgcolor: '#fff', hovermode: 'x',
+  }, { responsive: true, displayModeBar: false });
+}
+
+const REF_HISTORIES = {
+  HGB: [0,90,180,365,548,730].map((d,i)=>({day:d,value:[13.2,12.8,13.0,13.5,13.1,12.9][i]})),
+  PLT: [0,90,180,365,548,730].map((d,i)=>({day:d,value:[225,210,230,218,222,215][i]})),
+  CRE: [0,90,180,365,548,730].map((d,i)=>({day:d,value:[0.82,0.85,0.88,0.84,0.86,0.83][i]})),
+  GLU: [0,90,180,365,548,730].map((d,i)=>({day:d,value:[95,98,102,97,101,96][i]})),
+  TC:  [0,90,180,365,548,730].map((d,i)=>({day:d,value:[190,195,202,188,197,193][i]})),
+};
+const REF_BASE_T = 730;
+
+async function sweepSensitivity(test, param, values) {
+  const history = REF_HISTORIES[test] || REF_HISTORIES['HGB'];
+  const resp = await fetch('/api/sensitivity', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ test_name: test, sex: 1, age: 50, history, base_t: REF_BASE_T, param, values }),
+  });
+  return resp.json();
+}
+
+function drawSensChart(containerId, results, unit, xFmt) {
+  const valid = results.filter(r => !r.error);
+  if (!valid.length) return;
+  const x = valid.map(r => xFmt(r.value));
+  const y = valid.map(r => r.mu);
+  const yUp = valid.map(r => r.ci_upper - r.mu);
+  const yDn = valid.map(r => r.mu - r.ci_lower);
+  const refLow = valid[0].ref_low;
+  const refHigh = valid[0].ref_high;
+  Plotly.newPlot(containerId, [
+    { x, y: valid.map(()=>refHigh), mode:'lines', line:{color:'rgba(217,119,6,0.5)',dash:'dot',width:1.5}, hoverinfo:'skip', showlegend:false },
+    { x, y: valid.map(()=>refLow), mode:'lines', line:{color:'rgba(220,38,38,0.5)',dash:'dot',width:1.5}, hoverinfo:'skip', showlegend:false },
+    { x, y, mode:'lines+markers', name:'NORMA', line:{color:'#30d158',width:2.5}, marker:{color:'#30d158',size:7},
+      error_y:{type:'data',symmetric:false,array:yUp,arrayminus:yDn,color:'rgba(48,209,88,0.3)',thickness:1.5,width:5},
+      hovertemplate:'%{x}<br>%{y:.2f} ' + unit + '<extra>NORMA</extra>' },
+  ], {
+    margin:{l:50,r:14,t:10,b:40}, font:{family:'DM Sans,sans-serif',size:11,color:'#5c5c5c'},
+    xaxis:{showgrid:true,gridcolor:'rgba(0,0,0,0.05)',zeroline:false},
+    yaxis:{title:unit,showgrid:true,gridcolor:'rgba(0,0,0,0.05)',zeroline:false},
+    plot_bgcolor:'#fff', paper_bgcolor:'#fff', hovermode:'x unified', showlegend:false,
+  },{responsive:true,displayModeBar:false});
+}
+
+function drawSexChart(containerId, results, unit) {
+  const valid = results.filter(r => !r.error);
+  if (!valid.length) return;
+  const labels = valid.map(r => r.value === 0 ? 'Male' : 'Female');
+  const y = valid.map(r => r.mu);
+  const yUp = valid.map(r => r.ci_upper - r.mu);
+  const yDn = valid.map(r => r.mu - r.ci_lower);
+  const refLow = valid[0].ref_low;
+  const refHigh = valid[0].ref_high;
+  Plotly.newPlot(containerId, [
+    { x: labels, y, type:'bar', name:'NORMA', marker:{color:['#0369a1','#be185d'],opacity:0.8},
+      error_y:{type:'data',symmetric:false,array:yUp,arrayminus:yDn,color:'rgba(0,0,0,0.3)',thickness:1.5,width:8},
+      hovertemplate:'%{x}: %{y:.2f} ' + unit + '<extra></extra>' },
+    { x: labels, y: valid.map(()=>refHigh), mode:'lines', line:{color:'rgba(217,119,6,0.5)',dash:'dot',width:1.5}, hoverinfo:'skip', showlegend:false },
+    { x: labels, y: valid.map(()=>refLow), mode:'lines', line:{color:'rgba(220,38,38,0.5)',dash:'dot',width:1.5}, hoverinfo:'skip', showlegend:false },
+  ], {
+    margin:{l:50,r:14,t:10,b:40}, font:{family:'DM Sans,sans-serif',size:11,color:'#5c5c5c'},
+    xaxis:{showgrid:false,zeroline:false},
+    yaxis:{title:unit,showgrid:true,gridcolor:'rgba(0,0,0,0.05)',zeroline:false},
+    plot_bgcolor:'#fff', paper_bgcolor:'#fff', showlegend:false,
+  },{responsive:true,displayModeBar:false});
+}
+
+async function loadAgeSens(test) {
+  document.getElementById('sens-age-chart').innerHTML = '<div class="chart-loading"><div class="spinner-sm"></div><span>Loading…</span></div>';
+  try {
+    const d = await sweepSensitivity(test, 'age', [20,30,40,50,60,70,80]);
+    drawSensChart('sens-age-chart', d.results, d.unit, v => v + ' y');
+  } catch(e) {}
+}
+async function loadSexSens(test) {
+  document.getElementById('sens-sex-chart').innerHTML = '<div class="chart-loading"><div class="spinner-sm"></div><span>Loading…</span></div>';
+  try {
+    const d = await sweepSensitivity(test, 'sex', [0, 1]);
+    drawSexChart('sens-sex-chart', d.results, d.unit);
+  } catch(e) {}
+}
+async function loadHorizonSens(test) {
+  document.getElementById('sens-horizon-chart').innerHTML = '<div class="chart-loading"><div class="spinner-sm"></div><span>Loading…</span></div>';
+  try {
+    const d = await sweepSensitivity(test, 'horizon', [7,30,90,180,365,730]);
+    drawSensChart('sens-horizon-chart', d.results, d.unit, v => v >= 365 ? (v/365).toFixed(1) + ' yr' : v + ' d');
+  } catch(e) {}
+}
+
+function setAgeSensTest(test) {
+  document.querySelectorAll('[id^="age-btn-"]').forEach(b => b.classList.remove('active'));
+  document.getElementById('age-btn-' + test).classList.add('active');
+  loadAgeSens(test);
+}
+function setSexSensTest(test) {
+  document.querySelectorAll('[id^="sex-btn-"]').forEach(b => b.classList.remove('active'));
+  document.getElementById('sex-btn-' + test).classList.add('active');
+  loadSexSens(test);
+}
+function setHorizonSensTest(test) {
+  document.querySelectorAll('[id^="hor-btn-"]').forEach(b => b.classList.remove('active'));
+  document.getElementById('hor-btn-' + test).classList.add('active');
+  loadHorizonSens(test);
+}
+
+loadMetrics();
+loadAgeSens('HGB');
+loadSexSens('HGB');
+loadHorizonSens('HGB');
+</script>
+</body>
+</html>

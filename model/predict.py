@@ -1,4 +1,4 @@
-simport torch
+import torch
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -9,47 +9,56 @@ from utils import *
 
 CODE_TO_TEST_NAME = {i: test_name for test_name, i in TEST_VOCAB.items()}
 
-def predict(model, device, train_loader, val_loader, test_loader):
+def predict(model, device, train_loader, val_loader, test_loader, normalize=False):
     print('Generating predictions and computing metrics...')
     all_predictions = []
     for split_name, loader in [('train', train_loader), ('val', val_loader), ('test', test_loader)]:
         print(f"Evaluating {split_name} set...")
-        predictions_df = get_predictions(model, device, loader, split_name)
+        predictions_df = get_predictions(model, device, loader, split_name, normalize=normalize)
         predictions_df['split'] = split_name
         all_predictions.append(predictions_df)
     return pd.concat(all_predictions)
-        
-def get_predictions(model, device, loader, split_name):
+
+def get_predictions(model, device, loader, split_name, normalize=False):
     """Get predictions from model for a given dataloader."""
     model.eval()
     model.to(device)
-    
+
     predictions = []
-    
+
     with torch.no_grad():
         for batch in tqdm(loader, desc=f"{split_name} (predict)", leave=False):
             batch = to_device_batch(batch, device)
-            
+
             mu, log_var = model(
-                    batch['x_h'], batch['s_h'], batch['t_h'], batch['sex'],
-                    batch['age'], batch['cid'], batch['s_next'], batch['t_next'], batch['pad_mask']
-                )
-            
+                batch['x_h'], batch['s_h'], batch['t_h'], batch['sex'],
+                batch['age'], batch['cid'], batch['s_next'], batch['t_next'], batch['pad_mask']
+            )
+
             cid = batch['cid'].cpu().numpy()
-            pids = batch['pids'] 
-            mu = mu.cpu().numpy()
-            log_var = log_var.cpu().numpy()
+            pids = batch['pids']
             x_next = batch['x_next'].cpu().numpy()
             t_next = batch['t_next'].cpu().numpy()
             s_next = batch['s_next'].cpu().numpy()
-            
-            for i in range(len(mu)):
+            mu_np = mu.cpu().numpy()
+            log_var_np = log_var.cpu().numpy()
+
+            if normalize:
+                ref_low = batch['ref_low'].cpu().numpy()
+                ref_high = batch['ref_high'].cpu().numpy()
+                span = ref_high - ref_low
+                mu_np = mu_np * span + ref_low
+                x_next = x_next * span + ref_low
+                # denormalize log_var: Var(aX+b) = a^2 * Var(X), so log_var += 2*log(span)
+                log_var_np = log_var_np + 2.0 * np.log(span + 1e-8)
+
+            for i in range(len(mu_np)):
                 cid_val = int(cid[i].item() if hasattr(cid[i], 'item') else cid[i])
                 x_next_val = float(x_next[i].item() if hasattr(x_next[i], 'item') else x_next[i])
                 t_next_val = float(t_next[i].item() if hasattr(t_next[i], 'item') else t_next[i])
                 s_next_val = int(s_next[i].item() if hasattr(s_next[i], 'item') else s_next[i])
-                mu_val = float(mu[i].item() if hasattr(mu[i], 'item') else mu[i])
-                log_var_val = float(log_var[i].item() if hasattr(log_var[i], 'item') else log_var[i])
+                mu_val = float(mu_np[i].item() if hasattr(mu_np[i], 'item') else mu_np[i])
+                log_var_val = float(log_var_np[i].item() if hasattr(log_var_np[i], 'item') else log_var_np[i])
                 predictions.append({
                     'pid': pids[i],
                     'cid': cid_val,
@@ -60,7 +69,7 @@ def get_predictions(model, device, loader, split_name):
                     'mu': mu_val,
                     'log_var': log_var_val,
                 })
-    
+
     return pd.DataFrame(predictions)
 
 def load_predictions(run_ids, base, source):

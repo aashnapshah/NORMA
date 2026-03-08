@@ -87,10 +87,10 @@ class NORMATrainer:
 
     def _predict(self):
         train_seq, val_seq, test_seq = load_and_split_data(self.args.data_dir, self.args.test, self.args.sample, print_info=False, nstates=self.args.nstates)
-        train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, self.args.nstates, batch_size=self.args.batch_size, random_state=self.args.seed)
+        train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, self.args.nstates, batch_size=self.args.batch_size, random_state=self.args.seed, normalize=self.args.normalize)
         print(f'Performing Prediction and Evaluation on {self.args.test.title()}...')
-        
-        predictions_df = predict(self.model, self.device, train_loader, val_loader, test_loader)
+
+        predictions_df = predict(self.model, self.device, train_loader, val_loader, test_loader, normalize=self.args.normalize)
         self.predictions_df = predictions_df
         predictions_df.to_csv(os.path.join(self.args.log_dir, self.run_id, f"predictions_{self.args.test.lower()}.csv"), index=False)
         
@@ -98,7 +98,7 @@ class NORMATrainer:
         print('=' * 90)
         
         print(f'Performing Counterfactual Prediction on {self.args.test.title()}...')
-        counterfactual_predictions_df = predict_cf(self.model, self.device, train_loader, val_loader, test_loader)
+        counterfactual_predictions_df = predict_cf(self.model, self.device, train_loader, val_loader, test_loader, normalize=self.args.normalize)
         counterfactual_predictions_df.to_csv(os.path.join(self.args.log_dir, self.run_id, f"counterfactual_predictions_{self.args.test.lower()}.csv"), index=False)
         print(f"Counterfactual predictions saved to {os.path.join(self.args.log_dir, self.run_id, f'counterfactual_predictions_{self.args.test.lower()}.csv')}")
         print('=' * 90)
@@ -186,7 +186,7 @@ class NORMATrainer:
             
     def train(self):
         train_seq, val_seq, test_seq = load_and_split_data(self.args.data_dir, self.args.train, self.args.sample, nstates=self.args.nstates)
-        train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, self.args.nstates, batch_size=self.args.batch_size, random_state=self.args.seed)
+        train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, self.args.nstates, batch_size=self.args.batch_size, random_state=self.args.seed, normalize=self.args.normalize)
 
         self._set_up_model()
         if self.args.resume: 
@@ -250,6 +250,9 @@ def parse_args():
     parser.add_argument('--edit', dest='edit', action='store_true', default=False)
     parser.add_argument('--predict', dest='predict', action='store_true', default=True)
     parser.add_argument('--resume', dest='resume', action='store_true', default=False)
+    parser.add_argument('--normalize', dest='normalize', action='store_true', default=False,
+                        help='Normalize x values by per-test reference range before training. '
+                             'Predictions are denormalized back to original scale at inference.')
     parser.add_argument('--description', type=str, default='')
     parser.add_argument('--seed', type=int, default=42)
     return parser.parse_args()

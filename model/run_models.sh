@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --job-name=NORMA_SWEEP
+#SBATCH --job-name=NORMA_MODELS
 #SBATCH --output=logs/sweeps/%j.log
 #SBATCH --mem=64G
 #SBATCH -t 50:00:00
-#SBATCH -p gpu
-#SBATCH --gres=gpu:1       
+#SBATCH -p gpu_quad
+#SBATCH --gres=gpu:rtx8000:1       # use 1 GPU per experiment (change to :2 if you really need 2)
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=aashnashah@g.harvard.edu
 
@@ -16,8 +16,7 @@ module load cuda/11.7
 # conda activate norma   # or your env
 
 # mkdir -p logs
-python train.py --state_type 3
-python train.py --state_type 3 --train combined --test combined
-python train.py --state_type 3 --train ehrshot --test ehrshot
+python train.py --nstates 3 --train combined --test combined
+python train.py --nstates 3 --train ehrshot --test ehrshot
 
-python train.py --state_type 2
+python train.py --nstates 2

@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NORMA — Training &amp; Architecture</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <style>
+    :root {
+      --bg: #f5f5f7; --surface: #fff; --text-1: #1d1d1f; --text-2: #6e6e73; --text-3: #aeaeb2;
+      --border: rgba(0,0,0,0.08); --accent: #0071e3; --accent-h: #0077ed;
+      --low: #ff3b30; --normal: #30d158; --high: #ff9f0a; --purple: #bf5af2;
+      --dark-bg: #0a0a0f; --dark-border: rgba(255,255,255,0.08);
+      --r-xl: 20px; --r-lg: 14px; --r-md: 10px; --r-sm: 7px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 24px rgba(0,0,0,0.08);
+      --w: 1200px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: var(--text-1); font-size: 0.9375rem; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+
+    /* ── Nav ── */
+    .navbar { height: 52px; background: rgba(255,255,255,0.88); backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; align-items: center; gap: 1rem; position: sticky; top: 0; z-index: 100; }
+    .nav-brand { font-weight: 800; font-size: 1rem; color: var(--text-1); display: flex; align-items: center; gap: 0.45rem; text-decoration: none; }
+    .nav-dot { width: 7px; height: 7px; background: var(--accent); border-radius: 50%; flex-shrink: 0; }
+    .nav-spacer { flex: 1; }
+    .nav-links { display: flex; gap: 0.2rem; }
+    .nav-link { font-size: 0.8rem; font-weight: 500; color: var(--text-2); text-decoration: none; padding: 0.3rem 0.75rem; border-radius: var(--r-md); transition: all 0.15s; }
+    .nav-link:hover { background: var(--bg); color: var(--text-1); }
+    .nav-link.active { color: var(--accent); font-weight: 600; }
+    .btn-nav { background: var(--accent); color: #fff; border: none; border-radius: var(--r-md); padding: 0.35rem 1rem; font-size: 0.8rem; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 0.3rem; transition: background 0.15s; }
+    .btn-nav:hover { background: var(--accent-h); color: #fff; }
+
+    /* ── Header ── */
+    .page-header { background: var(--dark-bg); padding: 3.5rem 2rem 3rem; position: relative; overflow: hidden; }
+    .page-header::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent) 0%, var(--purple) 50%, var(--normal) 100%); }
+    .inner { max-width: var(--w); margin: 0 auto; }
+    .eyebrow { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: var(--accent); margin-bottom: 0.5rem; }
+    .eyebrow.dim { color: rgba(255,255,255,0.3); }
+    h1.page-title { font-size: clamp(1.9rem, 3.5vw, 2.8rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1.15; color: #fff; margin-bottom: 0.75rem; }
+    .page-lead { font-size: 0.975rem; color: rgba(255,255,255,0.48); line-height: 1.7; max-width: 600px; }
+    .toc-row { display: flex; gap: 0.45rem; flex-wrap: wrap; margin-top: 1.75rem; }
+    .toc-pill { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); border-radius: 999px; font-size: 0.72rem; font-weight: 500; color: rgba(255,255,255,0.48); padding: 0.25rem 0.85rem; text-decoration: none; transition: all 0.15s; }
+    .toc-pill:hover { background: rgba(255,255,255,0.12); color: #fff; }
+
+    /* ── Sections ── */
+    .sec { padding: 4.5rem 2rem; }
+    .sec.white { background: var(--surface); border-top: 1px solid var(--border); }
+    .sec.gray  { background: var(--bg); border-top: 1px solid var(--border); }
+    .sec.dark  { background: var(--dark-bg); border-top: 1px solid var(--dark-border); }
+    h2.stitle { font-size: clamp(1.3rem, 2.5vw, 1.9rem); font-weight: 800; letter-spacing: -0.035em; line-height: 1.2; margin-bottom: 0.4rem; }
+    h2.stitle.light { color: #fff; }
+    .slead { font-size: 0.9rem; color: var(--text-2); line-height: 1.75; max-width: 680px; margin-bottom: 2rem; }
+
+    /* ── Architecture diagram ── */
+    .arch-diagram { display: grid; grid-template-columns: 1.1fr 0.08fr 0.9fr 0.08fr 0.8fr; gap: 0; align-items: center; margin-top: 0.5rem; }
+    .arch-col { display: flex; flex-direction: column; gap: 0.5rem; }
+    .arch-arrow { display: flex; align-items: center; justify-content: center; }
+    .arch-arrow svg { flex-shrink: 0; }
+    .arch-box {
+      background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r-lg);
+      padding: 1rem 1.1rem; box-shadow: var(--shadow);
+    }
+    .arch-box.accent { border-color: rgba(0,113,227,0.3); background: rgba(0,113,227,0.03); }
+    .arch-box.green  { border-color: rgba(48,209,88,0.3); background: rgba(48,209,88,0.03); }
+    .arch-box.purple { border-color: rgba(191,90,242,0.3); background: rgba(191,90,242,0.03); }
+    .arch-box.orange { border-color: rgba(255,159,10,0.3); background: rgba(255,159,10,0.03); }
+    .arch-box-title { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); margin-bottom: 0.6rem; }
+    .emb-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; font-size: 0.8rem; }
+    .emb-row:last-child { margin-bottom: 0; }
+    .emb-chip {
+      font-size: 0.7rem; font-weight: 600; font-family: 'SF Mono','Fira Code',ui-monospace,monospace;
+      padding: 0.15rem 0.5rem; border-radius: var(--r-sm); border: 1px solid transparent; flex-shrink: 0;
+    }
+    .chip-val  { background: rgba(0,113,227,0.1);  color: #0053b0; border-color: rgba(0,113,227,0.2); }
+    .chip-state{ background: rgba(255,159,10,0.12); color: #a05a00; border-color: rgba(255,159,10,0.25); }
+    .chip-time { background: rgba(0,193,168,0.12); color: #006e62; border-color: rgba(0,193,168,0.25); }
+    .chip-demo { background: rgba(48,209,88,0.1);  color: #1a7a37; border-color: rgba(48,209,88,0.2); }
+    .chip-lab  { background: rgba(191,90,242,0.1); color: #7b2f9e; border-color: rgba(191,90,242,0.2); }
+    .chip-out  { background: rgba(0,113,227,0.1);  color: #0053b0; border-color: rgba(0,113,227,0.2); }
+    .emb-desc { font-size: 0.77rem; color: var(--text-2); }
+    .sum-circle {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--surface); border: 2px solid var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem; font-weight: 700; color: var(--accent); margin: 0.25rem auto;
+    }
+    .arch-divider { border: none; border-top: 1.5px dashed var(--border); margin: 0.6rem 0; }
+    .query-label {
+      font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-3); margin: 0.5rem 0 0.35rem; display: block;
+    }
+    .xfmr-box {
+      background: linear-gradient(135deg, rgba(0,113,227,0.06) 0%, rgba(191,90,242,0.06) 100%);
+      border: 1.5px solid rgba(0,113,227,0.25); border-radius: var(--r-lg);
+      padding: 1.25rem; text-align: center; box-shadow: var(--shadow);
+    }
+    .xfmr-title { font-size: 0.9rem; font-weight: 700; color: var(--text-1); margin-bottom: 0.85rem; letter-spacing: -0.02em; }
+    .xfmr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.85rem; }
+    .xfmr-stat { background: rgba(255,255,255,0.7); border: 1px solid var(--border); border-radius: var(--r-md); padding: 0.5rem 0.65rem; }
+    .xfmr-stat-val { font-size: 1.2rem; font-weight: 800; color: var(--accent); letter-spacing: -0.03em; line-height: 1; }
+    .xfmr-stat-lbl { font-size: 0.62rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 0.15rem; }
+    .xfmr-note { font-size: 0.73rem; color: var(--text-2); margin-top: 0.5rem; }
+    .xfmr-layer { background: rgba(0,113,227,0.08); border: 1px solid rgba(0,113,227,0.2); border-radius: var(--r-sm); padding: 0.3rem 0.65rem; font-size: 0.74rem; color: var(--accent); font-weight: 600; margin-top: 0.35rem; }
+    .out-box-title { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); margin-bottom: 0.6rem; }
+    .head-row { background: rgba(0,113,227,0.06); border: 1px solid rgba(0,113,227,0.18); border-radius: var(--r-md); padding: 0.55rem 0.75rem; margin-bottom: 0.45rem; }
+    .head-row:last-of-type { margin-bottom: 0; }
+    .head-label { font-size: 0.73rem; font-weight: 700; color: var(--text-1); }
+    .head-dim { font-size: 0.66rem; color: var(--text-2); font-family: 'SF Mono','Fira Code',ui-monospace,monospace; }
+    .head-out { font-size: 0.8rem; font-weight: 700; color: var(--accent); margin-top: 0.1rem; }
+    .loss-inline {
+      margin-top: 0.75rem; background: rgba(255,249,230,0.8); border: 1px solid rgba(255,159,10,0.3);
+      border-radius: var(--r-md); padding: 0.75rem; text-align: center;
+    }
+    .loss-title-sm { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--high); margin-bottom: 0.35rem; }
+    .loss-formula-sm { font-size: 0.82rem; font-family: 'SF Mono','Fira Code',ui-monospace,monospace; color: var(--text-1); line-height: 1.6; }
+    .causal-note { margin-top: 0.6rem; font-size: 0.73rem; color: var(--text-3); display: flex; align-items: center; gap: 0.35rem; }
+
+    /* ── Stats strip ── */
+    .stats-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--r-xl); overflow: hidden; margin-top: 2rem; }
+    .stat-cell { background: var(--surface); padding: 1.25rem 1.5rem; }
+    .stat-val { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.04em; color: var(--text-1); line-height: 1; }
+    .stat-lbl { font-size: 0.72rem; color: var(--text-2); margin-top: 0.3rem; }
+
+    /* ── Map ── */
+    #cohort-map { width: 100%; height: 420px; }
+    .map-legend { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-2); }
+    .map-legend-item { display: flex; align-items: center; gap: 0.4rem; }
+    .map-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Cohort table ── */
+    .cohort-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; margin-top: 1.5rem; }
+    .cohort-table th { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); padding: 0.5rem 1rem; border-bottom: 2px solid var(--border); text-align: left; }
+    .cohort-table td { padding: 0.7rem 1rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .cohort-table tr:last-child td { border-bottom: none; }
+    .cohort-table tr.ext-row td { background: rgba(48,209,88,0.03); }
+    .badge-train { display: inline-flex; align-items: center; gap: 0.25rem; background: rgba(0,113,227,0.1); color: #004a99; border-radius: 999px; font-size: 0.67rem; font-weight: 700; padding: 0.15rem 0.55rem; }
+    .badge-ext   { display: inline-flex; align-items: center; gap: 0.25rem; background: rgba(48,209,88,0.12); color: #1a7a37; border-radius: 999px; font-size: 0.67rem; font-weight: 700; padding: 0.15rem 0.55rem; }
+    .badge-num   { font-family: 'SF Mono','Fira Code',ui-monospace,monospace; font-size: 0.8rem; font-weight: 600; color: var(--text-1); }
+    .split-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; gap: 1px; margin-top: 0.3rem; min-width: 100px; }
+    .sb-train { background: var(--accent); }
+    .sb-val   { background: var(--purple); }
+    .sb-test  { background: var(--high); }
+
+    /* ── Loss section ── */
+    .loss-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl); padding: 2rem; box-shadow: var(--shadow); }
+    .loss-formula-block { text-align: center; margin: 1.5rem 0; }
+    .loss-eq { font-size: 1.05rem; font-family: 'SF Mono','Fira Code',ui-monospace,monospace; line-height: 1.9; color: var(--text-1); }
+    .loss-eq .lhs { color: var(--high); font-weight: 700; }
+    .loss-eq .term { color: var(--accent); }
+    .loss-eq .greek { font-style: italic; }
+    .loss-terms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 1.5rem; }
+    .lt-box { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 1rem; text-align: center; }
+    .lt-sym { font-size: 1.3rem; font-family: 'SF Mono','Fira Code',ui-monospace,monospace; font-weight: 700; margin-bottom: 0.3rem; }
+    .lt-name { font-size: 0.7rem; font-weight: 600; color: var(--text-2); margin-bottom: 0.15rem; }
+    .lt-desc { font-size: 0.72rem; color: var(--text-3); }
+
+    /* ── Metrics ── */
+    .metrics-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+    .metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 1.1rem 1.25rem; box-shadow: var(--shadow); }
+    .metric-split { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); margin-bottom: 0.5rem; }
+    .metric-r2 { font-size: 2rem; font-weight: 800; letter-spacing: -0.04em; color: var(--text-1); line-height: 1; }
+    .metric-sub { font-size: 0.72rem; color: var(--text-2); margin-top: 0.3rem; }
+    .ms-btn { background: none; border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text-3); font-size: 0.68rem; font-weight: 600; padding: 0.22rem 0.65rem; cursor: pointer; transition: all 0.12s; }
+    .ms-btn:hover { color: var(--text-1); border-color: rgba(0,0,0,0.15); }
+    .ms-btn.ms-active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .compare-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    .compare-table th { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); padding: 0.5rem 0.85rem; border-bottom: 2px solid var(--border); text-align: left; }
+    .compare-table td { padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .compare-table tr:last-child td { border-bottom: none; }
+    .compare-table tr.norma-row td { background: rgba(48,209,88,0.04); }
+    .badge-norma { display: inline-flex; align-items: center; gap: 0.25rem; background: rgba(48,209,88,0.1); color: #1a7a37; border-radius: 999px; font-size: 0.68rem; font-weight: 700; padding: 0.15rem 0.55rem; border: 1px solid rgba(48,209,88,0.2); }
+    .chart-loading { display: flex; align-items: center; justify-content: center; height: 180px; gap: 0.5rem; color: var(--text-3); font-size: 0.85rem; }
+    .spinner-sm { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Comparison table ── */
+    .comp-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    .comp-table th { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); padding: 0.5rem 0.85rem; border-bottom: 2px solid var(--border); text-align: left; }
+    .comp-table td { padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .comp-table tr:last-child td { border-bottom: none; }
+    .check { color: var(--normal); } .cross { color: var(--low); } .partial { color: var(--high); }
+
+    /* ── CTA ── */
+    .cta-section { background: var(--dark-bg); padding: 5rem 2rem; text-align: center; border-top: 1px solid var(--dark-border); }
+    .btn-cta-primary { display: inline-flex; align-items: center; gap: 0.45rem; background: var(--accent); color: #fff; border: none; border-radius: 12px; padding: 0.8rem 1.6rem; font-size: 0.9rem; font-weight: 700; text-decoration: none; box-shadow: 0 4px 20px rgba(0,113,227,0.35); transition: background 0.15s; }
+    .btn-cta-primary:hover { background: var(--accent-h); color: #fff; }
+    .btn-cta-outline { display: inline-flex; align-items: center; gap: 0.45rem; background: transparent; color: rgba(255,255,255,0.65); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; padding: 0.8rem 1.6rem; font-size: 0.9rem; font-weight: 600; text-decoration: none; transition: all 0.15s; }
+    .btn-cta-outline:hover { border-color: rgba(255,255,255,0.4); color: #fff; }
+
+    [id] { scroll-margin-top: 80px; }
+
+    /* ── High-level architecture flow ── */
+    .hla-flow { display: grid; grid-template-columns: 1fr 44px 1.05fr 44px 0.9fr; align-items: center; gap: 0; margin-top: 1.75rem; }
+    .hla-arrow { display: flex; align-items: center; justify-content: center; }
+    .hla-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r-lg); padding: 1.25rem 1.3rem; box-shadow: var(--shadow); align-self: stretch; display: flex; flex-direction: column; }
+    .hla-card.encoder { border-color: rgba(0,113,227,0.25); background: linear-gradient(145deg, rgba(0,113,227,0.04) 0%, rgba(191,90,242,0.04) 100%); }
+    .hla-card.output  { border-color: rgba(48,209,88,0.25); background: rgba(48,209,88,0.02); }
+    .hla-title { font-size: 0.57rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.13em; color: var(--text-3); margin-bottom: 0.9rem; display: flex; align-items: center; gap: 0.35rem; }
+    .inp-row { display: flex; align-items: center; gap: 0.65rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+    .inp-row:last-child { border-bottom: none; }
+    .inp-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 0.88rem; flex-shrink: 0; }
+    .inp-label { font-size: 0.82rem; font-weight: 600; color: var(--text-1); line-height: 1.2; }
+    .inp-sub   { font-size: 0.69rem; color: var(--text-2); line-height: 1.3; }
+    .enc-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; margin-bottom: 0.85rem; }
+    .enc-stat { background: rgba(255,255,255,0.75); border: 1px solid var(--border); border-radius: var(--r-md); padding: 0.5rem; text-align: center; }
+    .enc-stat-val { font-size: 1.15rem; font-weight: 800; color: var(--accent); letter-spacing: -0.02em; line-height: 1; }
+    .enc-stat-lbl { font-size: 0.58rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.07em; margin-top: 0.12rem; }
+    .enc-desc { font-size: 0.79rem; color: var(--text-2); line-height: 1.65; }
+    .enc-note { font-size: 0.73rem; color: var(--text-2); background: rgba(0,0,0,0.03); border-radius: var(--r-sm); padding: 0.5rem 0.65rem; margin-top: 0.65rem; line-height: 1.5; }
+    .out-pred { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.75rem; border-radius: var(--r-md); border: 1px solid var(--border); margin-bottom: 0.5rem; }
+    .out-sym { font-size: 1.5rem; font-weight: 800; font-style: italic; line-height: 1; min-width: 22px; text-align: center; }
+    .out-label { font-size: 0.81rem; font-weight: 600; color: var(--text-1); }
+    .out-sub   { font-size: 0.7rem; color: var(--text-2); }
+    .hla-loss { margin-top: auto; padding-top: 0.85rem; }
+    .loss-block-sm { background: rgba(255,249,230,0.9); border: 1px solid rgba(255,159,10,0.3); border-radius: var(--r-md); padding: 0.85rem; text-align: center; }
+    .loss-ey { font-size: 0.56rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--high); margin-bottom: 0.35rem; }
+    .loss-eq-sm { font-size: 0.88rem; font-family: 'SF Mono','Fira Code',ui-monospace,monospace; color: var(--text-1); line-height: 1.5; }
+    .loss-gloss { font-size: 0.7rem; color: var(--text-2); margin-top: 0.4rem; line-height: 1.4; }
+    @media (max-width: 860px) {
+      .hla-flow { grid-template-columns: 1fr; }
+      .hla-arrow { transform: rotate(90deg); padding: 0.25rem 0; }
+    }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="/" class="nav-brand"><span class="nav-dot"></span>NORMA</a>
+  <div class="nav-spacer"></div>
+  <div class="nav-links">
+    <a href="/#demo" class="nav-link">Example</a>
+    <a href="/training" class="nav-link active">Training & Validation</a>
+  </div>
+  <a href="/app" class="btn-nav"><i class="bi bi-lightning-charge-fill"></i> Try NORMA</a>
+</nav>
+
+<!-- ── Header ── -->
+<div class="page-header">
+  <div class="inner">
+    <div class="eyebrow">Training &amp; Architecture</div>
+    <h1 class="page-title">How NORMA learns<br>personalized laboratory dynamics</h1>
+    <p class="page-lead">
+      This page covers the model architecture, forecasting performance, and clinical validation.
+    </p>
+
+    <div style="margin-top:1.75rem; padding:1.25rem 1.5rem; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-left:3px solid rgba(255,255,255,0.4); border-radius:12px">
+      <div style="font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;color:rgba(255,255,255,0.3);margin-bottom:0.55rem">Core prediction task</div>
+      <p style="font-size:1rem;font-weight:500;color:rgba(255,255,255,0.9);line-height:1.65;margin:0;font-style:italic">
+        "Given a patient's longitudinal history, what value would be expected at the next measurement
+        if the patient were in a <strong style="color:#fff;font-style:normal">healthy state</strong>?"
+      </p>
+    </div>
+
+    <div class="toc-row">
+      <a href="#architecture" class="toc-pill"><i class="bi bi-diagram-3"></i> How it works</a>
+      <a href="#cohorts"      class="toc-pill"><i class="bi bi-globe2"></i> Training cohorts</a>
+<a href="#metrics"      class="toc-pill"><i class="bi bi-graph-up"></i> Performance</a>
+    </div>
+  </div>
+</div>
+
+
+<!-- SECTION: Training Cohorts + Map                           -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<section class="sec white" id="cohorts">
+  <div class="inner">
+    <div class="eyebrow">Training Cohorts</div>
+    <h2 class="stitle">Trained on two health systems. Validated in a third.</h2>
+    <p class="slead">
+      NORMA was trained on longitudinal lab sequences from MIMIC-IV (Boston) and EHRSHOT (Stanford).
+      External validation was performed on Clalit Health Services (Israel) — the largest integrated
+      health system in Israel — with no model retraining.
+    </p>
+
+    <!-- Stats strip -->
+    <div class="stats-strip">
+      <!-- <div class="stat-cell">
+        <div class="stat-val">2.0M</div>
+        <div class="stat-lbl">Training sequences</div>
+      </div> -->
+      <div class="stat-cell">
+        <div class="stat-val">4.5M</div>
+        <div class="stat-lbl">Adults in external validation</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-val">34</div>
+        <div class="stat-lbl">Laboratory biomarkers modeled</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-val">1.7B</div>
+        <div class="stat-lbl">Lab results evaluated</div>
+      </div>
+    </div>
+
+    <!-- Map -->
+    <div style="margin-top:2rem; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-xl); padding:1.25rem; box-shadow:var(--shadow)">
+      <div id="cohort-map"></div>
+      <div class="map-legend">
+        <div class="map-legend-item"><div class="map-legend-dot" style="background:#0071e3"></div> Training cohort</div>
+        <div class="map-legend-item"><div class="map-legend-dot" style="background:#30d158"></div> External validation</div>
+        <div class="map-legend-item" style="color:var(--text-3); font-size:0.73rem">Marker size ∝ sample size. Hover for details.</div>
+      </div>
+    </div>
+
+    <!-- Cohort table -->
+    <div style="margin-top:1.5rem; overflow-x:auto">
+      <table class="cohort-table">
+        <thead>
+          <tr>
+            <th>Cohort</th>
+            <th>Institution</th>
+            <th>Role</th>
+            <th>Sequences</th>
+            <th>Train / Val / Test</th>
+            <th>70/10/20 split</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>MIMIC-IV</strong></td>
+            <td>Beth Israel Deaconess Medical Center, Boston MA</td>
+            <td><span class="badge-train"><i class="bi bi-database-fill"></i> Training</span></td>
+            <td><span class="badge-num">1,907,032</span></td>
+            <td style="font-size:0.78rem; color:var(--text-2)">1,334,921 / 190,704 / 381,407</td>
+            <td>
+              <div class="split-bar">
+                <div class="sb-train" style="flex:70"></div>
+                <div class="sb-val"   style="flex:10"></div>
+                <div class="sb-test"  style="flex:20"></div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>EHRSHOT</strong></td>
+            <td>Stanford Medicine, Palo Alto CA</td>
+            <td><span class="badge-train"><i class="bi bi-database-fill"></i> Training</span></td>
+            <td><span class="badge-num">96,042</span></td>
+            <td style="font-size:0.78rem; color:var(--text-2)">67,228 / 9,605 / 19,209</td>
+            <td>
+              <div class="split-bar">
+                <div class="sb-train" style="flex:70"></div>
+                <div class="sb-val"   style="flex:10"></div>
+                <div class="sb-test"  style="flex:20"></div>
+              </div>
+            </td>
+          </tr>
+          <tr class="ext-row">
+            <td><strong>Clalit</strong></td>
+            <td>Clalit Health Services, Israel</td>
+            <td><span class="badge-ext"><i class="bi bi-shield-check"></i> External validation</span></td>
+            <td><span class="badge-num">4,500,000+</span></td>
+            <td style="font-size:0.78rem; color:var(--text-2)">No retraining</td>
+            <td style="font-size:0.78rem; color:var(--text-3)">Held-out</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION: Architecture                                      -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<section class="sec gray" id="architecture">
+  <div class="inner">
+    <div class="eyebrow">How it works</div>
+    <h2 class="stitle">How NORMA works</h2>
+
+    <p class="slead">
+      Each patient visit is encoded as five input signals. A causal transformer reads the full history
+      and — queried with a <strong>target clinical state</strong> and forecast horizon — outputs a
+      calibrated probability distribution: predicted mean <em>μ</em> and uncertainty <em>σ</em>.
+      By conditioning on a "healthy" state at inference, deviation from NORMA's expectation becomes the clinical signal.
+    </p>
+
+    <div class="hla-flow">
+
+      <!-- Col 1: Inputs -->
+      <div class="hla-card">
+        <div class="hla-title"><i class="bi bi-arrow-right-circle" style="color:var(--accent)"></i> Patient History Inputs</div>
+
+        <div class="inp-row">
+          <div class="inp-icon" style="background:rgba(0,113,227,0.1)">🧪</div>
+          <div>
+            <div class="inp-label">Lab value</div>
+            <div class="inp-sub">Numeric measurement at each visit</div>
+          </div>
+        </div>
+
+        <div class="inp-row">
+          <div class="inp-icon" style="background:rgba(255,159,10,0.12)">📊</div>
+          <div>
+            <div class="inp-label">Clinical state</div>
+            <div class="inp-sub">Low / Normal / High at each time step</div>
+          </div>
+        </div>
+
+        <div class="inp-row">
+          <div class="inp-icon" style="background:rgba(0,193,168,0.12)">⏱</div>
+          <div>
+            <div class="inp-label">Irregular time intervals</div>
+            <div class="inp-sub">Variable gaps between visits via Time2Vec</div>
+          </div>
+        </div>
+
+        <div class="inp-row">
+          <div class="inp-icon" style="background:rgba(48,209,88,0.12)">👤</div>
+          <div>
+            <div class="inp-label">Age &amp; sex</div>
+            <div class="inp-sub">Demographic context shared across history</div>
+          </div>
+        </div>
+
+        <div class="inp-row">
+          <div class="inp-icon" style="background:rgba(191,90,242,0.1)">🔬</div>
+          <div>
+            <div class="inp-label">Lab test identity</div>
+            <div class="inp-sub">Which biomarker is being measured</div>
+          </div>
+        </div>
+
+        <div style="margin-top:1rem; padding:0.65rem 0.75rem; background:rgba(255,159,10,0.07); border:1px solid rgba(255,159,10,0.2); border-radius:var(--r-md); font-size:0.77rem; color:var(--text-2); line-height:1.5">
+          <i class="bi bi-crosshair" style="color:var(--high)"></i>
+          <strong style="color:var(--text-1)"> Query token</strong> — additionally specifies
+          the <em>target clinical state</em> and <em>forecast horizon</em> to condition the prediction
+        </div>
+      </div>
+
+      <!-- Arrow -->
+      <div class="hla-arrow">
+        <svg width="44" height="28" viewBox="0 0 44 28">
+          <defs><marker id="mha1" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L6,3 Z" fill="#0071e3"/>
+          </marker></defs>
+          <line x1="4" y1="14" x2="38" y2="14" stroke="#0071e3" stroke-width="2.2" marker-end="url(#mha1)"/>
+        </svg>
+      </div>
+
+      <!-- Col 2: Transformer Encoder -->
+      <div class="hla-card encoder">
+        <div class="hla-title"><i class="bi bi-cpu" style="color:var(--accent)"></i> Causal Transformer Encoder</div>
+
+        <div class="enc-stat-grid">
+          <div class="enc-stat"><div class="enc-stat-val">8</div><div class="enc-stat-lbl">Layers</div></div>
+          <div class="enc-stat"><div class="enc-stat-val">4</div><div class="enc-stat-lbl">Heads</div></div>
+          <div class="enc-stat"><div class="enc-stat-val">64</div><div class="enc-stat-lbl">Dim</div></div>
+          <div class="enc-stat"><div class="enc-stat-val">565K</div><div class="enc-stat-lbl">Params</div></div>
+        </div>
+
+        <div class="enc-desc">
+          Reads the patient's full laboratory history as an ordered sequence.
+          <strong>Causal masking</strong> ensures each time step only attends to past observations — no future leakage.
+        </div>
+
+        <div class="enc-note">
+          <i class="bi bi-arrow-return-right" style="color:var(--accent)"></i>
+          The <strong>last hidden state</strong> (from the query token) is a compact representation
+          of the patient's trajectory, conditioned on when and what to predict next.
+        </div>
+      </div>
+
+      <!-- Arrow -->
+      <div class="hla-arrow">
+        <svg width="44" height="28" viewBox="0 0 44 28">
+          <defs><marker id="mha2" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L6,3 Z" fill="#30d158"/>
+          </marker></defs>
+          <line x1="4" y1="14" x2="38" y2="14" stroke="#30d158" stroke-width="2.2" marker-end="url(#mha2)"/>
+        </svg>
+      </div>
+
+      <!-- Col 3: Predictions + Loss -->
+      <div class="hla-card output">
+        <div class="hla-title"><i class="bi bi-bullseye" style="color:var(--normal)"></i> Prediction</div>
+
+        <div class="out-pred" style="border-color:rgba(0,113,227,0.2); background:rgba(0,113,227,0.04)">
+          <div class="out-sym" style="color:var(--accent)">μ</div>
+          <div>
+            <div class="out-label">Predicted mean</div>
+            <div class="out-sub">Expected next lab value</div>
+          </div>
+        </div>
+
+        <div class="out-pred" style="border-color:rgba(191,90,242,0.2); background:rgba(191,90,242,0.04)">
+          <div class="out-sym" style="color:var(--purple)">σ</div>
+          <div>
+            <div class="out-label">Predicted uncertainty</div>
+            <div class="out-sub">Confidence narrows with more data;<br>widens over longer horizons</div>
+          </div>
+        </div>
+
+        <div style="font-size:0.77rem; color:var(--text-2); text-align:center; padding:0.4rem 0; line-height:1.4">
+          Together: a <strong>95% predictive interval</strong><br>personalized to each patient
+        </div>
+
+        <div class="hla-loss">
+          <div class="loss-block-sm">
+            <div class="loss-ey"><i class="bi bi-calculator"></i> Gaussian NLL Loss</div>
+            <div class="loss-eq-sm">ℒ = ½ [ log σ² + (y − μ)² / σ² ]</div>
+            <div class="loss-gloss">
+              Jointly optimizes accuracy <em>(y − μ)²</em><br>and calibration <em>log σ²</em>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /hla-flow -->
+
+    <!-- Contextual query callout -->
+    <div style="margin-top:2rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div style="background:var(--surface);border:1.5px solid rgba(48,209,88,0.35);border-radius:var(--r-lg);padding:1rem 1.25rem">
+        <div style="font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--normal);margin-bottom:0.5rem">Contextual query — healthy state</div>
+        <div style="font-size:0.88rem;font-weight:600;color:var(--text-1);line-height:1.5">"What value would we expect if this patient were healthy?"</div>
+        <div style="font-size:0.72rem;color:var(--text-2);margin-top:0.4rem;line-height:1.55">Set state = Normal at inference. Deviation from this expectation is a clinically meaningful signal — narrower than population ranges, anchored to the individual's history.</div>
+      </div>
+      <div style="background:var(--surface);border:1.5px solid rgba(191,90,242,0.3);border-radius:var(--r-lg);padding:1rem 1.25rem">
+        <div style="font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--purple);margin-bottom:0.5rem">Conditional query — what if?</div>
+        <div style="font-size:0.88rem;font-weight:600;color:var(--text-1);line-height:1.5">"What if this patient were older, or a different sex?"</div>
+        <div style="font-size:0.72rem;color:var(--text-2);margin-top:0.4rem;line-height:1.55">Swap static demographic inputs at inference time. The model adapts its prediction to the new context — enabling sensitivity analysis and personalized what-if exploration.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION: Training Metrics                                  -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<section class="sec gray" id="metrics">
+  <div class="inner">
+    <div class="eyebrow">Forecasting Performance</div>
+    <h2 class="stitle">How well does NORMA predict the next value?</h2>
+    <p class="slead">
+      These metrics evaluate <strong>forecasting accuracy</strong> — how closely NORMA's predicted
+      distribution matches the observed next lab value under a healthy contextual state.
+      High R² indicates the model captures individual trajectory dynamics well.
+      <br><br>
+      <span style="color:var(--text-3)">
+        Clinical validation — whether deviations from NORMA's predicted ranges predict disease
+        outcomes — is evaluated on 4.5 million adults in Clalit Health Services, with no model retraining.
+      </span>
+    </p>
+
+    <!-- Static summary from checkpoint (model_info injected server-side) -->
+    <div class="metrics-row">
+      <div class="metric-card">
+        <div class="metric-split">Train</div>
+        <div class="metric-r2">{{ model_info.train_r2 }}</div>
+        <div class="metric-sub">R² &nbsp;·&nbsp; NLL loss {{ model_info.train_loss }}</div>
+        <div class="metric-sub" style="margin-top:0.2rem; color:var(--text-3)">epoch {{ model_info.epoch }}</div>
+      </div>
+      <div class="metric-card" style="border-color:rgba(0,113,227,0.3); background:rgba(0,113,227,0.03)">
+        <div class="metric-split" style="color:var(--accent)">Validation</div>
+        <div class="metric-r2" style="color:var(--accent)">{{ model_info.val_r2 }}</div>
+        <div class="metric-sub">R² &nbsp;·&nbsp; NLL loss {{ model_info.val_loss }}</div>
+        <div class="metric-sub" style="margin-top:0.2rem; color:var(--text-3)">early stopping checkpoint</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-split">Test (bootstrap)</div>
+        <div class="metric-r2" style="color:var(--text-3)" id="test-r2-live">—</div>
+        <div class="metric-sub">95% CI from bootstrap resampling</div>
+        <div class="metric-sub" style="margin-top:0.2rem; color:var(--text-3)">held-out split</div>
+      </div>
+    </div>
+
+    <!-- Bootstrap metrics from API -->
+    <div style="display:flex;gap:0.45rem;align-items:center;margin-bottom:0.85rem;flex-wrap:wrap">
+      <span style="font-size:0.72rem;color:var(--text-3);font-weight:500">Bootstrap estimates — split:</span>
+      <button class="ms-btn ms-active" id="ms-test"  onclick="setMetricsSplit('test')">Test</button>
+      <button class="ms-btn"           id="ms-val"   onclick="setMetricsSplit('val')">Validation</button>
+      <button class="ms-btn"           id="ms-train" onclick="setMetricsSplit('train')">Train</button>
+    </div>
+    <div id="metrics-table-wrap">
+      <div class="chart-loading"><div class="spinner-sm"></div><span>Loading metrics…</span></div>
+    </div>
+  </div>
+</section>
+
+
+
+
+<!-- ── CTA ── -->
+<section class="cta-section">
+  <div style="max-width:520px; margin:0 auto">
+    <div class="eyebrow dim">Try it</div>
+    <h2 style="font-size:clamp(1.5rem,3vw,2rem);font-weight:800;letter-spacing:-0.04em;color:#fff;margin-bottom:0.75rem;margin-top:0.5rem">See NORMA in action</h2>
+    <p style="font-size:0.88rem;color:rgba(255,255,255,0.45);line-height:1.65;margin-bottom:2rem">
+      Enter a lab history, select patient demographics, and get a personalized predicted range with AI interpretation.
+    </p>
+    <div style="display:flex;gap:0.65rem;justify-content:center;flex-wrap:wrap">
+      <a href="/app" class="btn-cta-primary"><i class="bi bi-lightning-charge-fill"></i> Try NORMA</a>
+      <a href="/"    class="btn-cta-outline"><i class="bi bi-house"></i> Home</a>
+    </div>
+  </div>
+</section>
+
+
+<script>
+/* ── Cohort map ─────────────────────────────────────────────── */
+(function buildMap() {
+  const sites = [
+    {
+      name: 'MIMIC-IV',
+      inst: 'Beth Israel Deaconess Medical Center',
+      city: 'Boston, MA',
+      lat: 42.335, lon: -71.107,
+      role: 'Training',
+      sequences: 1907032, patients: '~40K adults',
+      train: 1334921, val: 190704, test: 381407,
+      color: '#0071e3', size: 26,
+    },
+    {
+      name: 'EHRSHOT',
+      inst: 'Stanford Medicine',
+      city: 'Palo Alto, CA',
+      lat: 37.442, lon: -122.143,
+      role: 'Training',
+      sequences: 96042, patients: '~7K adults',
+      train: 67228, val: 9605, test: 19209,
+      color: '#0071e3', size: 14,
+    },
+    {
+      name: 'Clalit Health Services',
+      inst: 'Clalit Health Services',
+      city: 'Israel',
+      lat: 31.77, lon: 35.22,
+      role: 'External Validation',
+      sequences: null, patients: '4.5M adults',
+      train: null, val: null, test: null,
+      color: '#30d158', size: 40,
+    },
+  ];
+
+  const customdata = sites.map(s => ({
+    inst: s.inst, city: s.city, role: s.role,
+    patients: s.patients,
+    seq: s.sequences ? s.sequences.toLocaleString() : 'N/A',
+    train: s.train ? s.train.toLocaleString() : '—',
+    val:   s.val   ? s.val.toLocaleString()   : '—',
+    test:  s.test  ? s.test.toLocaleString()  : '—',
+  }));
+
+  const trace = {
+    type: 'scattergeo',
+    mode: 'markers+text',
+    lat: sites.map(s => s.lat),
+    lon: sites.map(s => s.lon),
+    text: sites.map(s => s.name),
+    textposition: sites.map((s, i) => i === 2 ? 'top right' : 'top center'),
+    textfont: { family: 'DM Sans,sans-serif', size: 11, color: sites.map(s => s.color) },
+    customdata,
+    hovertemplate:
+      '<b>%{text}</b><br>' +
+      '%{customdata.inst}<br>' +
+      '%{customdata.city}<br><br>' +
+      '<b>Role:</b> %{customdata.role}<br>' +
+      '<b>Patients:</b> %{customdata.patients}<br>' +
+      '<b>Sequences:</b> %{customdata.seq}<br>' +
+      '<b>Train / Val / Test:</b> %{customdata.train} / %{customdata.val} / %{customdata.test}' +
+      '<extra></extra>',
+    marker: {
+      size: sites.map(s => s.size),
+      color: sites.map(s => s.color),
+      opacity: 0.88,
+      line: { color: '#fff', width: 2 },
+    },
+  };
+
+  const layout = {
+    margin: { l:0, r:0, t:0, b:0 },
+    paper_bgcolor: '#fff',
+    geo: {
+      scope: 'world',
+      projection: { type: 'natural earth' },
+      showland: true, landcolor: '#f0f0f5',
+      showocean: true, oceancolor: '#e8f2ff',
+      showcoastlines: true, coastlinecolor: '#ccc',
+      showcountries: true, countrycolor: '#ddd',
+      showframe: false,
+      lonaxis: { range: [-140, 60] },
+      lataxis: { range: [20, 60] },
+      bgcolor: '#fff',
+    },
+  };
+
+  Plotly.newPlot('cohort-map', [trace], layout, { responsive: true, displayModeBar: false });
+})();
+
+/* ── Metrics API ─────────────────────────────────────────────── */
+let _metricsData = null;
+let _metricsSplit = 'test';
+
+async function loadMetrics() {
+  try {
+    const resp = await fetch('/api/metrics');
+    _metricsData = await resp.json();
+    renderTrainTable();
+  } catch(e) {
+    document.getElementById('metrics-table-wrap').innerHTML =
+      '<p style="color:var(--text-3);font-size:0.85rem;padding:1rem 0">Could not load bootstrap metrics.</p>';
+  }
+}
+
+function setMetricsSplit(split) {
+  _metricsSplit = split;
+  ['test','val','train'].forEach(s => {
+    document.getElementById('ms-' + s).classList.toggle('ms-active', s === split);
+  });
+  if (_metricsData) renderTrainTable();
+}
+
+function renderTrainTable() {
+  const all = (_metricsData.overall || []).filter(r =>
+    (r.Split || r.split || '').toLowerCase() === _metricsSplit
+  );
+  if (!all.length) {
+    document.getElementById('metrics-table-wrap').innerHTML =
+      '<p style="color:var(--text-3);font-size:0.85rem;padding:1rem 0">No data for this split.</p>';
+    return;
+  }
+
+  // Group rows by Model → Metric → row
+  const byModel = {};
+  all.forEach(r => {
+    const model  = r.Model  || r.model  || '?';
+    const metric = r.Metric || r.metric || '?';
+    if (!byModel[model]) byModel[model] = {};
+    byModel[model][metric] = r;
+  });
+
+  const metricCols = ['R2','MAE','MAPE'];
+  const models = Object.keys(byModel).sort((a,b) => a === 'NORMA' ? -1 : 1);
+
+  let html = `<div style="overflow-x:auto"><table class="compare-table">
+    <thead><tr><th>Model</th>${metricCols.map(m =>
+      `<th>${m} <span style="font-weight:400;font-size:0.72rem;color:var(--text-3)">(mean ± std)</span></th>`
+    ).join('')}</tr></thead><tbody>`;
+
+  models.forEach(model => {
+    const isN = model === 'NORMA';
+    html += `<tr${isN ? ' class="norma-row"' : ''}><td>${isN
+      ? `<span class="badge-norma"><i class="bi bi-stars"></i> ${model}</span>`
+      : model}</td>`;
+    metricCols.forEach(met => {
+      const r = byModel[model]?.[met];
+      if (!r) { html += '<td>—</td>'; return; }
+      const mu  = +r.mean;
+      const std = r.std != null ? +r.std : null;
+      html += `<td>${mu.toFixed(3)}${std != null
+        ? `<div style="font-size:0.65rem;color:var(--text-3)">± ${std.toFixed(3)}</div>` : ''}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  document.getElementById('metrics-table-wrap').innerHTML = html;
+
+  // Populate live test R² card
+  if (_metricsSplit === 'test') {
+    const normaR2 = byModel['NORMA']?.['R2'];
+    if (normaR2) {
+      const card = document.getElementById('test-r2-live');
+      if (card) {
+        card.style.color = 'var(--text-1)';
+        const std = normaR2.std != null ? `<div style="font-size:0.75rem;font-weight:500;color:var(--text-3);margin-top:0.15rem">± ${(+normaR2.std).toFixed(3)}</div>` : '';
+        card.innerHTML = `${(+normaR2.mean).toFixed(3)}${std}`;
+      }
+    }
+  }
+}
+
+loadMetrics();
+</script>
+
+</body>
+</html>

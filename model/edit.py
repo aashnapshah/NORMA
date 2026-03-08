@@ -47,16 +47,16 @@ def pred(model, seq, nstates, normal=False):
         std = np.sqrt(var)
     return mu, std
 
-def predict_cf(model, device, train_loader, val_loader, test_loader):
+def predict_cf(model, device, train_loader, val_loader, test_loader, normalize=False):
     all_predictions = []
     for split_name, loader in [('train', train_loader), ('val', val_loader), ('test', test_loader)]:
         print(f"Evaluating {split_name} set...")
-        predictions_df = get_predictions_cf(model, device, loader, split_name)
+        predictions_df = get_predictions_cf(model, device, loader, split_name, normalize=normalize)
         predictions_df['split'] = split_name
         all_predictions.append(predictions_df)
     return pd.concat(all_predictions)
 
-def get_predictions_cf(model, device, loader, split_name):
+def get_predictions_cf(model, device, loader, split_name, normalize=False):
     model.eval()
     model.to(device)
 
@@ -66,24 +66,29 @@ def get_predictions_cf(model, device, loader, split_name):
         from tqdm import tqdm
         for batch in tqdm(loader, desc=f"{split_name} (CF predict)", leave=False):
             batch = to_device_batch(batch, device)
-            pids = batch['pids']  
+            pids = batch['pids']
             ones_snext = torch.ones_like(batch['s_next'])
             zeros_snext = torch.zeros_like(batch['s_next'])
 
-            out = {}
+            ref_low = batch['ref_low'].cpu().numpy() if normalize else None
+            ref_high = batch['ref_high'].cpu().numpy() if normalize else None
+
             for state, snext in zip([True, False], [ones_snext, zeros_snext]):
                 mu, log_var = forward_model(model, batch, s_next=snext)
-                mu = mu.detach()
-                log_var = log_var.detach()
-                std = torch.exp(0.5 * log_var)  # numerically stable std
+                std = torch.exp(0.5 * log_var)
 
-                # grab fields needed for row, move to cpu only once
                 cid = batch['cid'].detach().cpu().numpy()
                 x_next = batch['x_next'].detach().cpu().numpy()
                 t_next = batch['t_next'].detach().cpu().numpy()
                 s_next = batch['s_next'].detach().cpu().numpy()
                 mu_np = mu.detach().cpu().numpy()
                 std_np = std.detach().cpu().numpy()
+
+                if normalize:
+                    span = ref_high - ref_low
+                    mu_np = mu_np * span + ref_low
+                    std_np = std_np * span
+                    x_next = x_next * span + ref_low
 
                 for i in range(len(mu_np)):
                     cid_val = int(cid[i].item() if hasattr(cid[i], 'item') else cid[i])

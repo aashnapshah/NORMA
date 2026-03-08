@@ -3,413 +3,999 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NORMA — Lab Value Predictor</title>
-
-  <!-- Bootstrap 5 -->
+  <title>NORMA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <!-- Bootstrap Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
-  <!-- Plotly -->
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 
   <style>
     :root {
-      --norma-blue:   #1d4ed8;
-      --norma-light:  #eff6ff;
-      --low-color:    #e74c3c;
-      --normal-color: #27ae60;
-      --high-color:   #e67e22;
-      --ref-band:     rgba(148, 163, 184, 0.15);
-      --sidebar-w:    360px;
+      --bg:      #f5f5f7;
+      --surface: #ffffff;
+      --text-1:  #1d1d1f;
+      --text-2:  #6e6e73;
+      --text-3:  #aeaeb2;
+      --border:  rgba(0,0,0,0.08);
+      --accent:  #0071e3;
+      --accent-h:#0077ed;
+      --low:     #ff3b30;
+      --normal:  #30d158;
+      --high:    #ff9f0a;
+      --purple:  #bf5af2;
+      --r-xl:    20px;
+      --r-lg:    14px;
+      --r-md:    10px;
+      --r-sm:    7px;
+      --sidebar-w: 296px;
+      --nav-h:   48px;
+      --shadow:  0 1px 0 rgba(0,0,0,0.04), 0 2px 20px rgba(0,0,0,0.06);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    /* ── Scroll progress bar ── */
+    #scroll-progress {
+      position: fixed;
+      top: var(--nav-h);
+      left: 0;
+      width: 0%;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), #bf5af2);
+      z-index: 200;
+      transition: width 0.1s linear;
+      pointer-events: none;
+    }
+
+    /* ── Card scroll-reveal animation ── */
+    @keyframes cardReveal {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .card-reveal {
+      animation: cardReveal 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    /* ── Active-section sidebar pulse ── */
+    @keyframes sectionPulse {
+      0%   { box-shadow: 0 0 0 0 rgba(0,113,227,0.25); }
+      70%  { box-shadow: 0 0 0 6px rgba(0,113,227,0); }
+      100% { box-shadow: 0 0 0 0 rgba(0,113,227,0); }
+    }
+    .sidebar-section-active {
+      animation: sectionPulse 0.6s ease-out;
+    }
+
+    /* ── Scroll-linked section label in navbar ── */
+    #scroll-section-label {
+      font-size: 0.72rem;
+      color: var(--text-3);
+      margin-left: auto;
+      transition: opacity 0.3s;
+      white-space: nowrap;
     }
 
     body {
-      background: #f8fafc;
-      font-family: 'Inter', system-ui, sans-serif;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
       font-size: 0.875rem;
+      background: var(--bg);
+      margin: 0;
+      color: var(--text-1);
+      -webkit-font-smoothing: antialiased;
     }
 
     /* ── Navbar ── */
-    .navbar { background: var(--norma-blue); padding: 0.6rem 1.5rem; }
-    .navbar-brand { font-weight: 700; font-size: 1.1rem; color: #fff !important; letter-spacing: 0.03em; }
-    .model-badge {
-      background: rgba(255,255,255,0.18); color: #fff;
-      font-size: 0.72rem; padding: 0.2rem 0.6rem; border-radius: 999px;
-      font-family: monospace;
+    .navbar {
+      height: var(--nav-h);
+      background: rgba(255,255,255,0.88);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
-    .stat-chip {
-      background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.85);
-      font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 4px; margin-left: 0.4rem;
+
+    .nav-brand {
+      font-weight: 700;
+      font-size: 1.05rem;
+      color: var(--text-1);
+      letter-spacing: -0.025em;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+    }
+    .nav-brand-dot {
+      width: 8px; height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .nav-badge {
+      background: var(--bg);
+      color: var(--text-3);
+      font-size: 0.67rem;
+      padding: 0.18rem 0.55rem;
+      border-radius: 999px;
+      font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+      border: 1px solid var(--border);
+    }
+    .nav-stat { color: var(--text-3); font-size: 0.72rem; }
+    .nav-spacer { flex: 1; }
+
+    .btn-nav {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-2);
+      border-radius: var(--r-md);
+      padding: 0.28rem 0.8rem;
+      font-size: 0.76rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      transition: all 0.15s;
+      text-decoration: none;
+      line-height: 1.5;
+    }
+    .btn-nav:hover { background: var(--bg); color: var(--text-1); border-color: rgba(0,0,0,0.15); }
+
+    .runs-badge {
+      background: var(--accent);
+      color: #fff;
+      border-radius: 999px;
+      font-size: 0.6rem;
+      font-weight: 700;
+      padding: 0 0.4rem;
+      min-width: 1.15rem;
+      text-align: center;
     }
 
     /* ── Layout ── */
-    .main-layout { display: flex; height: calc(100vh - 52px); overflow: hidden; }
+    .app-layout {
+      display: flex;
+      height: calc(100vh - var(--nav-h));
+      overflow: hidden;
+    }
 
     /* ── Sidebar ── */
     .sidebar {
-      width: var(--sidebar-w); min-width: var(--sidebar-w);
-      background: #fff; border-right: 1px solid #e2e8f0;
-      overflow-y: auto; padding: 1.25rem 1rem;
-      display: flex; flex-direction: column; gap: 1rem;
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
     }
-    .sidebar-section {
-      background: #f8fafc; border: 1px solid #e2e8f0;
-      border-radius: 8px; padding: 0.85rem;
+    .sidebar::-webkit-scrollbar { width: 0; }
+
+    .sidebar-body {
+      flex: 1;
+      padding: 1.4rem 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.4rem;
     }
-    .sidebar-section h6 {
-      font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em;
-      text-transform: uppercase; color: #64748b; margin-bottom: 0.65rem;
+
+    .sidebar-footer {
+      padding: 1rem 1.2rem 1.25rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
     }
-    .form-label { font-weight: 500; color: #374151; margin-bottom: 0.25rem; }
+
+    .section-label {
+      font-size: 0.58rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 0.55rem;
+    }
+
+    /* ── Form ── */
     .form-control, .form-select {
-      font-size: 0.85rem; border-color: #d1d5db;
+      font-size: 0.83rem;
+      border-color: var(--border);
+      border-radius: var(--r-md);
+      background: var(--bg);
+      color: var(--text-1);
     }
     .form-control:focus, .form-select:focus {
-      border-color: var(--norma-blue); box-shadow: 0 0 0 3px rgba(29,78,216,0.12);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,113,227,0.12);
+      background: var(--surface);
+    }
+    .form-label { font-size: 0.74rem; font-weight: 500; color: var(--text-2); margin-bottom: 0.25rem; }
+
+    /* Apple segmented control for Sex */
+    .seg-wrap {
+      display: flex;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 2px;
+      gap: 2px;
+    }
+    .seg-wrap .btn-check { display: none; }
+    .seg-wrap label.btn {
+      flex: 1;
+      background: transparent;
+      border: none !important;
+      border-radius: calc(var(--r-md) - 2px) !important;
+      padding: 0.28rem 0.75rem;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--text-2);
+      transition: all 0.18s;
+      box-shadow: none !important;
+      outline: none !important;
+      line-height: 1.5;
+    }
+    .seg-wrap .btn-check:checked + label.btn {
+      background: var(--surface) !important;
+      color: var(--text-1) !important;
+      font-weight: 600;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.12) !important;
+    }
+    .seg-wrap label.btn:hover { color: var(--text-1); }
+
+    .ref-pill {
+      margin-top: 0.45rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.67rem;
+      color: var(--text-3);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.18rem 0.6rem;
     }
 
     /* ── History table ── */
-    #history-table { font-size: 0.82rem; }
-    #history-table th { font-size: 0.7rem; font-weight: 600; color: #6b7280; text-transform: uppercase; }
-    #history-table td { vertical-align: middle; padding: 0.3rem 0.4rem; }
+    .history-header {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.55rem;
+    }
+    #history-table { width: 100%; font-size: 0.79rem; border-collapse: collapse; }
+    #history-table th {
+      font-size: 0.57rem; font-weight: 700; color: var(--text-3);
+      text-transform: uppercase; letter-spacing: 0.08em;
+      padding: 0 0.3rem 0.4rem; border-bottom: 1px solid var(--border);
+    }
+    #history-table td { padding: 0.2rem 0.3rem; vertical-align: middle; }
     #history-table input {
-      font-size: 0.82rem; padding: 0.25rem 0.4rem;
-      border: 1px solid #d1d5db; border-radius: 4px; width: 100%;
+      width: 100%; font-size: 0.78rem; padding: 0.22rem 0.4rem;
+      border: 1px solid transparent; border-radius: var(--r-sm);
+      background: var(--bg); color: var(--text-1); transition: all 0.15s;
     }
-    #history-table input:focus { outline: none; border-color: var(--norma-blue); }
-    .btn-delete-row {
-      background: none; border: none; color: #94a3b8; padding: 0.1rem 0.3rem;
-      cursor: pointer; font-size: 1rem; line-height: 1;
+    #history-table input:focus {
+      outline: none; border-color: var(--accent);
+      background: var(--surface); box-shadow: 0 0 0 2px rgba(0,113,227,0.1);
     }
-    .btn-delete-row:hover { color: var(--low-color); }
+    .btn-del {
+      background: none; border: none; color: var(--text-3); cursor: pointer;
+      padding: 0.1rem 0.3rem; border-radius: var(--r-sm);
+      font-size: 1rem; line-height: 1; transition: color 0.15s;
+    }
+    .btn-del:hover { color: var(--low); }
 
     /* ── Buttons ── */
-    .btn-predict {
-      background: var(--norma-blue); color: #fff; border: none;
-      font-weight: 600; font-size: 0.9rem; padding: 0.55rem 1rem;
-      border-radius: 6px; width: 100%; transition: background 0.15s;
+    .btn-icon {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      font-size: 0.71rem; font-weight: 500; padding: 0.24rem 0.6rem;
+      border-radius: var(--r-sm); border: 1px solid var(--border);
+      background: var(--surface); color: var(--text-2); cursor: pointer; transition: all 0.15s;
     }
-    .btn-predict:hover { background: #1e40af; }
-    .btn-predict:disabled { background: #94a3b8; cursor: not-allowed; }
-    .btn-outline-sm {
-      font-size: 0.78rem; padding: 0.2rem 0.6rem; border-radius: 4px;
-      border: 1px solid #d1d5db; background: #fff; cursor: pointer; color: #374151;
+    .btn-icon:hover { background: var(--bg); color: var(--text-1); }
+
+    .btn-primary {
+      width: 100%; background: var(--accent); color: #fff; border: none;
+      border-radius: var(--r-lg); padding: 0.7rem; font-size: 0.9rem; font-weight: 600;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      gap: 0.4rem; transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+      letter-spacing: -0.01em;
     }
-    .btn-outline-sm:hover { background: #f1f5f9; }
+    .btn-primary:hover { background: var(--accent-h); box-shadow: 0 4px 14px rgba(0,113,227,0.35); }
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-primary:disabled { background: var(--border); color: var(--text-3); cursor: not-allowed; box-shadow: none; }
+
+    .btn-secondary {
+      width: 100%; background: var(--bg); color: var(--accent);
+      border: 1px solid var(--border); border-radius: var(--r-lg); padding: 0.55rem;
+      font-size: 0.82rem; font-weight: 500; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      gap: 0.4rem; transition: all 0.15s;
+    }
+    .btn-secondary:hover { background: rgba(0,113,227,0.05); border-color: rgba(0,113,227,0.25); }
+    .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 
     /* ── Main content ── */
-    .main-content { flex: 1; overflow-y: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+    .main-content {
+      flex: 1; overflow-y: auto; padding: 1.4rem;
+      display: flex; flex-direction: column; gap: 1.1rem;
+      min-height: 0;
+    }
+    .main-content::-webkit-scrollbar { width: 0; }
+    .main-content::after { content: ''; display: block; min-height: 1.4rem; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-xl);
+      overflow: clip;
+      flex-shrink: 0;
+      box-shadow: var(--shadow);
+    }
+    .card-header {
+      padding: 0.85rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 0.45rem;
+      font-size: 0.79rem; font-weight: 600; color: var(--text-1);
+      letter-spacing: -0.01em;
+    }
+    .card-body { padding: 1.25rem; }
+    .spacer { flex: 1; }
 
     /* ── Chart card ── */
-    .chart-card {
-      background: #fff; border: 1px solid #e2e8f0;
-      border-radius: 10px; padding: 1rem;
-      flex: 1; min-height: 340px;
-    }
-    #main-chart { width: 100%; height: 100%; min-height: 320px; }
+    .chart-card { min-height: 300px; }
+    #main-chart { width: 100%; height: 330px; }
 
-    /* ── Prediction results ── */
-    .results-row { display: flex; gap: 0.75rem; }
-    .pred-card {
-      flex: 1; border-radius: 8px; padding: 0.85rem 1rem;
-      border: 1.5px solid; background: #fff;
+    /* ── Empty chart ── */
+    .empty-chart {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; height: 280px; gap: 0.85rem;
     }
-    .pred-card.state-Low    { border-color: var(--low-color); }
-    .pred-card.state-Normal { border-color: var(--normal-color); }
-    .pred-card.state-High   { border-color: var(--high-color); }
-    .pred-card .state-label {
-      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 0.06em; margin-bottom: 0.3rem;
+    .empty-chart-icon {
+      width: 60px; height: 60px; background: var(--bg);
+      border-radius: 50%; display: flex; align-items: center;
+      justify-content: center; font-size: 1.6rem; color: var(--text-3);
     }
-    .pred-card.state-Low    .state-label { color: var(--low-color); }
-    .pred-card.state-Normal .state-label { color: var(--normal-color); }
-    .pred-card.state-High   .state-label { color: var(--high-color); }
-    .pred-card .mu-value  { font-size: 1.5rem; font-weight: 700; color: #111827; }
-    .pred-card .mu-unit   { font-size: 0.75rem; color: #6b7280; margin-left: 0.2rem; }
-    .pred-card .ci-text   { font-size: 0.78rem; color: #6b7280; margin-top: 0.15rem; }
-    .pred-card .sigma-text { font-size: 0.78rem; color: #9ca3af; }
+    .empty-chart p { font-size: 0.84rem; color: var(--text-3); margin: 0; text-align: center; line-height: 1.65; }
+    .empty-chart strong { color: var(--text-2); font-weight: 600; }
 
-    /* ── Empty state ── */
-    .empty-state {
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      height: 100%; min-height: 280px; color: #94a3b8;
+    /* ── Prediction summary card ── */
+    .pred-summary {
+      display: grid; grid-template-columns: auto 1fr auto;
+      gap: 1.5rem; align-items: center; padding: 1.25rem;
     }
-    .empty-state i { font-size: 2.5rem; margin-bottom: 0.5rem; }
-    .empty-state p { font-size: 0.85rem; margin: 0; }
+    .pred-mu-block .pred-label {
+      font-size: 0.58rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--normal); margin-bottom: 0.2rem;
+    }
+    .pred-mu-block .pred-mu {
+      font-size: 2.8rem; font-weight: 700; color: var(--text-1);
+      line-height: 1; letter-spacing: -0.035em;
+    }
+    .pred-mu-block .pred-unit { font-size: 0.82rem; color: var(--text-3); }
+    .pred-mu-block .pred-sigma { font-size: 0.7rem; color: var(--text-3); margin-top: 0.15rem; }
 
-    /* ── Ref range pill ── */
-    .ref-pill {
-      display: inline-flex; align-items: center; gap: 0.3rem;
-      font-size: 0.72rem; color: #4b5563; background: #f1f5f9;
-      border: 1px solid #e2e8f0; border-radius: 999px;
-      padding: 0.15rem 0.6rem; margin-top: 0.4rem;
+    .pred-range-block { min-width: 0; }
+    .range-label { font-size: 0.6rem; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.5rem; }
+    .range-bar-wrap { position: relative; height: 28px; }
+    .range-bar-bg {
+      position: absolute; top: 10px; left: 0; right: 0; height: 8px;
+      border-radius: 4px; overflow: hidden; background: rgba(255,59,48,0.1);
     }
+    .range-bar-normal { position: absolute; height: 100%; background: rgba(48,209,88,0.28); border-radius: 2px; }
+    .range-bar-marker {
+      position: absolute; top: 5px; width: 3px; height: 18px;
+      border-radius: 2px; background: var(--normal); transform: translateX(-50%);
+    }
+    .range-bar-labels { display: flex; justify-content: space-between; align-items: center; margin-top: 0.4rem; font-size: 0.68rem; }
+    .range-low-label  { color: var(--low); font-weight: 600; }
+    .range-ci-label   { color: var(--text-3); font-size: 0.63rem; }
+    .range-high-label { color: var(--high); font-weight: 600; }
+    .range-bound { font-size: 0.7rem; color: var(--text-2); font-weight: 500; }
+
+    /* ── Model key pills (demo-style) ── */
+    .model-keys {
+      display: flex; gap: 0.65rem; flex-wrap: wrap;
+      padding: 0.75rem 1.25rem;
+    }
+    .mk-pill {
+      flex: 1; min-width: 140px; background: var(--bg);
+      border: 1px solid var(--border); border-radius: var(--r-lg);
+      padding: 0.65rem 0.9rem; display: flex; align-items: flex-start; gap: 0.55rem;
+    }
+    .mk-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 0.3rem; }
+    .mk-label { font-size: 0.56rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); margin-bottom: 0.1rem; }
+    .mk-val { font-size: 1.2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+    .mk-ci { font-size: 0.65rem; color: var(--text-2); margin-top: 0.12rem; }
+
+    /* ── LLM Interpretation ── */
+    .interpret-header { background: #fbf4ff; }
+    .interpret-icon { color: var(--purple); }
+    .interpret-body { font-size: 0.875rem; line-height: 1.75; color: var(--text-2); min-height: 48px; }
+    .interpret-loading { display: flex; align-items: center; gap: 0.5rem; color: var(--text-3); font-size: 0.82rem; }
+    .dot-pulse { display: inline-flex; gap: 3px; }
+    .dot-pulse span {
+      width: 5px; height: 5px; background: var(--purple); border-radius: 50%;
+      animation: pulse 1.3s ease-in-out infinite;
+    }
+    .dot-pulse span:nth-child(2) { animation-delay: 0.2s; }
+    .dot-pulse span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes pulse { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1)} }
+
+    .btn-sm-pill {
+      background: none; border: 1px solid var(--border); color: var(--text-3);
+      border-radius: 999px; font-size: 0.7rem; padding: 0.15rem 0.55rem;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .btn-sm-pill:hover { background: var(--bg); color: var(--text-2); }
+    .btn-sm-pill.purple { border-color: rgba(191,90,242,0.3); color: #7b2f9e; }
+    .btn-sm-pill.purple:hover { background: #fbf4ff; }
+
+    /* ── Sensitivity / What if explorer ── */
+    .sens-param-group {
+      display: flex; gap: 0; background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--r-md); overflow: hidden; margin-bottom: 0.75rem;
+    }
+    .sparam-btn {
+      flex: 1; background: none; border: none; border-right: 1px solid var(--border);
+      padding: 0.5rem 0.4rem; cursor: pointer; display: flex; flex-direction: column;
+      align-items: center; gap: 0.18rem; font-size: 0.62rem; font-weight: 600;
+      color: var(--text-2); transition: all 0.15s; font-family: inherit; line-height: 1.2;
+    }
+    .sparam-btn:last-child { border-right: none; }
+    .sparam-btn i { font-size: 1rem; display: block; }
+    .sparam-btn:hover { background: rgba(0,113,227,0.06); color: var(--accent); }
+    .sparam-btn.active { background: var(--accent); color: #fff; }
+    .btn-sm-pill.purple { border-color: rgba(191,90,242,0.3); color: var(--purple); }
+    .btn-sm-pill.purple:hover { background: #fbf4ff; }
+
+    /* What if controls */
+    .whatif-stats {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem;
+      background: var(--bg); border-radius: var(--r-md); padding: 0.75rem 0.85rem;
+      margin-bottom: 1rem;
+    }
+    .wi-stat-val { font-size: 0.92rem; font-weight: 700; color: var(--text-1); letter-spacing: -0.01em; transition: color 0.2s; }
+    .wi-stat-val.loading { color: var(--text-3); }
+    .wi-stat-label { font-size: 0.6rem; color: var(--text-3); margin-top: 0.1rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .whatif-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
+    .whatif-range-labels { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--text-3); margin-top: 0.12rem; }
+    .wi-val { font-weight: 700; color: var(--accent); }
+    .whatif-seg { display: flex; gap: 0.3rem; margin-top: 0.25rem; }
+    .whatif-seg-btn {
+      background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-sm);
+      padding: 0.2rem 0.75rem; font-size: 0.76rem; cursor: pointer; transition: all 0.12s;
+      font-family: inherit; color: var(--text-2);
+    }
+    .whatif-seg-btn:hover { border-color: rgba(0,113,227,0.3); color: var(--accent); }
+    .whatif-seg-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .sweep-label { font-size: 0.66rem; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.45rem; margin-top: 0.25rem; }
+
+
+    /* Example loader */
+    .example-load-row {
+      margin-top: 0.6rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 0.55rem 0.75rem 0.6rem;
+    }
+    .example-load-label {
+      display: block;
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: var(--text-2);
+      margin-bottom: 0.45rem;
+      letter-spacing: -0.01em;
+    }
+    .example-load-label i { color: var(--accent); margin-right: 0.2rem; }
+
+    /* Example navigator */
+    .example-nav { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+    .ex-btn {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-sm);
+      width: 30px; height: 30px; font-size: 0.72rem; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.12s; color: var(--text-2); padding: 0;
+    }
+    .ex-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .ex-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .ex-btn.loading { opacity: 0.5; pointer-events: none; }
+
+    /* ── Saved runs ── */
+    .saved-runs-section { display: none; }
+    .saved-runs-scroll { display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 0.5rem; }
+    .saved-runs-scroll::-webkit-scrollbar { height: 0; }
+
+    .run-card {
+      min-width: 168px; max-width: 188px; flex-shrink: 0;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--r-lg); padding: 0.85rem;
+      cursor: pointer; transition: all 0.2s; position: relative;
+    }
+    .run-card:hover { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,113,227,0.1); background: var(--surface); }
+    .run-card.active { border-color: var(--accent); background: var(--surface); }
+    .run-card-test { font-size: 0.64rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.15rem; }
+    .run-card-demo { font-size: 0.64rem; color: var(--text-3); margin-bottom: 0.3rem; }
+    .run-card-val  { font-size: 1.1rem; font-weight: 700; color: var(--text-1); letter-spacing: -0.02em; }
+    .run-card-unit { font-size: 0.62rem; color: var(--text-3); }
+    .run-card-ts   { font-size: 0.6rem; color: var(--text-3); margin-top: 0.3rem; }
+    .run-card-del  {
+      position: absolute; top: 0.4rem; right: 0.45rem;
+      background: none; border: none; color: var(--text-3);
+      cursor: pointer; font-size: 0.85rem; line-height: 1; padding: 0.1rem;
+    }
+    .run-card-del:hover { color: var(--low); }
 
     /* ── Spinner ── */
-    .spinner-wrap { display: none; align-items: center; gap: 0.5rem; color: #6b7280; font-size: 0.82rem; }
-    .spinner-wrap.active { display: flex; }
+    .spin-wrap { display: none; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--text-3); }
+    .spin-wrap.active { display: flex; }
+    .spinner-border { color: var(--accent) !important; }
+
+    /* ── PID chip ── */
+    .pid-chip {
+      display: inline-flex; align-items: center; gap: 0.2rem;
+      font-size: 0.66rem; color: var(--text-3); background: var(--bg);
+      border: 1px solid var(--border); border-radius: 999px; padding: 0.12rem 0.55rem;
+    }
 
     /* ── Toast ── */
-    #toast-container { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999; }
-    .toast-msg {
-      background: #1e293b; color: #f1f5f9; border-radius: 8px;
-      padding: 0.6rem 1rem; font-size: 0.82rem; margin-top: 0.4rem;
-      animation: fadeInUp 0.2s ease;
+    #toast-container {
+      position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999;
+      display: flex; flex-direction: column; gap: 0.4rem;
     }
-    .toast-msg.error { background: #7f1d1d; }
-    @keyframes fadeInUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    .toast-msg {
+      background: rgba(29,29,31,0.92);
+      backdrop-filter: blur(20px);
+      color: #f5f5f7; border-radius: var(--r-md);
+      padding: 0.65rem 1rem; font-size: 0.82rem; max-width: 280px;
+      animation: slideUp 0.22s ease;
+    }
+    .toast-msg.error { background: rgba(255,59,48,0.9); }
+    @keyframes slideUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
   </style>
 </head>
 <body>
 
-<!-- ══════════════════════════════════════════════════
-     Navbar
-══════════════════════════════════════════════════ -->
-<nav class="navbar d-flex align-items-center gap-3">
-  <span class="navbar-brand"><i class="bi bi-activity me-2"></i>NORMA</span>
-  <span id="model-badge" class="model-badge">loading…</span>
-  <span id="stat-r2"   class="stat-chip d-none"></span>
-  <span id="stat-loss" class="stat-chip d-none"></span>
+<!-- ══ Navbar ══ -->
+<nav class="navbar">
+  <a href="/" class="nav-brand" style="text-decoration:none;color:inherit">
+    <span class="nav-brand-dot"></span>
+    NORMA
+  </a>
+  <span class="nav-badge" id="model-badge">—</span>
+  <span class="nav-stat" id="stat-r2"></span>
+  <span class="nav-stat" id="stat-loss"></span>
+  <div class="nav-spacer"></div>
+  <span id="scroll-section-label"></span>
+  <a href="/" class="btn-nav"><i class="bi bi-info-circle"></i> About</a>
+  <button class="btn-nav" onclick="scrollToRuns()">
+    <i class="bi bi-layers"></i> Runs
+    <span class="runs-badge" id="runs-badge">0</span>
+  </button>
 </nav>
+<div id="scroll-progress"></div>
 
-<!-- ══════════════════════════════════════════════════
-     Main layout
-══════════════════════════════════════════════════ -->
-<div class="main-layout">
+<!-- ══ Layout ══ -->
+<div class="app-layout">
 
-  <!-- ── Sidebar ── -->
+  <!-- ─ Sidebar ─ -->
   <aside class="sidebar">
+    <div class="sidebar-body">
 
-    <!-- Lab test -->
-    <div class="sidebar-section">
-      <h6>Lab Test</h6>
-      <select id="sel-test" class="form-select form-select-sm">
-        {% for t in tests %}
-        <option value="{{ t }}" {% if t == 'PLT' %}selected{% endif %}>{{ t }}</option>
-        {% endfor %}
-      </select>
-      <div id="ref-pill" class="ref-pill mt-2">
-        <i class="bi bi-rulers"></i>
-        <span id="ref-text">—</span>
+      <!-- Lab test -->
+      <div>
+        <div class="section-label">Lab Test</div>
+        <select id="sel-test" class="form-select form-select-sm">
+          {% for t in tests %}
+          <option value="{{ t }}" {% if t == 'PLT' %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+        <div class="ref-pill"><i class="bi bi-rulers"></i><span id="ref-text">—</span></div>
+
+        <!-- Example loader — prominent, right under lab selector -->
+        <div class="example-load-row">
+          <span class="example-load-label"><i class="bi bi-person-lines-fill"></i> Load a patient case</span>
+          <div class="example-nav" id="example-nav"></div>
+        </div>
       </div>
-    </div>
 
-    <!-- Demographics -->
-    <div class="sidebar-section">
-      <h6>Patient Demographics</h6>
-      <div class="d-flex gap-2 align-items-end">
-        <div style="flex:1">
-          <label class="form-label">Sex</label>
-          <div class="btn-group w-100" role="group">
-            <input type="radio" class="btn-check" name="sex" id="sex-m" value="0" autocomplete="off" checked>
-            <label class="btn btn-outline-secondary btn-sm" for="sex-m">M</label>
-            <input type="radio" class="btn-check" name="sex" id="sex-f" value="1" autocomplete="off">
-            <label class="btn btn-outline-secondary btn-sm" for="sex-f">F</label>
+      <!-- Demographics -->
+      <div>
+        <div class="section-label">Patient</div>
+        <div class="d-flex gap-2">
+          <div style="flex:1">
+            <label class="form-label">Sex</label>
+            <div class="seg-wrap btn-group w-100" role="group">
+              <input type="radio" class="btn-check" name="sex" id="sex-m" value="0" checked>
+              <label class="btn btn-outline-secondary btn-sm" for="sex-m">M</label>
+              <input type="radio" class="btn-check" name="sex" id="sex-f" value="1">
+              <label class="btn btn-outline-secondary btn-sm" for="sex-f">F</label>
+            </div>
+          </div>
+          <div style="flex:1">
+            <label class="form-label">Age</label>
+            <input type="number" id="inp-age" class="form-control form-control-sm" value="45" min="13" max="100">
           </div>
         </div>
-        <div style="flex:1">
-          <label class="form-label">Age</label>
-          <input type="number" id="inp-age" class="form-control form-control-sm"
-                 value="45" min="13" max="100" step="1">
+      </div>
+
+      <!-- History -->
+      <div style="flex:1">
+        <div class="history-header">
+          <div class="section-label mb-0">History</div>
+          <div class="d-flex gap-1">
+            <button class="btn-icon" onclick="addRow()"><i class="bi bi-plus-lg"></i> Add</button>
+          </div>
+        </div>
+        <table id="history-table">
+          <thead><tr><th>Date</th><th>Value</th><th></th></tr></thead>
+          <tbody id="history-body"></tbody>
+        </table>
+        <div id="pid-chip-wrap" style="display:none" class="mt-1">
+          <span class="pid-chip"><i class="bi bi-person-badge"></i> <span id="pid-text"></span></span>
         </div>
       </div>
-    </div>
 
-    <!-- History -->
-    <div class="sidebar-section" style="flex:1">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <h6 class="mb-0">History</h6>
-        <div class="d-flex gap-1">
-          <button class="btn-outline-sm" onclick="loadExample()" title="Load real patient">
-            <i class="bi bi-person-lines-fill"></i> Example
-          </button>
-          <button class="btn-outline-sm" onclick="addRow()" title="Add measurement">
-            <i class="bi bi-plus-lg"></i> Add
-          </button>
+      <!-- Prediction date -->
+      <div>
+        <div class="section-label">Prediction</div>
+        <label class="form-label">Predict on</label>
+        <input type="date" id="inp-tnext" class="form-control form-control-sm">
+        <div class="spin-wrap mt-2" id="spinner">
+          <div class="spinner-border spinner-border-sm" role="status"></div>
+          <span>Running model…</span>
         </div>
       </div>
-      <table class="table table-sm table-hover mb-0" id="history-table">
-        <thead><tr>
-          <th>Day</th>
-          <th>Value</th>
-          <th></th>
-        </tr></thead>
-        <tbody id="history-body"></tbody>
-      </table>
-      <div id="example-pid" class="mt-1" style="font-size:0.7rem;color:#9ca3af;display:none;">
-        <i class="bi bi-person"></i> <span id="pid-text"></span>
-      </div>
+
+
+    </div><!-- /.sidebar-body -->
+
+    <div class="sidebar-footer">
+      <button class="btn-primary" id="btn-predict" onclick="runPredict()">
+        <i class="bi bi-lightning-charge-fill"></i> Predict
+      </button>
+      <button class="btn-secondary" id="btn-save" onclick="saveCurrentRun()" disabled>
+        <i class="bi bi-bookmark-plus"></i> Save Run
+      </button>
     </div>
-
-    <!-- Prediction settings -->
-    <div class="sidebar-section">
-      <h6>Next Measurement</h6>
-      <label class="form-label">Days from start</label>
-      <input type="number" id="inp-tnext" class="form-control form-control-sm"
-             value="365" min="1" step="1">
-      <div class="mt-2 d-flex align-items-center gap-2">
-        <div class="spinner-wrap" id="spinner">
-          <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-          <span>Predicting…</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Predict button -->
-    <button class="btn-predict" id="btn-predict" onclick="runPredict()">
-      <i class="bi bi-lightning-charge-fill me-1"></i>Predict
-    </button>
-
   </aside>
 
-  <!-- ── Main content ── -->
+  <!-- ─ Main content ─ -->
   <main class="main-content">
 
-    <!-- Chart -->
-    <div class="chart-card">
+    <!-- Chart + Prediction summary (combined) -->
+    <div class="card chart-card" id="chart-card">
+      <div class="card-header">
+        <i class="bi bi-chart-line" style="color:var(--accent)"></i>
+        <span id="chart-title">Lab Value Trajectory</span>
+        <div class="spacer"></div>
+        <span id="pred-date-badge" class="ref-pill" style="font-size:0.66rem;display:none"></span>
+      </div>
       <div id="main-chart">
-        <div class="empty-state">
-          <i class="bi bi-graph-up"></i>
-          <p>Add history and click <strong>Predict</strong> to visualise</p>
+        <div class="empty-chart">
+          <div class="empty-chart-icon"><i class="bi bi-activity"></i></div>
+          <p>Add history points and click <strong>Predict</strong><br>to visualise the trajectory</p>
         </div>
+      </div>
+      <!-- Model key pills shown below chart after prediction -->
+      <div class="model-keys" id="pred-summary" style="display:none;border-top:1px solid var(--border)"></div>
+    </div>
+
+    <!-- What if? Explorer (above AI interpretation) -->
+    <div class="card" id="sens-card" style="display:none">
+      <div class="card-header" style="background:linear-gradient(120deg,#f0f8ff 0%,#f5f0ff 100%)">
+        <i class="bi bi-sliders2" style="color:var(--accent)"></i>
+        <div>
+          <div style="font-weight:700;line-height:1.25">What if…?</div>
+          <div style="font-size:0.67rem;color:var(--text-3);font-weight:400">See how NORMA adapts when conditions change</div>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn-sm-pill" id="wi-reset-btn" onclick="resetWhatIf()" style="display:none">
+          <i class="bi bi-arrow-counterclockwise"></i> Reset
+        </button>
+      </div>
+      <div class="card-body">
+
+        <!-- Live stats readout -->
+        <div class="whatif-stats">
+          <div>
+            <div class="wi-stat-val" id="wi-mu">—</div>
+            <div class="wi-stat-label">predicted value</div>
+          </div>
+          <div>
+            <div class="wi-stat-val" id="wi-ci">—</div>
+            <div class="wi-stat-label">95% interval</div>
+          </div>
+          <div>
+            <div class="wi-stat-val" id="wi-width">—</div>
+            <div class="wi-stat-label">interval width</div>
+          </div>
+          <div>
+            <div class="wi-stat-val" id="wi-pop">—</div>
+            <div class="wi-stat-label">population range</div>
+          </div>
+        </div>
+
+        <!-- Tunable controls -->
+        <div style="display:flex;flex-direction:column;gap:0.9rem;margin-bottom:1rem">
+
+          <!-- Age -->
+          <div>
+            <div style="font-size:0.82rem;margin-bottom:0.3rem">What if the patient is <span class="wi-val" id="wi-age-label">55</span> years old?</div>
+            <input type="range" id="wi-age" class="whatif-slider" min="18" max="85" value="55">
+            <div class="whatif-range-labels"><span>18 yrs</span><span>85 yrs</span></div>
+          </div>
+
+          <!-- Sex -->
+          <div>
+            <div style="font-size:0.82rem;margin-bottom:0.3rem">What if the biological sex is <span class="wi-val" id="wi-sex-label">Male</span>?</div>
+            <div class="whatif-seg">
+              <button class="whatif-seg-btn active" id="wi-sex-m" onclick="setWiSex(0)">Male</button>
+              <button class="whatif-seg-btn" id="wi-sex-f" onclick="setWiSex(1)">Female</button>
+            </div>
+          </div>
+
+          <!-- Horizon -->
+          <div>
+            <div style="font-size:0.82rem;margin-bottom:0.3rem">What if the next test is in <span class="wi-val" id="wi-horizon-label">30 days</span>?</div>
+            <input type="range" id="wi-horizon" class="whatif-slider" min="1" max="730" value="30">
+            <div class="whatif-range-labels"><span>1 day</span><span>2 years</span></div>
+          </div>
+
+        </div>
+
+        <!-- Sweep chart: full range view -->
+        <div class="sweep-label">Explore across full range</div>
+        <div class="sens-param-group">
+          <button class="sparam-btn active" id="sp-age"     onclick="setSensParam('age')">
+            <i class="bi bi-person"></i>Age
+          </button>
+          <button class="sparam-btn"        id="sp-sex"     onclick="setSensParam('sex')">
+            <i class="bi bi-gender-ambiguous"></i>Sex
+          </button>
+          <button class="sparam-btn"        id="sp-horizon" onclick="setSensParam('horizon')">
+            <i class="bi bi-calendar-range"></i>Horizon
+          </button>
+        </div>
+        <div id="sens-chart" style="width:100%;height:200px"></div>
+
       </div>
     </div>
 
-    <!-- Result cards -->
-    <div class="results-row" id="result-cards">
-      <!-- filled by JS -->
+    <!-- AI Interpretation -->
+    <div class="card" id="interpret-card" style="display:none">
+      <div class="card-header interpret-header">
+        <i class="bi bi-stars interpret-icon"></i>
+        <span>AI Interpretation</span>
+        <div class="spacer"></div>
+        <button class="btn-sm-pill purple" id="btn-retry" onclick="requestInterpretation()" style="display:none">
+          <i class="bi bi-arrow-clockwise"></i> Retry
+        </button>
+      </div>
+      <div class="card-body">
+        <div id="interpret-body" class="interpret-body"></div>
+      </div>
+    </div>
+
+    <!-- Saved runs -->
+    <div class="card saved-runs-section" id="saved-runs-section">
+      <div class="card-header">
+        <i class="bi bi-layers" style="color:var(--accent)"></i>
+        <span>Saved Runs</span>
+        <div class="spacer"></div>
+        <button class="btn-sm-pill" onclick="clearAllRuns()"><i class="bi bi-trash3"></i> Clear all</button>
+      </div>
+      <div class="card-body" style="padding:0.75rem 1.25rem">
+        <div class="saved-runs-scroll" id="saved-runs-scroll"></div>
+      </div>
     </div>
 
   </main>
 </div>
 
-<!-- Toast container -->
 <div id="toast-container"></div>
 
-<!-- ══════════════════════════════════════════════════
-     JS
-══════════════════════════════════════════════════ -->
 <script>
 const REF   = {{ ref_json | safe }};
 const MINFO = {{ model_info | safe }};
 
-// ── Initialise navbar ──
+// ── Navbar ──
 document.getElementById('model-badge').textContent = MINFO.run_id;
-document.getElementById('stat-r2').textContent   = `Val R² ${MINFO.val_r2}`;
-document.getElementById('stat-loss').textContent = `Val Loss ${MINFO.val_loss}`;
-document.getElementById('stat-r2').classList.remove('d-none');
-document.getElementById('stat-loss').classList.remove('d-none');
+document.getElementById('stat-r2').textContent    = `R² ${MINFO.val_r2}`;
+document.getElementById('stat-loss').textContent  = `Loss ${MINFO.val_loss}`;
 
-// ── Reference range pill ──
+// ── State ──
+let currentPayload = null;
+let currentResult  = null;
+let savedRuns      = JSON.parse(localStorage.getItem('norma_runs') || '[]');
+
+// ── Ref range pill ──
 function updateRefPill() {
-  const test  = document.getElementById('sel-test').value;
-  const sex   = document.querySelector('input[name="sex"]:checked').value;
-  const sexK  = sex === '1' ? 'F' : 'M';
+  const test = document.getElementById('sel-test').value;
+  const sexK = document.querySelector('input[name="sex"]:checked').value === '1' ? 'F' : 'M';
   if (!REF[test]) return;
-  const r     = REF[test][sexK];
-  document.getElementById('ref-text').textContent =
-    `Ref: ${r.low} – ${r.high} ${r.unit}`;
+  const r = REF[test][sexK];
+  document.getElementById('ref-text').textContent = `${r.low}–${r.high} ${r.unit}`;
 }
-
-document.getElementById('sel-test').addEventListener('change', updateRefPill);
+document.getElementById('sel-test').addEventListener('change', () => { seedDefaults(); updateRefPill(); });
 document.querySelectorAll('input[name="sex"]').forEach(r => r.addEventListener('change', updateRefPill));
 updateRefPill();
 
+// ── Helpers ──
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+function hexToRgba(hex, a) {
+  const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function linspace(a, b, n) { return Array.from({length:n},(_,i)=>a+(b-a)*i/(n-1)); }
+function gaussianPdf(xs, mu, sigma) {
+  return xs.map(x => Math.exp(-0.5*((x-mu)/sigma)**2)/(sigma*Math.sqrt(2*Math.PI)));
+}
+
 // ── History table ──
 let rowId = 0;
-function addRow(day = '', value = '') {
-  const id   = rowId++;
-  const body = document.getElementById('history-body');
-  const tr   = document.createElement('tr');
-  tr.id      = `row-${id}`;
+function addRow(date='', value='') {
+  const id = rowId++;
+  const tr = document.createElement('tr');
+  tr.id = `row-${id}`;
   tr.innerHTML = `
-    <td><input type="number" step="any" placeholder="0" value="${day}" class="day-input"></td>
-    <td><input type="number" step="any" placeholder="value" value="${value}" class="val-input"></td>
-    <td><button class="btn-delete-row" onclick="deleteRow(${id})">×</button></td>`;
-  body.appendChild(tr);
+    <td><input type="date" class="date-input" value="${date}"></td>
+    <td><input type="number" step="any" class="val-input" value="${value}" placeholder="value"></td>
+    <td><button class="btn-del" onclick="deleteRow(${id})">×</button></td>`;
+  document.getElementById('history-body').appendChild(tr);
 }
-
-function deleteRow(id) {
-  const row = document.getElementById(`row-${id}`);
-  if (row) row.remove();
-}
-
+function deleteRow(id) { document.getElementById(`row-${id}`)?.remove(); }
 function getHistory() {
-  const rows = document.querySelectorAll('#history-body tr');
-  const hist = [];
-  rows.forEach(r => {
-    const d = parseFloat(r.querySelector('.day-input').value);
-    const v = parseFloat(r.querySelector('.val-input').value);
-    if (!isNaN(d) && !isNaN(v)) hist.push({ day: d, value: v });
-  });
-  return hist.sort((a, b) => a.day - b.day);
+  return [...document.querySelectorAll('#history-body tr')]
+    .map(r => ({ date: r.querySelector('.date-input').value, value: parseFloat(r.querySelector('.val-input').value) }))
+    .filter(h => h.date && !isNaN(h.value))
+    .sort((a,b) => a.date.localeCompare(b.date));
 }
-
-function clearHistory() {
-  document.getElementById('history-body').innerHTML = '';
-  rowId = 0;
-}
-
-// seed some default PLT values
+function clearHistory() { document.getElementById('history-body').innerHTML = ''; rowId = 0; }
 function seedDefaults() {
   clearHistory();
-  const defaults = { PLT:[{d:0,v:240},{d:45,v:220},{d:120,v:235},{d:200,v:210},{d:300,v:225}],
-    HGB:[{d:0,v:14.2},{d:45,v:13.8},{d:120,v:14.0},{d:200,v:13.5},{d:300,v:13.9}] };
+  const today = new Date();
+  const ago   = n => new Date(today - n*86400000).toISOString().slice(0,10);
+  const defs  = {
+    PLT: [{d:365,v:240},{d:270,v:225},{d:180,v:235},{d:90,v:218},{d:30,v:228}],
+    HGB: [{d:365,v:14.2},{d:270,v:13.9},{d:180,v:14.0},{d:90,v:13.7},{d:30,v:13.8}],
+  };
+  const pts = defs[document.getElementById('sel-test').value] || [{d:90,v:''}];
+  pts.forEach(p => addRow(ago(p.d), p.v));
+  document.getElementById('inp-tnext').value = todayStr();
+}
+
+// ── Load example ──
+// ── Example navigator ──
+let _exampleIdx   = 0;
+let _exampleCount = 0;
+
+async function initExampleNav() {
   const test = document.getElementById('sel-test').value;
-  const pts  = defaults[test] || [];
-  if (pts.length) {
-    pts.forEach(p => addRow(p.d, p.v));
-    document.getElementById('inp-tnext').value = 365;
-  } else {
-    addRow(0, '');
+  try {
+    const resp = await fetch(`/api/example/${test}?idx=0`);
+    const data = await resp.json();
+    if (data.n_examples) buildExampleNav(data.n_examples);
+  } catch(e) {}
+}
+
+function buildExampleNav(n) {
+  _exampleCount = n;
+  const nav = document.getElementById('example-nav');
+  nav.innerHTML = '';
+  for (let i = 0; i < n; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'ex-btn' + (i === 0 ? ' active' : '');
+    btn.textContent = i + 1;
+    btn.title = `Patient example ${i + 1}`;
+    btn.onclick = () => loadExample(i);
+    nav.appendChild(btn);
   }
 }
-document.getElementById('sel-test').addEventListener('change', () => {
-  seedDefaults(); updateRefPill();
-});
 
-// ── Load example patient ──
-async function loadExample() {
+function setExampleNavActive(idx) {
+  document.querySelectorAll('.ex-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', i === idx);
+    btn.classList.remove('loading');
+  });
+}
+
+async function loadExample(idx) {
+  if (idx === undefined) idx = _exampleIdx;
   const test = document.getElementById('sel-test').value;
-  showToast(`Loading example for ${test}…`);
+  const url  = `/api/example/${test}?idx=${idx}`;
+
+  // Mark button as loading
+  const btns = document.querySelectorAll('.ex-btn');
+  if (btns[idx]) btns[idx].classList.add('loading');
+
   try {
-    const resp = await fetch(`/api/example/${test}`);
+    const resp = await fetch(url);
     const data = await resp.json();
     if (data.error) { showToast(data.error, true); return; }
+
+    // Populate history table + form fields
     clearHistory();
-    data.history.forEach(h => addRow(h.day, h.value));
-    document.getElementById('inp-tnext').value = Math.round(data.t_next);
-    document.getElementById('example-pid').style.display = 'block';
+    data.history.forEach(h => addRow(h.date, h.value));
+    document.getElementById('inp-tnext').value = data.pred_date;
+    if (data.sex !== undefined) {
+      document.querySelector(`input[name="sex"][value="${data.sex}"]`).checked = true;
+      updateRefPill();
+    }
+    if (data.age !== undefined) document.getElementById('inp-age').value = data.age;
+    document.getElementById('pid-chip-wrap').style.display = 'block';
     document.getElementById('pid-text').textContent = `Patient ${data.pid}`;
-    showToast('Example loaded');
+
+    // If predictions bundled, render immediately — no second /api/predict call needed
+    if (data.predictions) {
+      const payload = {
+        test_name: test,
+        sex:       data.sex,
+        age:       data.age,
+        history:   data.history,
+        pred_date: data.pred_date,
+      };
+      currentPayload = payload;
+      currentResult  = data;
+      drawChart(payload, data);
+      drawDistChart(payload, data);
+      drawPredSummary(payload, data);
+      document.getElementById('chart-title').textContent = `${test} trajectory`;
+      document.getElementById('btn-save').disabled = false;
+      showInterpretPanel();
+      _wiSweeps = data.wi_sweeps || null;
+      initWhatIfControls();
+      drawWhatIfStats(data);
+      requestInterpretation();
+      runSensitivity();
+    }
+
+    // Update example navigator state
+    _exampleIdx = data.idx ?? idx;
+    if (data.n_examples && !_exampleCount) buildExampleNav(data.n_examples);
+    setExampleNavActive(_exampleIdx);
+
   } catch(e) { showToast('Failed to load example', true); }
 }
 
 // ── Predict ──
-let chartDrawn = false;
-
 async function runPredict() {
   const history = getHistory();
   if (history.length < 1) { showToast('Add at least 1 history point', true); return; }
-
   const payload = {
     test_name: document.getElementById('sel-test').value,
     sex:       parseInt(document.querySelector('input[name="sex"]:checked').value),
     age:       parseFloat(document.getElementById('inp-age').value),
     history,
-    t_next:    parseFloat(document.getElementById('inp-tnext').value),
+    pred_date: document.getElementById('inp-tnext').value || todayStr(),
   };
-
   setLoading(true);
   try {
     const resp = await fetch('/api/predict', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload)
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
     });
     const data = await resp.json();
     if (data.error) { showToast(data.error, true); return; }
+    currentPayload = payload;
+    currentResult  = data;
+    _wiSweeps = null;  // manual predict — no pre-computed sweeps
     drawChart(payload, data);
-    drawCards(data);
+    drawDistChart(payload, data);
+    drawPredSummary(payload, data);
+    document.getElementById('chart-title').textContent = `${payload.test_name} trajectory`;
+    document.getElementById('btn-save').disabled = false;
+    showInterpretPanel();
+    initWhatIfControls();
+    drawWhatIfStats(data);
+    requestInterpretation();
+    runSensitivity();
   } catch(e) {
     showToast('Prediction failed: ' + e.message, true);
   } finally {
@@ -417,196 +1003,842 @@ async function runPredict() {
   }
 }
 
-// ── Chart ──
-function gaussianPdf(x, mu, sigma) {
-  return x.map(xi =>
-    (1 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * ((xi - mu) / sigma) ** 2)
-  );
+// ── Prediction summary (demo-style model key pills) ──
+function drawPredSummary(payload, data) {
+  const { test_name } = payload;
+  const { predictions: preds, gmm_prediction: gmm, ref_low, ref_high, unit, pred_date } = data;
+  const norm = preds['Normal'];
+  if (!norm || norm.error) return;
+
+  const mu = norm.mu, ciLo = norm.ci_lower, ciHi = norm.ci_upper;
+  const gmmOk = gmm && !gmm.error;
+
+  const predDateBadge = document.getElementById('pred-date-badge');
+  predDateBadge.textContent = `Pred: ${pred_date}`;
+  predDateBadge.style.display = '';
+  document.getElementById('pred-summary').style.display = 'flex';
+
+  document.getElementById('pred-summary').innerHTML = `
+    <div class="mk-pill">
+      <span class="mk-swatch" style="background:#0071e3"></span>
+      <div>
+        <div class="mk-label">NORMA</div>
+        <div class="mk-val" style="color:#0071e3">${mu.toFixed(1)} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
+        <div class="mk-ci">95% CI: ${ciLo.toFixed(1)} – ${ciHi.toFixed(1)}</div>
+      </div>
+    </div>
+    ${gmmOk ? `<div class="mk-pill">
+      <span class="mk-swatch" style="background:#bf5af2"></span>
+      <div>
+        <div class="mk-label">Personalized (GMM)</div>
+        <div class="mk-val" style="color:#bf5af2">${gmm.mu.toFixed(1)} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
+        <div class="mk-ci">95% CI: ${gmm.ci_lower.toFixed(1)} – ${gmm.ci_upper.toFixed(1)}</div>
+      </div>
+    </div>` : ''}
+    <div class="mk-pill">
+      <span class="mk-swatch" style="background:#aeaeb2"></span>
+      <div>
+        <div class="mk-label">Population ref range</div>
+        <div class="mk-val">${ref_low} – ${ref_high} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
+        <div class="mk-ci">Standard reference interval</div>
+      </div>
+    </div>`;
 }
 
-function linspace(a, b, n) {
-  return Array.from({length: n}, (_, i) => a + (b - a) * i / (n - 1));
-}
-
+// ── Timeline chart (demo-style: history, ref band, forecast line, annotations) ──
 function drawChart(payload, data) {
-  const history = payload.history;
-  const test    = payload.test_name;
-  const t_next  = data.t_next;
-  const ref_low = data.ref_low;
-  const ref_high= data.ref_high;
-  const unit    = data.unit;
-  const preds   = data.predictions;
+  const { history, test_name, pred_date } = payload;
+  const { predictions: preds, gmm_prediction: gmm, ref_low, ref_high, unit } = data;
+  const norm = preds['Normal'];
+  if (!norm || norm.error) return;
 
-  const histX  = history.map(h => h.day);
+  const { mu, ci_lower: ciLo, ci_upper: ciHi } = norm;
+  const histX  = history.map(h => h.date);
   const histY  = history.map(h => h.value);
+  const gmmOk  = gmm && !gmm.error;
+  const gmmMu  = gmmOk ? gmm.mu    : null;
+  const gmmSig = gmmOk ? gmm.sigma : null;
+  const refMu  = (ref_low + ref_high) / 2;
+  const refSig = (ref_high - ref_low) / 3.92;
 
-  // Determine y range
-  const allMu    = Object.values(preds).filter(p => !p.error).map(p => p.mu);
-  const allSigma = Object.values(preds).filter(p => !p.error).map(p => p.sigma);
-  const allY     = [...histY, ...allMu.map((m, i) => m + 2*allSigma[i]),
-                             ...allMu.map((m, i) => m - 2*allSigma[i])];
-  const yPad = (Math.max(...allY) - Math.min(...allY)) * 0.15;
-  const yLo  = Math.min(ref_low * 0.85, Math.min(...allY) - yPad);
-  const yHi  = Math.max(ref_high * 1.12, Math.max(...allY) + yPad);
+  // Compute scale for bell curve fan (width in ms)
+  const firstMs  = new Date(histX[0]).getTime();
+  const lastMs   = new Date(histX[histX.length - 1]).getTime();
+  const predMs   = new Date(pred_date).getTime();
+  const histSpanDays = (lastMs - firstMs) / 86400000 || 30;
+  const scaleDays    = Math.min(120, Math.max(25, histSpanDays * 0.22));
+  const xDate = ms => new Date(ms).toISOString().slice(0, 10);
+
+  // Helper: build a vertical KDE "teardrop" trace anchored at pred_date
+  function bellTrace(bellMu, bellSig, color, fillcolor, name) {
+    const ys   = linspace(bellMu - 3.2 * bellSig, bellMu + 3.2 * bellSig, 120);
+    const pdfs = gaussianPdf(ys, bellMu, bellSig);
+    const peak = Math.max(...pdfs);
+    const xs   = pdfs.map(p => xDate(predMs + (p / peak) * scaleDays * 86400000));
+    return {
+      x: [pred_date, ...xs, pred_date],
+      y: [ys[0],     ...ys, ys[ys.length - 1]],
+      fill: 'toself', fillcolor,
+      line: { color, width: 1.5 },
+      mode: 'lines', name,
+      hovertemplate: '%{y:.2f} ' + unit + '<extra>' + name + '</extra>',
+    };
+  }
+
+  const xAxisMax = xDate(predMs + scaleDays * 1.15 * 86400000);
+
+  const allVals = [...histY, mu, ciLo, ciHi, ref_low, ref_high, ...(gmmOk ? [gmmMu] : [])];
+  const pad  = (Math.max(...allVals) - Math.min(...allVals)) * 0.12 || 1;
+  const yMin = Math.min(...allVals) - pad;
+  const yMax = Math.max(...allVals) + pad;
 
   const traces = [];
 
-  // Reference range band
+  // 1. Ref range shaded band (history region only)
   traces.push({
-    x: [Math.min(...histX, t_next) - 20, Math.max(...histX, t_next) + 20,
-        Math.max(...histX, t_next) + 20, Math.min(...histX, t_next) - 20],
-    y: [ref_high, ref_high, ref_low, ref_low],
-    fill: 'toself', fillcolor: 'rgba(148,163,184,0.12)',
-    line: {color: 'transparent'}, mode: 'lines',
-    name: `Ref range (${ref_low}–${ref_high} ${unit})`, hoverinfo: 'none',
-    showlegend: true,
+    x:[histX[0], pred_date, pred_date, histX[0]],
+    y:[ref_high, ref_high, ref_low, ref_low],
+    fill:'toself', fillcolor:'rgba(174,174,178,0.07)',
+    line:{width:0}, showlegend:false, hoverinfo:'skip', mode:'lines',
   });
 
-  // Reference range borders
+  // 2. History line
   traces.push({
-    x: [Math.min(...histX, t_next) - 20, Math.max(...histX, t_next) + 20],
-    y: [ref_high, ref_high],
-    mode: 'lines', line: {color: 'rgba(148,163,184,0.5)', width: 1, dash: 'dot'},
-    showlegend: false, hoverinfo: 'none',
-  });
-  traces.push({
-    x: [Math.min(...histX, t_next) - 20, Math.max(...histX, t_next) + 20],
-    y: [ref_low, ref_low],
-    mode: 'lines', line: {color: 'rgba(148,163,184,0.5)', width: 1, dash: 'dot'},
-    showlegend: false, hoverinfo: 'none',
+    x:histX, y:histY, mode:'lines+markers', name:'History',
+    line:{color:'#6e6e73', width:1.5}, marker:{color:'#6e6e73', size:5},
+    hovertemplate:'%{x}<br>%{y:.2f} '+unit+'<extra>History</extra>',
   });
 
-  // History line + points
+  // 3. Dashed connector from last obs to NORMA mean
+  const lastD = histX[histX.length - 1], lastV = histY[histY.length - 1];
   traces.push({
-    x: histX, y: histY,
-    mode: 'lines+markers',
-    line:   {color: '#1e293b', width: 2},
-    marker: {color: '#1e293b', size: 7, symbol: 'circle'},
-    name: 'History',
-    hovertemplate: 'Day %{x}<br>Value: %{y}<extra></extra>',
+    x:[lastD, pred_date], y:[lastV, mu],
+    mode:'lines', showlegend:false,
+    line:{color:'#0071e3', width:1.2, dash:'dot'}, hoverinfo:'skip',
   });
 
-  // Prediction Gaussian density traces + mean points per state
-  const stateColors = {Low: '#e74c3c', Normal: '#27ae60', High: '#e67e22'};
-  const densityWidth = (Math.max(...histX, t_next) - Math.min(...histX)) * 0.06;
+  // 4. Vertical KDE bell curves (population → personalized → NORMA, drawn back to front)
+  traces.push(bellTrace(refMu,  refSig,  'rgba(174,174,178,0.9)', 'rgba(174,174,178,0.13)', 'Population'));
+  if (gmmOk) {
+    traces.push(bellTrace(gmmMu, gmmSig, 'rgba(191,90,242,0.8)',  'rgba(191,90,242,0.10)',  'Personalized'));
+  }
+  traces.push(bellTrace(norm.mu, norm.sigma, 'rgba(0,113,227,0.9)', 'rgba(0,113,227,0.12)', 'NORMA'));
 
-  Object.entries(preds).forEach(([label, p]) => {
-    if (p.error) return;
-    const color = stateColors[label];
-
-    // Rotated Gaussian density at t_next
-    const yGrid = linspace(Math.max(yLo, p.mu - 3.5*p.sigma),
-                           Math.min(yHi, p.mu + 3.5*p.sigma), 120);
-    const pdf   = gaussianPdf(yGrid, p.mu, p.sigma);
-    const pdfMax = Math.max(...pdf);
-    const xLeft = yGrid.map(() => t_next);
-    const xRight= pdf.map(pv => t_next + (pv / pdfMax) * densityWidth);
-
+  // 5. Mean markers at prediction date
+  traces.push({
+    x:[pred_date], y:[mu], mode:'markers', name:'NORMA mean',
+    marker:{color:'#0071e3', size:9, symbol:'diamond'},
+    hovertemplate:pred_date+'<br>%{y:.2f} '+unit+' (NORMA)<extra></extra>',
+  });
+  if (gmmOk) {
     traces.push({
-      x: [...xRight, ...xLeft.reverse()],
-      y: [...yGrid, ...yGrid.slice().reverse()],
-      fill: 'toself', fillcolor: hexToRgba(color, 0.18),
-      line: {color: hexToRgba(color, 0.6), width: 1.2},
-      mode: 'lines', name: `${label} dist.`,
-      hoverinfo: 'none', showlegend: false,
+      x:[pred_date], y:[gmmMu], mode:'markers', name:'GMM mean',
+      marker:{color:'#bf5af2', size:7, symbol:'circle'},
+      hovertemplate:pred_date+'<br>%{y:.2f} '+unit+' (Personalized)<extra></extra>',
     });
+  }
 
-    // Mean point with error bar
-    traces.push({
-      x: [t_next], y: [p.mu],
-      mode: 'markers',
-      marker: {color, size: 11, symbol: 'diamond',
-               line: {color: '#fff', width: 1.5}},
-      error_y: {
-        type: 'data', symmetric: false,
-        array:       [p.ci_upper - p.mu],
-        arrayminus:  [p.mu - p.ci_lower],
-        color, thickness: 2, width: 6,
-      },
-      name: `${label} (μ=${p.mu.toFixed(1)})`,
-      hovertemplate: `<b>${label}</b><br>μ = %{y:.2f}<br>95% CI: ${p.ci_lower.toFixed(1)}–${p.ci_upper.toFixed(1)}<extra></extra>`,
-    });
-  });
+  const shapes = [
+    {type:'line', x0:pred_date, x1:pred_date, y0:yMin, y1:yMax,
+     line:{color:'rgba(0,0,0,0.12)', width:1, dash:'dot'}},
+    {type:'line', x0:histX[0], x1:pred_date, y0:ref_high, y1:ref_high,
+     line:{color:'rgba(255,159,10,0.45)', width:1, dash:'dot'}},
+    {type:'line', x0:histX[0], x1:pred_date, y0:ref_low, y1:ref_low,
+     line:{color:'rgba(255,59,48,0.45)', width:1, dash:'dot'}},
+  ];
+  const annotations = [
+    {x:histX[0], y:ref_high, xanchor:'left', yanchor:'bottom',
+     showarrow:false, text:' High ('+ref_high+')', font:{size:9, color:'#ff9f0a'}},
+    {x:histX[0], y:ref_low,  xanchor:'left', yanchor:'top',
+     showarrow:false, text:' Low ('+ref_low+')',  font:{size:9, color:'#ff3b30'}},
+    {x:pred_date, y:yMax, xanchor:'left', yanchor:'top',
+     showarrow:false, text:' forecast →', font:{size:9, color:'#aeaeb2'}},
+  ];
 
   const layout = {
-    margin: {l: 50, r: 20, t: 30, b: 50},
-    xaxis: {
-      title: 'Days from first measurement',
-      showgrid: true, gridcolor: '#f1f5f9', zeroline: false,
-    },
-    yaxis: {
-      title: `${test} (${unit})`,
-      range: [yLo, yHi],
-      showgrid: true, gridcolor: '#f1f5f9', zeroline: false,
-    },
-    legend: {orientation: 'h', y: -0.18, font: {size: 11}},
-    hovermode: 'closest',
-    plot_bgcolor: '#fff', paper_bgcolor: '#fff',
-    shapes: [{
-      type: 'line', x0: t_next, x1: t_next, y0: yLo, y1: yHi,
-      line: {color: '#94a3b8', width: 1.5, dash: 'dash'},
-    }],
-    annotations: [{
-      x: t_next, y: yHi, xanchor: 'left', yanchor: 'top',
-      text: `  t=${t_next}d`, showarrow: false,
-      font: {size: 10, color: '#94a3b8'},
-    }],
+    margin:{l:46, r:14, t:10, b:52},
+    font:{family:'DM Sans,sans-serif', size:11, color:'#6e6e73'},
+    xaxis:{title:'Date', type:'date', range:[histX[0], xAxisMax],
+           showgrid:true, gridcolor:'rgba(0,0,0,0.05)', zeroline:false},
+    yaxis:{title:unit, range:[yMin, yMax], showgrid:true, gridcolor:'rgba(0,0,0,0.05)', zeroline:false},
+    legend:{orientation:'h', y:-0.22, font:{size:11}},
+    hovermode:'closest',
+    plot_bgcolor:'#fff', paper_bgcolor:'#fff',
+    shapes, annotations,
   };
 
   const el = document.getElementById('main-chart');
   el.innerHTML = '';
-  Plotly.newPlot(el, traces, layout, {responsive: true, displayModeBar: false});
-  chartDrawn = true;
+  _baseTraceCount = traces.length;
+  Plotly.newPlot(el, traces, layout, {responsive:true, displayModeBar:false});
 }
 
-// ── Result cards ──
-function drawCards(data) {
-  const preds   = data.predictions;
-  const unit    = data.unit;
-  const container = document.getElementById('result-cards');
-  container.innerHTML = '';
-  ['Low', 'Normal', 'High'].forEach(label => {
-    const p   = preds[label];
-    const div = document.createElement('div');
-    div.className = `pred-card state-${label}`;
-    if (p && !p.error) {
-      div.innerHTML = `
-        <div class="state-label">${label}</div>
-        <div><span class="mu-value">${p.mu.toFixed(1)}</span><span class="mu-unit">${unit}</span></div>
-        <div class="ci-text">95% CI: ${p.ci_lower.toFixed(1)} – ${p.ci_upper.toFixed(1)}</div>
-        <div class="sigma-text">σ = ${p.sigma.toFixed(2)}</div>`;
+// ── Distribution comparison chart — superseded by inline bell curves in drawChart ──
+function drawDistChart(payload, data) {
+  return; // distributions now rendered as vertical KDEs in the main trajectory chart
+  const { test_name } = payload;
+  const { predictions: preds, gmm_prediction: gmm, ref_low, ref_high, unit, pred_date } = data;
+  const norm = preds['Normal'];
+  if (!norm || norm.error) return;
+
+  const gmmMu  = gmm && !gmm.error ? gmm.mu    : null;
+  const gmmSig = gmm && !gmm.error ? gmm.sigma  : null;
+  const refMu  = (ref_low + ref_high) / 2;
+  const refSig = (ref_high - ref_low) / 3.92;
+
+  // Compute x range across all three distributions
+  const allMu  = [norm.mu, refMu, ...(gmmMu != null ? [gmmMu] : [])];
+  const allSig = [norm.sigma, refSig, ...(gmmSig != null ? [gmmSig] : [])];
+  const xLo = Math.min(...allMu.map((m,i) => m - 4*allSig[i]));
+  const xHi = Math.max(...allMu.map((m,i) => m + 4*allSig[i]));
+  const xs  = linspace(xLo, xHi, 500);
+
+  const traces = [];
+
+  // Population reference distribution
+  traces.push({
+    x: xs, y: gaussianPdf(xs, refMu, refSig),
+    mode: 'lines', name: 'Population',
+    line: {color: '#aeaeb2', width: 2, dash: 'dot'},
+    fill: 'tozeroy', fillcolor: 'rgba(174,174,178,0.08)',
+    hovertemplate: '<b>Population</b><br>value = %{x:.1f}<br>density = %{y:.4f}<extra></extra>',
+  });
+
+  // Personalized (GMM) distribution
+  if (gmmMu != null) {
+    traces.push({
+      x: xs, y: gaussianPdf(xs, gmmMu, gmmSig),
+      mode: 'lines', name: 'Personalized',
+      line: {color: '#bf5af2', width: 2},
+      fill: 'tozeroy', fillcolor: 'rgba(191,90,242,0.1)',
+      hovertemplate: '<b>Personalized</b><br>value = %{x:.1f}<br>density = %{y:.4f}<extra></extra>',
+    });
+  }
+
+  // NORMA distribution
+  traces.push({
+    x: xs, y: gaussianPdf(xs, norm.mu, norm.sigma),
+    mode: 'lines', name: 'NORMA',
+    line: {color: '#30d158', width: 2.5},
+    fill: 'tozeroy', fillcolor: 'rgba(48,209,88,0.12)',
+    hovertemplate: '<b>NORMA</b><br>value = %{x:.1f}<br>density = %{y:.4f}<extra></extra>',
+  });
+
+  // Mean markers at the top of each curve
+  traces.push({
+    x: [refMu], y: [Math.max(...gaussianPdf([refMu], refMu, refSig))],
+    mode: 'markers', marker: {color: '#aeaeb2', size: 7, symbol: 'circle'},
+    showlegend: false, hoverinfo: 'none',
+  });
+  if (gmmMu != null) {
+    traces.push({
+      x: [gmmMu], y: [Math.max(...gaussianPdf([gmmMu], gmmMu, gmmSig))],
+      mode: 'markers', marker: {color: '#bf5af2', size: 8, symbol: 'circle', line:{color:'#fff',width:1.5}},
+      showlegend: false, hoverinfo: 'none',
+    });
+  }
+  traces.push({
+    x: [norm.mu], y: [Math.max(...gaussianPdf([norm.mu], norm.mu, norm.sigma))],
+    mode: 'markers', marker: {color: '#30d158', size: 10, symbol: 'diamond', line:{color:'#fff',width:1.5}},
+    showlegend: false, hoverinfo: 'none',
+  });
+
+  const allPdfs = [
+    gaussianPdf(xs, norm.mu, norm.sigma),
+    gaussianPdf(xs, refMu, refSig),
+    ...(gmmMu != null ? [gaussianPdf(xs, gmmMu, gmmSig)] : []),
+  ];
+  const yMax = Math.max(...allPdfs.flat()) * 1.22;
+
+  const layout = {
+    margin: {l:40, r:20, t:10, b:60},
+    font: {family:'DM Sans,sans-serif', size:11, color:'#6e6e73'},
+    xaxis: {title:`${test_name} (${unit})`, showgrid:true, gridcolor:'#f5f5f7', zeroline:false},
+    yaxis: {title:'Density', range:[0, yMax], showgrid:false, zeroline:false, showticklabels:false},
+    legend: {orientation:'h', y:-0.3, font:{size:11}},
+    hovermode: 'x unified',
+    plot_bgcolor: '#fff', paper_bgcolor: '#fff',
+    shapes: [
+      // Population ref bounds
+      {type:'line', x0:ref_low,  x1:ref_low,  y0:0, y1:yMax, line:{color:'rgba(174,174,178,0.5)', width:1, dash:'dot'}},
+      {type:'line', x0:ref_high, x1:ref_high, y0:0, y1:yMax, line:{color:'rgba(174,174,178,0.5)', width:1, dash:'dot'}},
+      // NORMA 95% CI bounds
+      {type:'line', x0:norm.ci_lower, x1:norm.ci_lower, y0:0, y1:yMax, line:{color:'rgba(48,209,88,0.45)', width:1, dash:'dash'}},
+      {type:'line', x0:norm.ci_upper, x1:norm.ci_upper, y0:0, y1:yMax, line:{color:'rgba(48,209,88,0.45)', width:1, dash:'dash'}},
+      {type:'rect', x0:norm.ci_lower, x1:norm.ci_upper, y0:0, y1:yMax, fillcolor:'rgba(48,209,88,0.04)', line:{width:0}},
+    ],
+    annotations: [
+      {x:ref_low,  y:yMax*0.96, xanchor:'right', yanchor:'top', showarrow:false, text:'ref low',  font:{size:9, color:'#aeaeb2'}},
+      {x:ref_high, y:yMax*0.96, xanchor:'left',  yanchor:'top', showarrow:false, text:'ref high', font:{size:9, color:'#aeaeb2'}},
+      {x:norm.ci_lower, y:yMax*0.5, xanchor:'right', yanchor:'middle', showarrow:false, text:'95% CI', font:{size:8, color:'#30d158'}},
+    ],
+  };
+
+  document.getElementById('dist-card').style.display = 'block';
+  document.getElementById('dist-date-badge').textContent = `Pred: ${pred_date}`;
+  Plotly.newPlot(document.getElementById('dist-chart'), traces, layout, {responsive:true, displayModeBar:false});
+}
+
+// ── LLM Interpretation ──
+function showInterpretPanel() {
+  document.getElementById('interpret-card').style.display = 'block';
+  document.getElementById('btn-retry').style.display = 'none';
+  document.getElementById('interpret-body').innerHTML =
+    '<div class="interpret-loading"><div class="dot-pulse"><span></span><span></span><span></span></div>&nbsp;Generating interpretation…</div>';
+}
+
+async function requestInterpretation() {
+  if (!currentResult || !currentPayload) return;
+  document.getElementById('btn-retry').style.display = 'none';
+  document.getElementById('interpret-body').innerHTML =
+    '<div class="interpret-loading"><div class="dot-pulse"><span></span><span></span><span></span></div>&nbsp;Generating interpretation…</div>';
+  try {
+    const resp = await fetch('/api/interpret', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        test_name:   currentPayload.test_name,
+        sex:         currentPayload.sex,
+        age:         currentPayload.age,
+        history:     currentPayload.history,
+        pred_date:   currentResult.pred_date,
+        predictions: currentResult.predictions,
+        ref_low:     currentResult.ref_low,
+        ref_high:    currentResult.ref_high,
+        unit:        currentResult.unit,
+      })
+    });
+    const d = await resp.json();
+    const body = document.getElementById('interpret-body');
+    if (d.error) {
+      body.innerHTML = `<span style="color:var(--text-3);font-size:0.8rem"><i class="bi bi-info-circle"></i> ${d.error}</span>`;
+      document.getElementById('btn-retry').style.display = 'inline-flex';
     } else {
-      div.innerHTML = `<div class="state-label">${label}</div><div class="text-muted">—</div>`;
+      body.textContent = d.interpretation;
+      if (currentResult) currentResult._interpretation = d.interpretation;
     }
-    container.appendChild(div);
+  } catch(e) {
+    document.getElementById('interpret-body').innerHTML =
+      `<span style="color:var(--text-3);font-size:0.8rem">Could not reach interpretation service.</span>`;
+    document.getElementById('btn-retry').style.display = 'inline-flex';
+  }
+}
+
+// ── Saved runs ──
+function saveCurrentRun() {
+  if (!currentResult || !currentPayload) return;
+  const norm = currentResult.predictions['Normal'];
+  savedRuns.unshift({
+    id: Date.now().toString(36),
+    ts: new Date().toLocaleString(),
+    test_name:      currentPayload.test_name,
+    sex:            currentPayload.sex,
+    age:            currentPayload.age,
+    history:        currentPayload.history,
+    pred_date:      currentResult.pred_date,
+    predictions:    currentResult.predictions,
+    gmm_prediction: currentResult.gmm_prediction,
+    ref_prediction: currentResult.ref_prediction,
+    ref_low:        currentResult.ref_low,
+    ref_high:       currentResult.ref_high,
+    unit:           currentResult.unit,
+    norm_mu:        norm?.mu,
+    interpretation: currentResult._interpretation || null,
+  });
+  if (savedRuns.length > 15) savedRuns.pop();
+  localStorage.setItem('norma_runs', JSON.stringify(savedRuns));
+  renderSavedRuns();
+  showToast('Run saved');
+}
+
+function deleteRun(id) {
+  savedRuns = savedRuns.filter(r => r.id !== id);
+  localStorage.setItem('norma_runs', JSON.stringify(savedRuns));
+  renderSavedRuns();
+}
+
+function clearAllRuns() {
+  savedRuns = [];
+  localStorage.setItem('norma_runs', JSON.stringify(savedRuns));
+  renderSavedRuns();
+}
+
+function renderSavedRuns() {
+  const section = document.getElementById('saved-runs-section');
+  const scroll  = document.getElementById('saved-runs-scroll');
+  document.getElementById('runs-badge').textContent = savedRuns.length;
+  if (savedRuns.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  scroll.innerHTML = '';
+  savedRuns.forEach(run => {
+    const muStr  = run.norm_mu != null ? `${run.norm_mu.toFixed(1)}` : '—';
+    const sexStr = run.sex === 1 ? 'F' : 'M';
+    const div = document.createElement('div');
+    div.className = 'run-card';
+    div.onclick = () => restoreRun(run.id);
+    div.innerHTML = `
+      <button class="run-card-del" onclick="event.stopPropagation();deleteRun('${run.id}')">×</button>
+      <div class="run-card-test">${run.test_name}</div>
+      <div class="run-card-demo">${sexStr}, ${run.age}y · ${run.pred_date}</div>
+      <div><span class="run-card-val">${muStr}</span> <span class="run-card-unit">${run.unit}</span></div>
+      ${run.interpretation ? `<div class="run-card-ts" style="font-style:italic">${run.interpretation.slice(0,55)}…</div>` : ''}
+      <div class="run-card-ts">${run.ts}</div>`;
+    scroll.appendChild(div);
   });
 }
 
-// ── Utilities ──
-function hexToRgba(hex, alpha) {
-  const r = parseInt(hex.slice(1,3),16);
-  const g = parseInt(hex.slice(3,5),16);
-  const b = parseInt(hex.slice(5,7),16);
-  return `rgba(${r},${g},${b},${alpha})`;
+function restoreRun(id) {
+  const run = savedRuns.find(r => r.id === id);
+  if (!run) return;
+  document.getElementById('sel-test').value = run.test_name;
+  document.querySelector(`input[name="sex"][value="${run.sex}"]`).checked = true;
+  document.getElementById('inp-age').value   = run.age;
+  document.getElementById('inp-tnext').value = run.pred_date;
+  clearHistory();
+  run.history.forEach(h => addRow(h.date, h.value));
+  updateRefPill();
+  document.getElementById('pid-chip-wrap').style.display = 'none';
+  currentPayload = {test_name:run.test_name, sex:run.sex, age:run.age, history:run.history, pred_date:run.pred_date};
+  currentResult  = {predictions:run.predictions, gmm_prediction:run.gmm_prediction, ref_prediction:run.ref_prediction, ref_low:run.ref_low, ref_high:run.ref_high, unit:run.unit, pred_date:run.pred_date};
+  drawChart(currentPayload, currentResult);
+  drawDistChart(currentPayload, currentResult);
+  drawPredSummary(currentPayload, currentResult);
+  document.getElementById('chart-title').textContent = `${run.test_name} trajectory`;
+  document.getElementById('btn-save').disabled = false;
+  document.getElementById('interpret-card').style.display = 'block';
+  document.getElementById('btn-retry').style.display = 'none';
+  const body = document.getElementById('interpret-body');
+  if (run.interpretation) {
+    body.textContent = run.interpretation;
+  } else {
+    body.innerHTML = `<span style="color:var(--text-3);font-size:0.8rem">No interpretation for this run.</span>`;
+    document.getElementById('btn-retry').style.display = 'inline-flex';
+  }
 }
 
+function scrollToRuns() {
+  if (savedRuns.length === 0) { showToast('No saved runs yet'); return; }
+  document.getElementById('saved-runs-section').scrollIntoView({behavior:'smooth'});
+}
+
+// ── What if? Explorer ──
+let _sensParam  = 'age';
+let _wiAge = 55, _wiSex = 0, _wiHorizon = 30;
+let _wiDebounceTimer = null;
+let _wiSweeps = null;   // pre-computed from example cache: {age: [...], sex: [...], horizon: [...]}
+
+// Initialise slider values from the current prediction payload
+function initWhatIfControls() {
+  if (!currentPayload) return;
+  _wiAge = currentPayload.age || 55;
+  _wiSex = currentPayload.sex || 0;
+
+  const history = currentPayload.history;
+  const sorted  = [...history].sort((a,b) => a.date.localeCompare(b.date));
+  const lastMs  = new Date(sorted[sorted.length - 1].date).getTime();
+  const predMs  = new Date(currentPayload.pred_date).getTime();
+  _wiHorizon = Math.max(1, Math.min(730, Math.round((predMs - lastMs) / 86400000) || 30));
+
+  // Update panel slider values + labels
+  document.getElementById('wi-age').value = _wiAge;
+  document.getElementById('wi-age-label').textContent = _wiAge;
+  setWiSex(_wiSex, false);
+  document.getElementById('wi-horizon').value = _wiHorizon;
+  document.getElementById('wi-horizon-label').textContent = horizonLabel(_wiHorizon);
+
+  // Panel age slider
+  document.getElementById('wi-age').oninput = function() {
+    _wiAge = parseInt(this.value);
+    document.getElementById('wi-age-label').textContent = _wiAge;
+    scheduleWiUpdate();
+  };
+
+  // Panel horizon slider
+  document.getElementById('wi-horizon').oninput = function() {
+    _wiHorizon = parseInt(this.value);
+    document.getElementById('wi-horizon-label').textContent = horizonLabel(_wiHorizon);
+    scheduleWiUpdate();
+  };
+}
+
+function horizonLabel(days) {
+  if (days < 7)   return `${days} day${days === 1 ? '' : 's'}`;
+  if (days < 30)  return `${Math.round(days/7)} wk`;
+  if (days < 365) return `${Math.round(days/30)} mo`;
+  return `${(days/365).toFixed(1)} yr`;
+}
+
+function setWiSex(val, update=true) {
+  _wiSex = val;
+  document.getElementById('wi-sex-m').classList.toggle('active', val === 0);
+  document.getElementById('wi-sex-f').classList.toggle('active', val === 1);
+  document.getElementById('wi-sex-label').textContent = val === 0 ? 'Male' : 'Female';
+  if (update) scheduleWiUpdate();
+}
+
+function scheduleWiUpdate() {
+  // Instant — no debounce needed since we're reading from cached grid
+  updateWhatIf();
+}
+
+// Instant what-if lookup from pre-computed sweep cache
+function updateWhatIf() {
+  if (!currentPayload || !currentResult) return;
+
+  // If no sweep cache (manual predict, not example), fall back gracefully
+  if (!_wiSweeps) {
+    runSensitivity();
+    return;
+  }
+
+  // Find nearest point in each sweep axis
+  function nearest(sweep, val) {
+    return sweep.reduce((best, r) =>
+      Math.abs(r.value - val) < Math.abs(best.value - val) ? r : best);
+  }
+
+  // Pick the sweep axis that most recently changed to drive the stats
+  // Use the last-changed param heuristic: prefer sex match, then age, then horizon
+  const byAge     = nearest(_wiSweeps.age,     _wiAge);
+  const bySex     = nearest(_wiSweeps.sex,     _wiSex);
+  const byHorizon = nearest(_wiSweeps.horizon, _wiHorizon);
+
+  // Blend: use the swept point for the current _sensParam, others from base
+  const primary = _sensParam === 'age'     ? byAge
+                : _sensParam === 'sex'     ? bySex
+                : byHorizon;
+
+  const sorted      = [...currentPayload.history].sort((a,b) => a.date.localeCompare(b.date));
+  const lastMs      = new Date(sorted[sorted.length - 1].date).getTime();
+  const newPredDate = new Date(lastMs + _wiHorizon * 86400000).toISOString().slice(0,10);
+
+  // Build a synthetic data object for the stats/overlay functions
+  const unit = currentResult.unit || '';
+  const wiData = {
+    unit,
+    ref_low:  primary.ref_low,
+    ref_high: primary.ref_high,
+    predictions: { Normal: {
+      mu:       primary.mu,
+      sigma:    primary.sigma,
+      ci_lower: primary.ci_lower,
+      ci_upper: primary.ci_upper,
+    }},
+  };
+
+  drawWhatIfStats(wiData);
+  updateChartWhatIfOverlay(wiData, newPredDate);
+  updatePredSummaryWhatIf(wiData, newPredDate);
+  document.getElementById('wi-reset-btn').style.display = '';
+  runSensitivity();
+}
+
+function resetWhatIf() {
+  // Remove chart overlay
+  const el = document.getElementById('main-chart');
+  if (el && el.data && el.data.length > _baseTraceCount) {
+    Plotly.deleteTraces(el, Array.from({length: el.data.length - _baseTraceCount}, (_,i) => _baseTraceCount + i));
+  }
+  // Restore pred-summary to original prediction
+  if (currentPayload && currentResult) {
+    drawPredSummary(currentPayload, currentResult);
+    drawWhatIfStats(currentResult);
+    initWhatIfControls();
+  }
+  document.getElementById('wi-reset-btn').style.display = 'none';
+}
+
+function updatePredSummaryWhatIf(wiData, wiPredDate) {
+  const norm = wiData.predictions?.['Normal'];
+  if (!norm || norm.error) return;
+  const unit = wiData.unit || '';
+  const mu = norm.mu, ciLo = norm.ci_lower, ciHi = norm.ci_upper;
+
+  // Update the NORMA pill to show the what-if prediction with a tinted background
+  const summary = document.getElementById('pred-summary');
+  if (!summary) return;
+  const nPill = summary.querySelector('.mk-pill');
+  if (!nPill) return;
+  nPill.style.borderColor = 'rgba(48,209,88,0.4)';
+  nPill.style.background  = 'rgba(48,209,88,0.06)';
+  nPill.querySelector('.mk-val').textContent = mu.toFixed(1);
+  nPill.querySelector('.mk-ci').textContent  = `95% CI: ${ciLo.toFixed(1)} – ${ciHi.toFixed(1)}`;
+  // Update pred date badge
+  const badge = document.getElementById('pred-date-badge');
+  if (badge) badge.textContent = `What if: ${wiPredDate}`;
+}
+
+// ── Chart overlay for what-if prediction ──
+let _baseTraceCount = 0;
+
+function updateChartWhatIfOverlay(wiData, wiPredDate) {
+  const el = document.getElementById('main-chart');
+  if (!el || !el.data) return;
+
+  const norm = wiData.predictions?.['Normal'];
+  if (!norm || norm.error) return;
+
+  const wiMu  = norm.mu;
+  const wiLo  = norm.ci_lower;
+  const wiHi  = norm.ci_upper;
+  const unit  = wiData.unit || '';
+  const hist  = currentPayload.history;
+  const lastD = [...hist].sort((a,b) => a.date.localeCompare(b.date)).at(-1).date;
+  const lastV = hist.find(h => h.date === lastD)?.value ?? hist[hist.length-1].value;
+
+  // Check if this is the same as the base prediction (no change needed)
+  const sameDate = wiPredDate === currentPayload.pred_date;
+  const samePred = sameDate &&
+    Math.abs(wiMu - (currentResult.predictions?.Normal?.mu ?? Infinity)) < 0.01;
+  if (samePred) {
+    // Remove overlay if it was there
+    if (el.data.length > _baseTraceCount) {
+      Plotly.deleteTraces(el, Array.from({length: el.data.length - _baseTraceCount}, (_,i) => _baseTraceCount + i));
+    }
+    return;
+  }
+
+  const wiTraces = [
+    // Dashed line from last obs → what-if point
+    {
+      x: [lastD, wiPredDate], y: [lastV, wiMu],
+      mode: 'lines', showlegend: false,
+      line: {color: '#30d158', width: 1.5, dash: 'dash'}, hoverinfo: 'skip',
+    },
+    // CI band
+    {
+      x: [wiPredDate, wiPredDate], y: [wiLo, wiHi],
+      mode: 'lines', showlegend: false,
+      line: {color: 'rgba(48,209,88,0.5)', width: 6}, hoverinfo: 'skip',
+    },
+    // Mean marker
+    {
+      x: [wiPredDate], y: [wiMu],
+      mode: 'markers', name: 'What if…',
+      marker: {color: '#30d158', size: 9, symbol: 'diamond-open',
+               line: {width: 2.5, color: '#30d158'}},
+      hovertemplate: wiPredDate + '<br>%{y:.2f} ' + unit + ' (What if…)<extra></extra>',
+    },
+  ];
+
+  // Remove previous overlay, add new
+  const extraCount = el.data.length - _baseTraceCount;
+  if (extraCount > 0) {
+    Plotly.deleteTraces(el, Array.from({length: extraCount}, (_,i) => _baseTraceCount + i));
+  }
+  Plotly.addTraces(el, wiTraces);
+}
+
+function drawWhatIfStats(data) {
+  const norm = data.predictions?.['Normal'];
+  if (!norm || norm.error) return;
+
+  const mu = norm.mu, ciLo = norm.ci_lower, ciHi = norm.ci_upper;
+  const unit = data.unit || '';
+
+  ['wi-mu','wi-ci','wi-width'].forEach(id => document.getElementById(id).classList.remove('loading'));
+
+  document.getElementById('wi-mu').textContent    = `${mu.toFixed(1)} ${unit}`;
+  document.getElementById('wi-ci').textContent    = `${ciLo.toFixed(1)}–${ciHi.toFixed(1)}`;
+  document.getElementById('wi-width').textContent = `±${((ciHi-ciLo)/2).toFixed(1)} ${unit}`;
+  document.getElementById('wi-pop').textContent   =
+    (data.ref_low != null && data.ref_high != null) ? `${data.ref_low}–${data.ref_high}` : '—';
+}
+
+function setSensParam(param) {
+  _sensParam = param;
+  ['age','sex','horizon'].forEach(p =>
+    document.getElementById(`sp-${p}`).classList.toggle('active', p === param));
+  if (currentPayload && currentResult) runSensitivity();
+}
+
+
+function runSensitivity() {
+  if (!currentPayload || !currentResult) return;
+  document.getElementById('sens-card').style.display = 'block';
+
+  // Use pre-computed sweep cache when available (instant, no API call)
+  if (_wiSweeps && _wiSweeps[_sensParam]) {
+    drawSensChart(_wiSweeps[_sensParam], currentResult.unit || '');
+    return;
+  }
+
+  // Fallback to API for manually-entered (non-example) predictions
+  const { test_name, history } = currentPayload;
+  const sex = _wiSex, age = _wiAge;
+  const sorted  = [...history].sort((a,b) => a.date < b.date ? -1 : 1);
+  const firstMs = new Date(sorted[0].date).getTime();
+  const lastMs  = new Date(sorted[sorted.length - 1].date).getTime();
+  const hist    = sorted.map(h => ({ day: (new Date(h.date).getTime() - firstMs) / 86400000, value: h.value }));
+  const base_t  = (lastMs - firstMs) / 86400000 + _wiHorizon;
+  const sweepValues = _sensParam === 'age' ? [20,30,40,50,60,70,80]
+                    : _sensParam === 'sex' ? [0,1]
+                    : [7,30,60,90,180,365,730];
+
+  fetch('/api/sensitivity', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ test_name, sex, age, history: hist, base_t, param: _sensParam, values: sweepValues }),
+  }).then(r => r.json()).then(data => {
+    if (!data.error) drawSensChart(data.results, data.unit);
+  }).catch(() => {});
+}
+
+function drawSensChart(results, unit) {
+  const ok = results.filter(r => !r.error);
+  if (!ok.length) return;
+
+  const xLabels = ok.map(r => {
+    if (_sensParam === 'age')     return `Age ${r.value}`;
+    if (_sensParam === 'sex')     return r.value ? 'Female' : 'Male';
+    if (_sensParam === 'horizon') return horizonLabel(r.value);
+  });
+
+  const mu    = ok.map(r => r.mu);
+  const ci_lo = ok.map(r => r.ci_lower);
+  const ci_hi = ok.map(r => r.ci_upper);
+  const ref_lo = ok.map(r => r.ref_low);
+  const ref_hi = ok.map(r => r.ref_high);
+
+  const ciErrLo = ok.map((r,i) => mu[i] - ci_lo[i]);
+  const ciErrHi = ok.map((r,i) => ci_hi[i] - mu[i]);
+
+  // Highlight the current what-if value on the sweep
+  const currentVal = _sensParam === 'age' ? _wiAge : _sensParam === 'sex' ? _wiSex : _wiHorizon;
+  const hlIdx = ok.reduce((best, r, i) =>
+    Math.abs(r.value - currentVal) < Math.abs(ok[best].value - currentVal) ? i : best, 0);
+  const markerColors = ok.map((_, i) => i === hlIdx ? '#0071e3' : '#30d158');
+  const markerSizes  = ok.map((_, i) => i === hlIdx ? 10 : 6);
+
+  const traces = [
+    {
+      x: xLabels, y: mu,
+      mode: 'lines+markers', name: 'NORMA μ',
+      line: { color: '#30d158', width: 2 },
+      marker: { color: markerColors, size: markerSizes },
+      error_y: { type:'data', symmetric:false, array: ciErrHi, arrayminus: ciErrLo,
+                 color:'rgba(48,209,88,0.35)', thickness:1.5, width:4 },
+      hovertemplate: '%{x}<br>μ = %{y:.2f} ' + unit + '<extra>NORMA</extra>',
+    },
+    {
+      x: xLabels, y: ref_lo,
+      mode: 'lines', name: 'Pop ref low',
+      line: { color: 'rgba(174,174,178,0.6)', width: 1, dash: 'dot' },
+      hoverinfo: 'skip',
+    },
+    {
+      x: xLabels, y: ref_hi,
+      mode: 'lines', name: 'Pop ref high',
+      line: { color: 'rgba(174,174,178,0.6)', width: 1, dash: 'dot' },
+      fill: 'tonexty', fillcolor: 'rgba(174,174,178,0.07)',
+      hoverinfo: 'skip',
+    },
+  ];
+
+  const paramLabel = { age: 'Age (years)', sex: 'Sex', horizon: 'Time to next test' };
+  Plotly.newPlot('sens-chart', traces, {
+    margin: { l: 42, r: 10, t: 6, b: 38 },
+    font:   { family: 'DM Sans,sans-serif', size: 11, color: '#6e6e73' },
+    xaxis:  { title: paramLabel[_sensParam], showgrid: false },
+    yaxis:  { title: unit, showgrid: true, gridcolor: '#f5f5f7', zeroline: false },
+    legend: { orientation: 'h', y: -0.38, font: { size: 10 } },
+    hovermode: 'closest',
+    plot_bgcolor: '#fff', paper_bgcolor: '#fff',
+  }, { responsive: true, displayModeBar: false });
+}
+
+// ── Utilities ──
 function setLoading(on) {
   document.getElementById('spinner').classList.toggle('active', on);
   document.getElementById('btn-predict').disabled = on;
 }
 
-function showToast(msg, isError = false) {
-  const c   = document.getElementById('toast-container');
+function showToast(msg, isError=false) {
   const div = document.createElement('div');
-  div.className = 'toast-msg' + (isError ? ' error' : '');
+  div.className = 'toast-msg' + (isError?' error':'');
   div.textContent = msg;
-  c.appendChild(div);
-  setTimeout(() => div.remove(), 3000);
+  document.getElementById('toast-container').appendChild(div);
+  setTimeout(() => div.remove(), 3200);
 }
 
+// ── Scroll progress + section tracking ──
+(function initScrollSync() {
+  const main = document.querySelector('.main-content');
+  if (!main) return;
+
+  const progressBar   = document.getElementById('scroll-progress');
+  const sectionLabel  = document.getElementById('scroll-section-label');
+
+  // Map card id → readable section name
+  const SECTION_NAMES = {
+    'chart-card':         'Trajectory',
+    'sens-card':          'What if…?',
+    'interpret-card':     'AI Interpretation',
+    'saved-runs-section': 'Saved Runs',
+  };
+
+  // Track which cards have already been revealed (avoid re-animating)
+  const _revealed = new Set();
+
+  // IntersectionObserver: reveal cards as they scroll into view
+  const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting && !_revealed.has(entry.target.id)) {
+        _revealed.add(entry.target.id);
+        entry.target.classList.add('card-reveal');
+        // When What if? card enters view and we have a result, refresh sensitivity
+        if (entry.target.id === 'sens-card' && currentPayload && currentResult) {
+          runSensitivity();
+        }
+      }
+    });
+  }, { root: main, threshold: 0.08 });
+
+  // Observe all cards (including dynamically-shown ones)
+  function observeCards() {
+    document.querySelectorAll('.card, .chart-card').forEach(el => {
+      if (el.id) revealObserver.observe(el);
+    });
+  }
+  observeCards();
+
+  // Scroll progress bar tied to main-content scroll
+  main.addEventListener('scroll', () => {
+    const scrollTop    = main.scrollTop;
+    const scrollHeight = main.scrollHeight - main.clientHeight;
+    const pct          = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
+    progressBar.style.width = pct + '%';
+
+    // Active section label: find topmost card that's scrolled into view
+    const mainTop = main.getBoundingClientRect().top;
+    let topCard = null, topDist = Infinity;
+    Object.keys(SECTION_NAMES).forEach(id => {
+      const el = document.getElementById(id);
+      if (!el || el.style.display === 'none') return;
+      const rect = el.getBoundingClientRect();
+      const relTop = rect.top - mainTop;
+      // Card is in the upper portion of the viewport
+      if (relTop <= 120 && rect.bottom - mainTop > 0) {
+        const dist = Math.abs(relTop);
+        if (dist < topDist) { topDist = dist; topCard = id; }
+      }
+    });
+    sectionLabel.textContent = topCard ? SECTION_NAMES[topCard] : '';
+    sectionLabel.style.opacity = topCard ? '1' : '0';
+  }, { passive: true });
+
+  // Re-observe when new cards become visible (after predict/loadExample)
+  const domObserver = new MutationObserver(() => observeCards());
+  domObserver.observe(main, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
+})();
+
 // ── Init ──
+document.getElementById('inp-tnext').value = todayStr();
 seedDefaults();
 updateRefPill();
+renderSavedRuns();
+// Pre-build example navigator for default test
+initExampleNav();
+// Re-build when test changes
+document.getElementById('sel-test').addEventListener('change', initExampleNav);
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

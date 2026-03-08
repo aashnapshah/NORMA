@@ -1,0 +1,1381 @@
+coz<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NORMA — Personalized Lab Value Prediction</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <style>
+    :root {
+      --bg:          #f5f5f7;
+      --surface:     #ffffff;
+      --text-1:      #1d1d1f;
+      --text-2:      #6e6e73;
+      --text-3:      #aeaeb2;
+      --border:      rgba(0,0,0,0.08);
+      --accent:      #0071e3;
+      --accent-h:    #0077ed;
+      --low:         #ff3b30;
+      --normal:      #30d158;
+      --high:        #ff9f0a;
+      --purple:      #bf5af2;
+      --dark-bg:     #0a0a0f;
+      --dark-border: rgba(255,255,255,0.08);
+      --w:           1200px;
+      --r-xl: 20px;
+      --r-lg: 14px;
+      --r-md: 10px;
+      --r-sm: 7px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 24px rgba(0,0,0,0.08);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text-1);
+      -webkit-font-smoothing: antialiased;
+      font-size: 0.9375rem;
+      line-height: 1.6;
+    }
+
+    /* ── Nav ── */
+    .navbar {
+      height: 52px; background: rgba(255,255,255,0.88);
+      backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2.5rem; display: flex; align-items: center; gap: 1rem;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .nav-brand {
+      font-weight: 800; font-size: 1rem; color: var(--text-1);
+      letter-spacing: -0.03em; text-decoration: none;
+      display: flex; align-items: center; gap: 0.4rem;
+    }
+    .nav-dot { width: 7px; height: 7px; background: var(--accent); border-radius: 50%; }
+    .nav-spacer { flex: 1; }
+    .nav-links { display: flex; gap: 0.15rem; }
+    .nav-link {
+      font-size: 0.8rem; font-weight: 500; color: var(--text-2);
+      text-decoration: none; padding: 0.3rem 0.75rem; border-radius: var(--r-md);
+      transition: all 0.15s;
+    }
+    .nav-link:hover { background: var(--bg); color: var(--text-1); }
+    .btn-nav {
+      background: var(--accent); color: #fff; border: none;
+      border-radius: var(--r-md); padding: 0.35rem 1rem;
+      font-size: 0.8rem; font-weight: 600; cursor: pointer;
+      text-decoration: none; transition: background 0.15s;
+    }
+    .btn-nav:hover { background: var(--accent-h); color: #fff; }
+
+    /* ── Hero ── */
+    .hero {
+      background: var(--dark-bg); padding: 3.25rem 2.5rem 3rem;
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--purple) 50%, var(--normal));
+    }
+    .hero-glow {
+      position: absolute; top: -180px; right: -180px; width: 600px; height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0,113,227,0.1) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-in { max-width: var(--w); margin: 0 auto; position: relative; }
+    .disease-bubble {
+      background: var(--bg); border: 1px solid var(--border);
+      color: var(--text-2); border-radius: 999px;
+      font-size: 0.68rem; font-weight: 500; padding: 0.28rem 0.65rem;
+      display: inline-flex;
+    }
+    h1.hero-title {
+      font-size: clamp(1.9rem, 4vw, 3.2rem);
+      font-weight: 800; letter-spacing: -0.04em; line-height: 1.1; color: #fff;
+      white-space: nowrap; /* keep on one line */
+    }
+    @media (max-width: 780px) { h1.hero-title { white-space: normal; } }
+    h1.hero-title em { font-style: italic; color: #30d158; }
+    .hero-sub {
+      font-size: 0.975rem; line-height: 1.7; color: rgba(255,255,255,0.5);
+      max-width: 540px; margin-top: 0.85rem; margin-bottom: 1.5rem;
+    }
+    .hero-ctas { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      background: var(--accent); color: #fff; border: none;
+      border-radius: 11px; padding: 0.7rem 1.5rem;
+      font-size: 0.875rem; font-weight: 700; letter-spacing: -0.01em;
+      text-decoration: none; cursor: pointer;
+      box-shadow: 0 4px 18px rgba(0,113,227,0.35);
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn-primary:hover { background: var(--accent-h); color: #fff; }
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-ghost {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.75);
+      border: 1px solid rgba(255,255,255,0.14); border-radius: 11px;
+      padding: 0.7rem 1.5rem; font-size: 0.875rem; font-weight: 600;
+      text-decoration: none; transition: background 0.15s;
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,0.12); color: #fff; }
+    .hero-stats {
+      display: flex; gap: 2.25rem; flex-wrap: wrap;
+      margin-top: 1.75rem; padding-top: 1.5rem;
+      border-top: 1px solid var(--dark-border);
+    }
+    .h-num { font-size: 1.55rem; font-weight: 800; color: #fff; letter-spacing: -0.04em; line-height: 1; }
+    .h-num span { color: var(--accent); }
+    .h-lbl { font-size: 0.68rem; color: rgba(255,255,255,0.3); margin-top: 0.12rem; line-height: 1.35; }
+
+    /* ── Shared section ── */
+    .sec { padding: 3.75rem 2.5rem; }
+    .sec.white { background: var(--surface); border-top: 1px solid var(--border); }
+    .sec.gray  { background: var(--bg); border-top: 1px solid var(--border); }
+    .sec.dark  { background: var(--dark-bg); border-top: 1px solid var(--dark-border); }
+    .inner { max-width: var(--w); margin: 0 auto; }
+    .eyebrow {
+      font-size: 0.59rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.16em; color: var(--accent); margin-bottom: 0.5rem;
+    }
+    .eyebrow.dim { color: rgba(255,255,255,0.3); }
+    h2.stitle {
+      font-size: clamp(1.35rem, 2.5vw, 1.85rem);
+      font-weight: 800; letter-spacing: -0.035em; line-height: 1.2;
+      color: var(--text-1); margin-bottom: 0.6rem;
+    }
+    h2.stitle:has(.lead-phrase) { line-height: 1.15; }
+    h2.stitle .lead-phrase {
+      display: block;
+      color: var(--accent);
+      font-size: 1.2em;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      margin-bottom: 0;
+    }
+    h2.stitle.light { color: #fff; }
+    .slead { font-size: 0.925rem; line-height: 1.75; color: var(--text-2); max-width: 660px; }
+    .slead.light { color: rgba(255,255,255,0.45); max-width: 480px; }
+
+    /* ── Labs coverage ── */
+    .labs-scroll-wrap {
+      overflow-x: auto; margin-top: 1.5rem; padding-bottom: 0.5rem;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.12) transparent;
+    }
+    .labs-scroll-wrap::-webkit-scrollbar { height: 4px; }
+    .labs-scroll-wrap::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 99px; }
+    .labs-scroll { display: flex; gap: 0.5rem; min-width: min-content; padding: 2px 2px 2px 2px; }
+    .lab-card {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--r-lg); padding: 0.7rem 0.9rem; cursor: pointer;
+      transition: all 0.15s; min-width: 88px; text-align: center; flex-shrink: 0;
+    }
+    .lab-card:hover { border-color: var(--accent); background: rgba(0,113,227,0.04); }
+    .lab-card.active {
+      border-color: var(--accent); background: rgba(0,113,227,0.06);
+      box-shadow: 0 0 0 3px rgba(0,113,227,0.1);
+    }
+    .lc-abbr { font-size: 0.88rem; font-weight: 700; color: var(--text-1); letter-spacing: -0.02em; }
+    .lc-cat { font-size: 0.54rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 0.22rem; }
+    .cat-heme  { color: #f43f5e; }
+    .cat-meta  { color: #f59e0b; }
+    .cat-hepat { color: var(--normal); }
+    .cat-lipid { color: var(--purple); }
+    .cat-renal { color: var(--accent); }
+    .cat-other { color: var(--text-3); }
+    .lab-detail {
+      display: none; margin-top: 1.1rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r-xl); padding: 1.5rem 1.75rem;
+      box-shadow: var(--shadow);
+    }
+    .lab-detail.show { display: block; }
+    .ld-abbr { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); margin-bottom: 0.3rem; }
+    .ld-name { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.025em; color: var(--text-1); }
+    .ld-desc { font-size: 0.88rem; color: var(--text-2); line-height: 1.7; margin-top: 0.65rem; max-width: 720px; }
+    .ld-refs { display: flex; gap: 1.75rem; margin-top: 1rem; flex-wrap: wrap; }
+    .ld-ref-sex { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); }
+    .ld-ref-range { font-size: 0.9rem; font-weight: 600; color: var(--text-1); margin-top: 0.12rem; }
+
+    /* ── Approaches ── */
+    .ap-grid {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.1rem; margin-top: 1.75rem;
+    }
+    @media (max-width: 720px) { .ap-grid { grid-template-columns: 1fr; } }
+    .ap-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r-xl); padding: 1.4rem; position: relative; overflow: hidden;
+    }
+    .ap-card.highlight {
+      border-color: rgba(48,209,88,0.3);
+      box-shadow: 0 0 0 3px rgba(48,209,88,0.06), var(--shadow);
+    }
+    .ap-card.highlight::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: var(--normal);
+    }
+    .ap-tag { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.55rem; display: flex; align-items: center; gap: 0.3rem; }
+    .ap-tag.pop { color: var(--accent); }
+    .ap-tag.per { color: var(--low); }
+    .ap-tag.ctx { color: var(--normal); }
+    .ap-title { font-size: 1rem; font-weight: 700; letter-spacing: -0.02em; color: var(--text-1); margin-bottom: 0.8rem; }
+    .ap-ul { list-style: none; display: flex; flex-direction: column; gap: 0.42rem; }
+    .ap-ul li { font-size: 0.82rem; color: var(--text-2); line-height: 1.45; display: flex; align-items: flex-start; gap: 0.45rem; }
+    .ap-ul li::before { content: '·'; color: var(--text-3); flex-shrink: 0; font-size: 1rem; line-height: 1.1; }
+    .ap-ul.ck li::before { content: '✓'; color: var(--normal); font-size: 0.76rem; margin-top: 0.12rem; }
+    .ap-ul.ck li { color: var(--text-1); font-weight: 500; }
+    .ap-foot { margin-top: 0.9rem; padding-top: 0.8rem; border-top: 1px solid var(--border); font-size: 0.71rem; color: var(--text-3); }
+    .norma-badge {
+      display: inline-flex; align-items: center; gap: 0.25rem;
+      background: rgba(48,209,88,0.1); color: #1a7a37;
+      border-radius: 999px; font-size: 0.67rem; font-weight: 600;
+      padding: 0.16rem 0.55rem; border: 1px solid rgba(48,209,88,0.2);
+    }
+
+    /* ── Demo ── */
+    .demo-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r-xl); overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06), 0 20px 60px rgba(0,0,0,0.09);
+      margin-top: 1.75rem;
+    }
+    .demo-hdr {
+      padding: 0.85rem 1.5rem; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 0.5rem;
+      font-size: 0.82rem; font-weight: 600; color: var(--text-1);
+      background: #fafafa;
+    }
+    .live-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--normal);
+      box-shadow: 0 0 0 3px rgba(48,209,88,0.2); animation: pulse 2s infinite;
+      flex-shrink: 0;
+    }
+    @keyframes pulse { 0%,100%{box-shadow:0 0 0 3px rgba(48,209,88,0.2);} 50%{box-shadow:0 0 0 6px rgba(48,209,88,0.07);} }
+    .ex-loading {
+      display: flex; align-items: center; justify-content: center;
+      height: 300px; gap: 0.5rem; color: var(--text-3); font-size: 0.85rem;
+    }
+    .spinner {
+      width: 18px; height: 18px; border: 2px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .ex-chart-panel {
+      padding: 0.75rem 0 0;
+      width: 100%;
+      min-width: 0;
+    }
+
+    /* Model key pills */
+    .model-keys {
+      display: flex; gap: 0.65rem; flex-wrap: wrap;
+      padding: 0.75rem 1.5rem 0;
+    }
+    .mk-pill {
+      flex: 1; min-width: 140px; background: var(--bg);
+      border: 1px solid var(--border); border-radius: var(--r-lg);
+      padding: 0.65rem 0.9rem; display: flex; align-items: flex-start; gap: 0.55rem;
+    }
+    .mk-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 0.3rem; }
+    .mk-label { font-size: 0.56rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); margin-bottom: 0.1rem; }
+    .mk-val { font-size: 1.2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+    .mk-ci { font-size: 0.65rem; color: var(--text-2); margin-top: 0.12rem; }
+
+    /* inner panel cards */
+    .dpanel {
+      margin: 0.75rem 1.5rem 0;
+      border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden;
+    }
+    .dpanel-hdr {
+      padding: 0.6rem 1rem; display: flex; align-items: center; gap: 0.35rem;
+      font-size: 0.59rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.13em;
+      border-bottom: 1px solid var(--border);
+    }
+    .dpanel-hdr.ai   { background: #fbf4ff; color: #6b21a8; }
+    .dpanel-hdr.risk { background: #fffbeb; color: #92400e; }
+    .dpanel-hdr.sens { background: #f0f8ff; color: #0369a1; }
+    .dpanel-body { padding: 1rem 1.1rem; }
+    .interp-text { font-size: 0.875rem; line-height: 1.82; color: var(--text-2); }
+
+    /* Risk */
+    .risk-what { font-size: 0.84rem; color: var(--text-2); line-height: 1.65; margin-bottom: 0.85rem; }
+    .risk-bar-wrap { margin-bottom: 0.85rem; }
+    .risk-bar-lbl { font-size: 0.63rem; color: var(--text-3); margin-bottom: 0.28rem; display: flex; justify-content: space-between; }
+    .risk-bar { height: 5px; background: var(--bg); border-radius: 99px; overflow: hidden; display: flex; border: 1px solid var(--border); }
+    .risk-bar-l { background: var(--low);    height: 100%; }
+    .risk-bar-n { background: var(--normal); height: 100%; }
+    .risk-bar-h { background: var(--high);   height: 100%; }
+    .risk-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media (max-width: 560px) { .risk-cols { grid-template-columns: 1fr; } }
+    .risk-col-hd { font-size: 0.64rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; display: flex; align-items: center; gap: 0.3rem; margin-bottom: 0.6rem; }
+    .risk-col-hd.lo { color: var(--low); }
+    .risk-col-hd.hi { color: var(--high); }
+    .risk-item { margin-bottom: 0.7rem; padding-bottom: 0.7rem; border-bottom: 1px solid var(--border); }
+    .risk-item:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+    .risk-disease { font-size: 0.81rem; font-weight: 600; color: var(--text-1); margin-bottom: 0.1rem; }
+    .risk-desc { font-size: 0.76rem; color: var(--text-2); line-height: 1.5; }
+    .risk-cite { font-size: 0.66rem; color: var(--text-3); margin-top: 0.15rem; font-style: italic; }
+
+    /* Sensitivity / What if */
+    .sbtn {
+      background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-sm);
+      color: var(--text-2); font-size: 0.71rem; font-weight: 500;
+      padding: 0.2rem 0.6rem; cursor: pointer; transition: all 0.15s;
+    }
+    .sbtn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .adapts-block { padding: 0 0 1rem; }
+    .adapts-controls { display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; align-items: flex-start; }
+    .adapts-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .adapts-label { font-size: 0.7rem; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; min-width: 3rem; }
+    .adapts-pills { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+    .tune-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
+    .tune-range-ends { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--text-3); margin-top: 0.1rem; }
+    /* What if stats readout */
+    .wi-stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem;
+      background: var(--bg); border-radius: var(--r-md); padding: 0.7rem 0.85rem; margin-bottom: 1rem; }
+    .wi-stat-val { font-size: 0.88rem; font-weight: 700; color: var(--text-1); transition: color 0.2s; }
+    .wi-stat-val.loading { color: var(--text-3); }
+    .wi-stat-lbl { font-size: 0.58rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0.1rem; }
+    /* Controls grid */
+    .wi-controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem 1.5rem; }
+    @media (max-width: 560px) { .wi-controls-grid { grid-template-columns: 1fr; } }
+    .wi-q { font-size: 0.8rem; color: var(--text-1); margin-bottom: 0.3rem; line-height: 1.4; }
+    .wi-dval { font-weight: 700; color: var(--accent); }
+    .tune-seg { display: flex; gap: 0.3rem; margin-top: 0.25rem; }
+    .tune-seg-btn {
+      background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-sm);
+      padding: 0.2rem 0.75rem; font-size: 0.76rem; cursor: pointer; transition: all 0.12s;
+      font-family: inherit; color: var(--text-2);
+    }
+    .tune-seg-btn:hover { border-color: rgba(0,113,227,0.3); color: var(--accent); }
+    .tune-seg-btn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .sens-range { width: 100%; accent-color: var(--accent); cursor: pointer; margin-top: 0.15rem; }
+
+    /* Demo footer */
+    .demo-footer {
+      padding: 1rem 1.5rem 1.25rem; border-top: 1px solid var(--border);
+      margin-top: 0.75rem; text-align: center;
+    }
+
+    /* ── CTA ── */
+    .cta-btns { display: flex; gap: 0.65rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem; }
+    .btn-cta {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      background: var(--accent); color: #fff; border: none; border-radius: 11px;
+      padding: 0.75rem 1.55rem; font-size: 0.875rem; font-weight: 700;
+      text-decoration: none; box-shadow: 0 4px 18px rgba(0,113,227,0.35);
+      transition: background 0.15s;
+    }
+    .btn-cta:hover { background: var(--accent-h); color: #fff; }
+    .btn-cta-outline {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      background: transparent; color: rgba(255,255,255,0.65);
+      border: 1px solid rgba(255,255,255,0.2); border-radius: 11px;
+      padding: 0.75rem 1.55rem; font-size: 0.875rem; font-weight: 600;
+      text-decoration: none; transition: all 0.15s;
+    }
+    .btn-cta-outline:hover { border-color: rgba(255,255,255,0.4); color: #fff; }
+
+    [id] { scroll-margin-top: 64px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Navbar ── -->
+<nav class="navbar">
+  <a href="/" class="nav-brand"><span class="nav-dot"></span>NORMA</a>
+  <div class="nav-spacer"></div>
+  <div class="nav-links">
+    <a href="#demo"      class="nav-link">Example</a>
+    <a href="/training" class="nav-link">Training</a>
+  </div>
+  <a href="/app" class="btn-nav"><i class="bi bi-lightning-charge-fill"></i> Try NORMA</a>
+</nav>
+
+
+<!-- ── Hero ── -->
+<section class="hero">
+  <div class="hero-glow"></div>
+  <div class="hero-in">
+    <h1 class="hero-title">Learning <em>Normal</em> for Routine Laboratory Tests</h1>
+    <p class="hero-sub">
+      A contextual sequence model personalizing lab reference ranges using a patient's
+      longitudinal history, demographics, and clinical state — validated on 4.5 million adults.
+    </p>
+    <div class="hero-ctas">
+      <a href="#demo" class="btn-primary"><i class="bi bi-activity"></i> See a live example</a>
+      <a href="/app"  class="btn-ghost"><i class="bi bi-lightning-charge-fill"></i> Try the tool</a>
+    </div>
+    <div class="hero-stats">
+      <div><div class="h-num">4<span>.5M</span></div><div class="h-lbl">adults in external validation</div></div>
+      <div><div class="h-num">2<span>.8M</span></div><div class="h-lbl">training sequences</div></div>
+      <div><div class="h-num">{{ model_info.n_tests }}</div><div class="h-lbl">lab biomarkers modeled</div></div>
+      <div><div class="h-num">1<span>.7B</span></div><div class="h-lbl">lab results evaluated</div></div>
+    </div>
+  </div>
+</section>
+
+
+
+
+<!-- ── Why not Normal for whom ── -->
+<section class="sec gray">
+  <div class="inner" style="max-width:1100px">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:3.5rem; align-items:center">
+
+      <!-- Left: text -->
+      <div>
+        <h2 class="stitle">
+          <span class="lead-phrase">Normal for <em>whom</em>?</span><br>
+          A personalized way to interpret blood labs
+        </h2>
+        <p class="slead" style="margin-top:1.25rem">
+          <strong style="color:var(--text-1); font-size:0.7rem; letter-spacing:0.08em; text-transform:uppercase">Problem.</strong>
+          Most routine lab tests use a <strong>one-size-fits-all definition of "normal"</strong>—the same broad, static range for everyone. But people are different, and this approach can <strong>miss early signs of disease or meaningful changes</strong> in an individual’s health.
+        </p>
+        <p class="slead" style="margin-top:1rem">
+          <strong style="color:var(--text-1); font-size:0.7rem; letter-spacing:0.08em; text-transform:uppercase">Solution.</strong>
+          <strong>Personalize interpretation</strong>. <strong>NORMA</strong> learns what’s normal for you by utilizing <strong>repeatable laboratory values and clinical context</strong>. This enables <strong>personalized thresholds</strong> designed around your unique biology.
+        </p>
+        <p class="slead" style="margin-top:1rem">
+          <strong style="color:var(--text-1); font-size:0.7rem; letter-spacing:0.08em; text-transform:uppercase">Impact.</strong>
+          <strong>Screening for hundreds of diseases.</strong> NORMA is <strong>easy to integrate</strong> in existing lab workflows and has been <strong>validated on millions of patients</strong>.
+        </p>
+        <div class="disease-bubbles" style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-top:0.9rem;">
+          <span class="disease-bubble">Anemia</span>
+          <span class="disease-bubble">Diabetes</span>
+          <span class="disease-bubble">Kidney disease</span>
+          <span class="disease-bubble">Liver disease</span>
+          <span class="disease-bubble">Dyslipidemia</span>
+          <span class="disease-bubble">Thyroid disorders</span>
+          <span class="disease-bubble">Electrolyte imbalance</span>
+          <span class="disease-bubble">Infection</span>
+          <span class="disease-bubble">Bleeding disorders</span>
+        </div>
+      </div>
+
+      <!-- Right: schematic chart -->
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-xl); padding:1.25rem 1rem 0.75rem; box-shadow:var(--shadow)">
+        <div id="for-whom-chart" style="width:100%;height:320px"></div>
+        <p style="margin:0.5rem 0.25rem 0.25rem; font-size:0.72rem; color:var(--text-3); line-height:1.55">
+          Fasting glucose (mg/dL) in a patient with a stable personal setpoint of ~82.
+          Their trajectory rises slowly but stays <em>within population "normal"</em> for months—until NORMA flags the meaningful personal deviation early.
+        </p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+
+<!-- ── Three Approaches ── -->
+<section class="sec white">
+  <div class="inner">
+    <div class="eyebrow">Framework</div>
+    <h2 class="stitle">Three approaches to laboratory interpretation</h2>
+    <div class="ap-grid">
+
+      <div class="ap-card">
+        <div class="ap-tag pop"><i class="bi bi-people-fill"></i> Population Reference</div>
+        <div class="ap-title">Too Generalized</div>
+        <ul class="ap-ul">
+          <li>Fixed thresholds from a reference population</li>
+          <li>Ignores individual physiological baseline</li>
+          <li>Meaningful change may go undetected within range</li>
+          <li>Sensitivity limited by inter-individual variation</li>
+        </ul>
+        <div class="ap-foot">Standard of care in clinical laboratory medicine</div>
+      </div>
+
+      <div class="ap-card">
+        <div class="ap-tag per"><i class="bi bi-person-fill"></i> Pure Individualization</div>
+        <div class="ap-title">Too Personalized</div>
+        <ul class="ap-ul">
+          <li>Fitted to the patient's own history only</li>
+          <li>Overfits on sparse or noisy observations</li>
+          <li>May normalize chronic disease states</li>
+          <li>No population anchor to constrain predictions</li>
+        </ul>
+        <div class="ap-foot">Prior work on individual setpoint models</div>
+      </div>
+
+      <div class="ap-card highlight">
+        <div class="ap-tag ctx"><i class="bi bi-activity"></i> NORMA</div>
+        <div class="ap-title" style="color:var(--normal)">Contextualized</div>
+        <ul class="ap-ul ck">
+          <li>Trained on population-scale longitudinal sequences</li>
+          <li>Conditioned on individual trajectory and demographics</li>
+          <li>Predicts under a specified clinical state</li>
+          <li>Calibrated uncertainty adapts to data and horizon</li>
+          <li>Externally validated without retraining</li>
+        </ul>
+        <div class="ap-foot"><span class="norma-badge"><i class="bi bi-check-circle-fill"></i> This work</span></div>
+      </div>
+
+    </div><!-- /ap-grid -->
+
+    <!-- Coverage: lab biomarker cards (hover to load live demo below) -->
+    <div style="margin-top:2.5rem">
+      <div class="eyebrow" style="margin-bottom:0.5rem">Coverage — {{ model_info.n_tests }} biomarkers</div>
+      <p style="font-size:0.82rem;color:var(--text-3);margin-bottom:0.9rem">
+        Hover a biomarker to see a live patient example in the demo below.
+      </p>
+      <div class="labs-scroll-wrap">
+        <div class="labs-scroll">
+          {% for t in tests %}
+          <div class="lab-card" id="lc-{{ t }}"
+               onmouseenter="onLabHover('{{ t }}')">
+            <div class="lc-abbr">{{ t }}</div>
+            <div class="lc-cat" id="lcat-{{ t }}"></div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="lab-detail" id="lab-detail">
+        <div class="ld-abbr" id="ld-abbr"></div>
+        <div class="ld-name" id="ld-name"></div>
+        <div class="ld-desc" id="ld-desc"></div>
+        <div class="ld-refs" id="ld-refs"></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ── Live Demo ── -->
+<section class="sec gray" id="demo">
+  <div class="inner">
+    <div class="eyebrow">Live Example</div>
+    <div class="live-example-header">
+      <h2 class="stitle">
+        <span style="display:flex;align-items:center;gap:0.5rem">
+          <i class="bi bi-activity" style="color:var(--normal);font-size:1.5em"></i>
+          NORMA interprets a real patient trajectory
+        </span>
+      </h2>
+    </div>
+    <style>
+      .live-example-header { margin-bottom: 1.3rem; }
+    </style>
+
+    <div class="demo-card">
+      <div class="demo-hdr">
+        <span class="live-dot"></span>
+        <span>Live prediction</span>
+        <span id="ex-label" style="color:var(--text-3);font-size:0.72rem;margin-left:0.1rem"></span>
+        <div style="flex:1"></div>
+        <button onclick="loadDemo(_currentEx?.test || 'LDL')" style="background:none;border:1px solid var(--border);border-radius:var(--r-sm);padding:0.2rem 0.6rem;font-size:0.71rem;color:var(--text-2);cursor:pointer;display:flex;align-items:center;gap:0.28rem">
+          <i class="bi bi-arrow-clockwise"></i> New patient
+        </button>
+      </div>
+
+      <div id="ex-loading" class="ex-loading">
+        <div class="spinner"></div><span>Loading example…</span>
+      </div>
+
+      <div id="ex-content" style="display:none">
+
+        <!-- Trajectory with rotated distributions at forecast date -->
+        <div class="ex-chart-panel">
+          <div id="ex-chart" style="width:100%;height:360px"></div>
+        </div>
+
+        <!-- Model keys -->
+        <div class="model-keys" id="ex-mkeys"></div>
+
+        <!-- AI Interpretation -->
+        <div id="ex-ai-wrap" style="display:none">
+          <div class="dpanel">
+            <div class="dpanel-hdr ai"><i class="bi bi-stars"></i> AI Interpretation</div>
+            <div class="dpanel-body">
+              <div class="interp-text" id="ex-ai-body">
+                <span style="color:var(--text-3)">Generating…</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Disease Risk -->
+        <div id="ex-risk-wrap" style="display:none">
+          <div class="dpanel">
+            <div class="dpanel-hdr risk"><i class="bi bi-shield-exclamation" style="color:var(--high)"></i> Disease Risk Context</div>
+            <div class="dpanel-body">
+              <div class="risk-what" id="ex-risk-what"></div>
+              <div class="risk-bar-wrap" id="ex-risk-bar"></div>
+              <div class="risk-cols" id="ex-risk-cols">
+                <span style="color:var(--text-3);font-size:0.82rem">Loading…</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- What if? interactive explorer -->
+        <div class="dpanel" id="ex-tune-wrap" style="display:none;margin-top:1rem">
+          <div class="dpanel-hdr" style="background:linear-gradient(120deg,#f0f8ff 0%,#f5f0ff 100%)">
+            <i class="bi bi-sliders2" style="color:var(--accent)"></i>
+            <div>
+              <div style="font-weight:700">What if…?</div>
+              <div style="font-size:0.67rem;color:var(--text-3);font-weight:400">Adjust parameters and see how NORMA adapts in real time</div>
+            </div>
+          </div>
+          <div class="dpanel-body">
+            <!-- Live stats readout -->
+            <div class="wi-stats-row">
+              <div><div class="wi-stat-val" id="tune-norma-val">—</div><div class="wi-stat-lbl">NORMA</div></div>
+              <div><div class="wi-stat-val" id="tune-ci-val">—</div><div class="wi-stat-lbl">95% CI</div></div>
+              <div><div class="wi-stat-val" id="tune-width-val">—</div><div class="wi-stat-lbl">CI width</div></div>
+              <div><div class="wi-stat-val" id="tune-pop-val">—</div><div class="wi-stat-lbl">pop range</div></div>
+            </div>
+
+            <!-- All controls always visible -->
+            <div class="wi-controls-grid">
+
+              <!-- Age -->
+              <div>
+                <div class="wi-q">What if the patient is <span class="wi-dval" id="tune-age-value">50</span> years old?</div>
+                <input type="range" id="tune-age" class="tune-slider" min="18" max="85" value="50" step="1">
+                <div class="tune-range-ends"><span>18</span><span>85 yrs</span></div>
+              </div>
+
+              <!-- Sex -->
+              <div>
+                <div class="wi-q">What if the biological sex is <span class="wi-dval" id="tune-sex-label">Female</span>?</div>
+                <div class="tune-seg">
+                  <button type="button" class="tune-seg-btn" id="tune-sb-m" onclick="setTuneSex(0)">Male</button>
+                  <button type="button" class="tune-seg-btn on" id="tune-sb-f" onclick="setTuneSex(1)">Female</button>
+                </div>
+              </div>
+
+              <!-- Horizon -->
+              <div>
+                <div class="wi-q">What if the next test is in <span class="wi-dval" id="tune-horizon-value">90 d</span>?</div>
+                <input type="range" id="tune-horizon-slider" class="tune-slider" min="7" max="730" value="90" step="1">
+                <div class="tune-range-ends"><span>1 week</span><span>2 years</span></div>
+              </div>
+
+              <!-- hidden lab picker still needed by bindTunePanel -->
+              <div id="tune-lab" style="display:none">
+                <button type="button" class="sbtn" data-lab="HGB">HGB</button>
+                <button type="button" class="sbtn" data-lab="PLT">PLT</button>
+                <button type="button" class="sbtn" data-lab="CRE">CRE</button>
+                <button type="button" class="sbtn" data-lab="GLU">GLU</button>
+                <button type="button" class="sbtn" data-lab="TC">TC</button>
+                <button type="button" class="sbtn" data-lab="SODIUM">SODIUM</button>
+                <button type="button" class="sbtn" data-lab="WBC">WBC</button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <div class="demo-footer">
+          <a href="/app" class="btn-primary" style="font-size:0.875rem;padding:0.68rem 1.45rem;box-shadow:none">
+            <i class="bi bi-lightning-charge-fill"></i> Try NORMA with your own data
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ── CTA ── -->
+<section class="sec dark" style="text-align:center">
+  <div class="inner" style="max-width:520px">
+    <div class="eyebrow dim">Explore Further</div>
+    <h2 class="stitle light" style="font-size:clamp(1.4rem,2.8vw,2rem)">Ready to use your own patient data?</h2>
+    <p class="slead light">
+      Enter a lab history, select demographics, and get NORMA's prediction with AI interpretation.
+    </p>
+    <div class="cta-btns">
+      <a href="/app"   class="btn-cta"><i class="bi bi-lightning-charge-fill"></i> Try NORMA</a>
+      <a href="/training" class="btn-cta-outline"><i class="bi bi-cpu"></i> Training & Validation</a>
+    </div>
+  </div>
+</section>
+
+
+<script>
+/* ─────────────────────────────────────────
+   Lab info
+───────────────────────────────────────── */
+const LAB_INFO = {
+  HCT:  {name:'Hematocrit',                       cat:'Hematology', desc:'Fraction of blood volume occupied by red blood cells. Low values indicate anemia; elevated values may suggest polycythemia or dehydration.'},
+  HGB:  {name:'Hemoglobin',                        cat:'Hematology', desc:'Iron-containing protein in red blood cells that transports oxygen. The primary marker of anemia and erythrocytosis, reflecting oxygen-carrying capacity.'},
+  MCH:  {name:'Mean Corpuscular Hemoglobin',       cat:'Hematology', desc:'Average mass of hemoglobin per red blood cell. Used with MCV to classify anemia subtypes — low in iron deficiency, high in macrocytic anemias.'},
+  MCHC: {name:'Mean Corpuscular Hemoglobin Conc.', cat:'Hematology', desc:'Hemoglobin concentration within red blood cells. Low in iron-deficiency; elevated in hereditary spherocytosis. Most analytically stable RBC index.'},
+  MPV:  {name:'Mean Platelet Volume',              cat:'Hematology', desc:'Average size of platelets, reflecting bone marrow platelet production and turnover. Larger platelets are more metabolically active.'},
+  PLT:  {name:'Platelet Count',                    cat:'Hematology', desc:'Number of platelets per µL. Critical for hemostasis — thrombocytopenia increases bleeding risk; thrombocytosis may indicate reactive or clonal processes.'},
+  RBC:  {name:'Red Blood Cell Count',              cat:'Hematology', desc:'Number of red blood cells per µL. Used with hemoglobin and hematocrit to characterize anemia severity and type.'},
+  RDW:  {name:'Red Cell Distribution Width',       cat:'Hematology', desc:'Coefficient of variation in red cell volume. Elevated early in nutritional deficiencies (iron, B12, folate); useful for distinguishing mixed anemias.'},
+  WBC:  {name:'White Blood Cell Count',            cat:'Hematology', desc:'Total count of circulating immune cells. Elevated in infection or inflammation; reduced in immunosuppression, bone marrow failure, or viral illness.'},
+  MCV:  {name:'Mean Corpuscular Volume',           cat:'Hematology', desc:'Average volume of red blood cells. Classifies anemia as microcytic (iron deficiency, thalassemia) or macrocytic (B12/folate deficiency, liver disease).'},
+  NA:   {name:'Sodium',                            cat:'Metabolic',  desc:'Primary extracellular electrolyte controlling fluid balance and nerve/muscle function. Imbalance reflects disorders of hydration, kidney function, or hormonal regulation.'},
+  SODIUM:{name:'Sodium',                           cat:'Metabolic',  desc:'Primary extracellular electrolyte controlling fluid balance and nerve/muscle function. Dysnatremia reflects disorders of water homeostasis.'},
+  K:    {name:'Potassium',                         cat:'Metabolic',  desc:'Critical intracellular electrolyte essential for cardiac rhythm and muscle contraction. Even small deviations from normal can produce life-threatening arrhythmias.'},
+  CL:   {name:'Chloride',                          cat:'Metabolic',  desc:'Principal extracellular anion that works with sodium to maintain fluid balance and plays a key role in acid-base homeostasis.'},
+  CO2:  {name:'Carbon Dioxide (Bicarbonate)',      cat:'Metabolic',  desc:'Serum bicarbonate reflects acid-base status. Decreased in metabolic acidosis (DKA, renal failure); increased in metabolic alkalosis (vomiting, diuretic use).'},
+  BUN:  {name:'Blood Urea Nitrogen',               cat:'Renal',      desc:'Waste product of protein metabolism, cleared by the kidneys. Elevated with impaired renal function, dehydration, or high protein catabolism.'},
+  CRE:  {name:'Creatinine',                        cat:'Renal',      desc:'Muscle breakdown product cleared entirely by glomerular filtration. The gold-standard endogenous marker of kidney function; rises with declining GFR.'},
+  CREATININE:{name:'Creatinine',                   cat:'Renal',      desc:'Muscle breakdown product cleared entirely by glomerular filtration. The gold-standard endogenous marker of kidney function.'},
+  GLU:  {name:'Glucose',                           cat:'Metabolic',  desc:'Circulating blood sugar, the primary cellular energy substrate. Central to the diagnosis and management of diabetes; acutely sensitive to recent food intake.'},
+  A1C:  {name:'Hemoglobin A1c',                    cat:'Metabolic',  desc:'Glycated hemoglobin reflecting average blood glucose over 2–3 months. Standard diagnostic marker for diabetes and monitor of long-term glycemic control.'},
+  CA:   {name:'Calcium',                           cat:'Metabolic',  desc:'Essential mineral for bone mineralization, neuromuscular signaling, and coagulation. Regulated by parathyroid hormone, calcitonin, and vitamin D.'},
+  ALT:  {name:'Alanine Aminotransferase',          cat:'Hepatic',    desc:'Enzyme predominantly found in hepatocytes. The most specific serum marker of hepatocellular injury; elevated in hepatitis, NAFLD, and drug-induced liver injury.'},
+  AST:  {name:'Aspartate Aminotransferase',        cat:'Hepatic',    desc:'Enzyme present in liver, heart, and skeletal muscle. Elevated in hepatocellular injury, myocardial infarction, and rhabdomyolysis; less liver-specific than ALT.'},
+  ALP:  {name:'Alkaline Phosphatase',              cat:'Hepatic',    desc:'Enzyme from liver, bone, intestine, and placenta. Markedly elevated in cholestasis, Paget\'s disease, bone metastases, and bile duct obstruction.'},
+  TBIL: {name:'Total Bilirubin',                   cat:'Hepatic',    desc:'End product of hemoglobin catabolism processed by the liver. Elevated in hepatic dysfunction, hemolysis, or bile duct obstruction; clinically produces jaundice.'},
+  DBIL: {name:'Direct (Conjugated) Bilirubin',     cat:'Hepatic',    desc:'Bilirubin conjugated by the liver for biliary excretion. Specifically elevated in hepatic and post-hepatic (obstructive) jaundice.'},
+  ALB:  {name:'Albumin',                           cat:'Hepatic',    desc:'Most abundant plasma protein, synthesized exclusively by the liver. A sensitive marker of hepatic synthetic function, nutritional status, and severity of chronic disease.'},
+  TP:   {name:'Total Protein',                     cat:'Hepatic',    desc:'Combined albumin and globulin levels. Reflects liver synthesis, immune globulin production, and overall nutritional status.'},
+  TC:   {name:'Total Cholesterol',                 cat:'Lipid',      desc:'Sum of LDL, HDL, and VLDL cholesterol. Elevated levels are a major modifiable risk factor for atherosclerotic cardiovascular disease.'},
+  HDL:  {name:'HDL Cholesterol',                   cat:'Lipid',      desc:'"Good" cholesterol. Mediates reverse cholesterol transport to the liver. Higher levels are independently protective against cardiovascular disease.'},
+  LDL:  {name:'LDL Cholesterol',                   cat:'Lipid',      desc:'"Bad" cholesterol; the primary atherogenic lipoprotein. The principal therapeutic target for cardiovascular disease prevention with statins.'},
+  TGL:  {name:'Triglycerides',                     cat:'Lipid',      desc:'Main form of stored dietary fat circulating as VLDL. Elevated with insulin resistance, metabolic syndrome, alcohol use, and genetic dyslipidemias.'},
+};
+
+const CAT_CLS = {Hematology:'cat-heme', Metabolic:'cat-meta', Hepatic:'cat-hepat', Lipid:'cat-lipid', Renal:'cat-renal'};
+const REF_JSON = {{ ref_json | safe }};
+
+// Populate category labels
+document.querySelectorAll('[id^="lcat-"]').forEach(el => {
+  const t = el.id.replace('lcat-','');
+  const info = LAB_INFO[t];
+  if (info) { el.textContent = info.cat; el.className = 'lc-cat ' + (CAT_CLS[info.cat]||'cat-other'); }
+});
+
+let _activeLab = null;
+let _labHoverTimer = null;
+
+// Called on lab card hover: update detail panel immediately, debounce demo load
+function onLabHover(t) {
+  selectLab(t);
+  clearTimeout(_labHoverTimer);
+  _labHoverTimer = setTimeout(() => {
+    loadDemo(t);
+    // Smooth-scroll to demo section on first hover after page load
+    if (!_demoHasScrolled) {
+      _demoHasScrolled = true;
+      document.getElementById('demo')?.scrollIntoView({behavior:'smooth', block:'start'});
+    }
+  }, 350);
+}
+let _demoHasScrolled = false;
+
+function selectLab(t) {
+  if (_activeLab) document.getElementById('lc-' + _activeLab)?.classList.remove('active');
+  _activeLab = t;
+  document.getElementById('lc-' + t)?.classList.add('active');
+  const info = LAB_INFO[t] || {name:t, cat:'', desc:'No description available.'};
+  document.getElementById('ld-abbr').textContent = t;
+  document.getElementById('ld-name').textContent = info.name;
+  document.getElementById('ld-desc').textContent = info.desc;
+  const refs = REF_JSON[t];
+  if (refs) {
+    document.getElementById('ld-refs').innerHTML = Object.entries(refs).map(([sex, r]) => `
+      <div><div class="ld-ref-sex">${sex==='M'?'Male':'Female'}</div>
+      <div class="ld-ref-range">${r.low} – ${r.high} <span style="font-size:0.72rem;font-weight:400;color:var(--text-3)">${r.unit}</span></div></div>`).join('');
+  }
+  document.getElementById('lab-detail').classList.add('show');
+}
+
+function var_accent() { return '#0071e3'; }
+
+/* ─────────────────────────────────────────
+   Disease risk
+───────────────────────────────────────── */
+async function loadRisk(test, data) {
+  const wrap = document.getElementById('ex-risk-wrap');
+  const cols = document.getElementById('ex-risk-cols');
+  const what = document.getElementById('ex-risk-what');
+  const bar  = document.getElementById('ex-risk-bar');
+  wrap.style.display = 'block';
+  cols.innerHTML = '<span style="color:var(--text-3);font-size:0.82rem">Loading…</span>';
+  what.textContent = ''; bar.innerHTML = '';
+  try {
+    const r = await fetch(`/api/disease_risk/${encodeURIComponent(test)}`);
+    const d = await r.json();
+    if (d.error) { cols.innerHTML = `<span style="color:var(--text-3);font-size:0.8rem">${d.error}</span>`; return; }
+    what.textContent = d.what_it_measures || '';
+    const {ref_low:rl, ref_high:rh} = data;
+    bar.innerHTML = `
+      <div class="risk-bar-lbl"><span>Low (&lt;${rl})</span><span>Normal (${rl}–${rh})</span><span>High (&gt;${rh})</span></div>
+      <div class="risk-bar">
+        <div class="risk-bar-l" style="width:25%"></div>
+        <div class="risk-bar-n" style="width:50%"></div>
+        <div class="risk-bar-h" style="width:25%"></div>
+      </div>`;
+    const items = arr => (arr||[]).map(i=>`
+      <div class="risk-item">
+        <div class="risk-disease">${i.disease||''}</div>
+        <div class="risk-desc">${i.description||''}</div>
+        <div class="risk-cite"><i class="bi bi-journal-text"></i> ${i.citation||''}</div>
+      </div>`).join('');
+    cols.innerHTML = `
+      <div><div class="risk-col-hd lo"><i class="bi bi-arrow-down-circle-fill"></i> If Too Low</div>${items(d.low_risks)}</div>
+      <div><div class="risk-col-hd hi"><i class="bi bi-arrow-up-circle-fill"></i> If Too High</div>${items(d.high_risks)}</div>`;
+  } catch(e) {
+    cols.innerHTML = '<span style="color:var(--text-3)">Could not load risk information.</span>';
+  }
+}
+
+/* ─────────────────────────────────────────
+   AI interpretation
+───────────────────────────────────────── */
+async function loadInterpretation(test, ex, data) {
+  const wrap = document.getElementById('ex-ai-wrap');
+  const body = document.getElementById('ex-ai-body');
+  wrap.style.display = 'block';
+  body.innerHTML = '<span style="color:var(--text-3)">Generating interpretation…</span>';
+  try {
+    const r = await fetch('/api/interpret', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        test_name:test, sex:ex.sex, age:ex.age,
+        history:ex.history, pred_date:ex.pred_date,
+        predictions:data.predictions, gmm_prediction:data.gmm_prediction,
+        ref_low:data.ref_low, ref_high:data.ref_high, unit:data.unit,
+      }),
+    });
+    const d = await r.json();
+    body.textContent = d.error || d.interpretation;
+  } catch(e) {
+    body.innerHTML = '<span style="color:var(--text-3)">Could not reach interpretation service.</span>';
+  }
+}
+
+/* ─────────────────────────────────────────
+   Gaussian helpers
+───────────────────────────────────────── */
+function gaussPDF(x, mu, sig) {
+  return Math.exp(-0.5 * ((x-mu)/sig)**2) / (sig * Math.sqrt(2*Math.PI));
+}
+
+function linspace(a, b, n) {
+  return Array.from({length:n}, (_, i) => a + (b - a) * i / (n - 1));
+}
+
+// Right-side KDE bell curve: teardrop shape anchored at predDate, opening to the right
+function makeRotatedDist(mu, sigma, predDate, scaleMs, lineColor, fillColor, name) {
+  const ys = linspace(mu - 3.2 * sigma, mu + 3.2 * sigma, 120);
+  const pdfs = ys.map(y => gaussPDF(y, mu, sigma));
+  const peak = gaussPDF(mu, mu, sigma);
+  const predMs = new Date(predDate).getTime();
+  const toDate = ms => new Date(ms).toISOString().slice(0, 10);
+  const xs = pdfs.map(p => toDate(predMs + (p / peak) * scaleMs));
+  return {
+    x: [predDate, ...xs, predDate],
+    y: [ys[0],     ...ys, ys[ys.length - 1]],
+    fill: 'toself', fillcolor: fillColor,
+    line: { color: lineColor, width: 1.5 },
+    name, mode: 'lines',
+    hovertemplate: '%{y:.2f}<extra>' + name + '</extra>',
+  };
+}
+
+function drawExDistChart(test, data) {
+  const {predictions:preds, gmm_prediction:gmm, ref_low, ref_high, unit} = data;
+  const norm = preds['Normal'];
+  if (!norm || norm.error) return;
+  const gmmOk = gmm && !gmm.error;
+  const gmmMu = gmmOk ? gmm.mu : null;
+  const gmmSig = gmmOk ? gmm.sigma : null;
+  const refMu = (ref_low + ref_high) / 2;
+  const refSig = (ref_high - ref_low) / 3.92;
+  const allMu = [norm.mu, refMu, ...(gmmOk ? [gmmMu] : [])];
+  const allSig = [norm.sigma, refSig, ...(gmmOk ? [gmmSig] : [])];
+  const xLo = Math.min(...allMu.map((m, i) => m - 4 * allSig[i]));
+  const xHi = Math.max(...allMu.map((m, i) => m + 4 * allSig[i]));
+  const xs = linspace(xLo, xHi, 300);
+  const trace = (xsArr, mu, sigma, color, fillColor, name) => ({
+    x: xsArr,
+    y: xsArr.map(x => gaussPDF(x, mu, sigma)),
+    mode: 'lines', name,
+    line: {color, width: 2},
+    fill: 'tozeroy', fillcolor: fillColor,
+    hovertemplate: '<b>' + name + '</b><br>value = %{x:.2f}<br>density = %{y:.4f}<extra></extra>',
+  });
+  const traces = [
+    trace(xs, refMu, refSig, '#aeaeb2', 'rgba(174,174,178,0.08)', 'Population'),
+  ];
+  if (gmmOk) traces.push(trace(xs, gmmMu, gmmSig, '#bf5af2', 'rgba(191,90,242,0.1)', 'Personalized'));
+  traces.push(trace(xs, norm.mu, norm.sigma, '#0071e3', 'rgba(0,113,227,0.12)', 'NORMA'));
+  const yMax = Math.max(...traces.flatMap(t => t.y)) * 1.2;
+  Plotly.newPlot('ex-dist-chart', traces, {
+    margin: {l: 44, r: 14, t: 8, b: 44},
+    font: {family: 'DM Sans,sans-serif', size: 11, color: '#6e6e73'},
+    xaxis: {title: test + ' (' + unit + ')', showgrid: true, gridcolor: 'rgba(0,0,0,0.05)', zeroline: false},
+    yaxis: {title: 'Density', range: [0, yMax], showgrid: false, zeroline: false, showticklabels: false},
+    legend: {orientation: 'h', y: -0.28, font: {size: 11}},
+    hovermode: 'x unified',
+    plot_bgcolor: '#fff', paper_bgcolor: '#fff',
+    shapes: [
+      {type: 'line', x0: ref_low, x1: ref_low, y0: 0, y1: yMax, line: {color: 'rgba(174,174,178,0.5)', width: 1, dash: 'dot'}},
+      {type: 'line', x0: ref_high, x1: ref_high, y0: 0, y1: yMax, line: {color: 'rgba(174,174,178,0.5)', width: 1, dash: 'dot'}},
+    ],
+  }, {responsive: true, displayModeBar: false});
+}
+
+/* ─────────────────────────────────────────
+   Main chart
+───────────────────────────────────────── */
+function renderChart(test, ex, data) {
+  const {predictions:preds, gmm_prediction:gmm, ref_low, ref_high, unit} = data;
+  const norm = preds['Normal'];
+  if (!norm || norm.error) return;
+
+  const histDates  = ex.history.map(h => h.date);
+  const histValues = ex.history.map(h => h.value);
+  const predDate   = ex.pred_date;
+  const gmmOk = gmm && !gmm.error;
+  const gmmMu = gmmOk ? gmm.mu : null;
+  const gmmSig= gmmOk ? gmm.sigma : null;
+  const refMu = (ref_low+ref_high)/2;
+  const refSig= (ref_high-ref_low)/3.92;
+
+  // y-range: trajectory + full extent of rotated bells (mu ± 4σ so curves taper to points)
+  const allVals = [...histValues, norm.mu, ref_low, ref_high, ...(gmmOk ? [gmmMu] : [])];
+  const tailRef = refMu - 4 * refSig;
+  const tailNorm = norm.mu - 4 * norm.sigma;
+  const tailGmm = gmmOk ? gmmMu - 4 * gmmSig : null;
+  const pad = (Math.max(...allVals) - Math.min(...allVals)) * 0.08 || 1;
+  const yMin = Math.min(...allVals, tailRef, tailNorm, ...(gmmOk ? [tailGmm] : [])) - pad;
+  const yMax = Math.max(...allVals, refMu + 4 * refSig, norm.mu + 4 * norm.sigma, ...(gmmOk ? [gmmMu + 4 * gmmSig] : [])) + pad;
+
+  // Scale (ms) for right-side bell curve — ~18% of history span, min 15 days, max 90 days
+  const firstMs = new Date(histDates[0]).getTime();
+  const predMs = new Date(predDate).getTime();
+  const spanMs = predMs - firstMs;
+  const halfMs = Math.max(15 * 86400000, Math.min(90 * 86400000, spanMs * 0.18));
+
+  const traces = [];
+
+  // 1. Ref range shaded band (full timeline)
+  traces.push({
+    x:[histDates[0], predDate, predDate, histDates[0]],
+    y:[ref_high, ref_high, ref_low, ref_low],
+    fill:'toself', fillcolor:'rgba(174,174,178,0.08)',
+    line:{width:0}, showlegend:false, hoverinfo:'skip', mode:'lines',
+  });
+
+  // 2. History line
+  traces.push({
+    x:histDates, y:histValues, mode:'lines+markers', name:'History',
+    line:{color:'#6e6e73',width:1.5}, marker:{color:'#6e6e73',size:5},
+    hovertemplate:'%{x}<br>%{y:.2f} '+unit+'<extra>History</extra>',
+  });
+
+  // 3. Connect last obs to NORMA mean
+  const lastD = histDates[histDates.length-1];
+  const lastV = histValues[histValues.length-1];
+  traces.push({
+    x:[lastD, predDate], y:[lastV, norm.mu],
+    mode:'lines', showlegend:false,
+    line:{color:'#0071e3',width:1.5,dash:'dot'}, hoverinfo:'skip',
+  });
+
+  // 4. Rotated normal curves at prediction date (bell shape, tapers to points at tails)
+  traces.push(makeRotatedDist(refMu, refSig, predDate, halfMs, '#aeaeb2', 'rgba(174,174,178,0.15)', 'Population ref'));
+  if (gmmOk) traces.push(makeRotatedDist(gmmMu, gmmSig, predDate, halfMs, '#bf5af2', 'rgba(191,90,242,0.15)', 'Personalized'));
+  traces.push(makeRotatedDist(norm.mu, norm.sigma, predDate, halfMs, '#0071e3', 'rgba(0,113,227,0.18)', 'NORMA'));
+
+  // 5. Mean dots at prediction date
+  traces.push({
+    x:[predDate], y:[norm.mu], mode:'markers', name:'NORMA mean',
+    marker:{color:'#0071e3',size:9,symbol:'diamond'},
+    hovertemplate:predDate+'<br>%{y:.2f} '+unit+' (NORMA)<extra></extra>',
+  });
+  if (gmmOk) {
+    traces.push({
+      x:[predDate], y:[gmmMu], mode:'markers', name:'GMM mean',
+      marker:{color:'#bf5af2',size:7,symbol:'circle'},
+      hovertemplate:predDate+'<br>%{y:.2f} '+unit+' (Personalized)<extra></extra>',
+    });
+  }
+
+  const tickMs = halfMs * 0.14;
+  const tickEndDate = new Date(predMs + tickMs).toISOString().slice(0, 10);
+  const shapes = [
+    // Vertical line at prediction date
+    {type:'line', x0:predDate,x1:predDate, y0:yMin,y1:yMax,
+     line:{color:'rgba(0,0,0,0.1)',width:1,dash:'dot'}},
+    // Ref range boundary lines along timeline
+    {type:'line', x0:histDates[0],x1:predDate, y0:ref_high,y1:ref_high,
+     line:{color:'rgba(255,159,10,0.5)',width:1,dash:'dot'}},
+    {type:'line', x0:histDates[0],x1:predDate, y0:ref_low, y1:ref_low,
+     line:{color:'rgba(255,59,48,0.5)', width:1,dash:'dot'}},
+    // 95% CI tick marks at forecast (small horizontal lines)
+    {type:'line', x0:predDate, x1:tickEndDate, y0:norm.ci_lower, y1:norm.ci_lower,
+     line:{color:'#0071e3', width:1.5}},
+    {type:'line', x0:predDate, x1:tickEndDate, y0:norm.ci_upper, y1:norm.ci_upper,
+     line:{color:'#0071e3', width:1.5}},
+  ];
+  if (gmmOk) {
+    shapes.push(
+      {type:'line', x0:predDate, x1:tickEndDate, y0:gmm.ci_lower, y1:gmm.ci_lower,
+       line:{color:'#bf5af2', width:1.5}},
+      {type:'line', x0:predDate, x1:tickEndDate, y0:gmm.ci_upper, y1:gmm.ci_upper,
+       line:{color:'#bf5af2', width:1.5}}
+    );
+  }
+  // Population ref 95% (ref_low, ref_high) ticks at forecast
+  shapes.push(
+    {type:'line', x0:predDate, x1:tickEndDate, y0:ref_low, y1:ref_low,
+     line:{color:'#aeaeb2', width:1.2}},
+    {type:'line', x0:predDate, x1:tickEndDate, y0:ref_high, y1:ref_high,
+     line:{color:'#aeaeb2', width:1.2}}
+  );
+  const annotations = [
+    {x:histDates[0], y:ref_high, xanchor:'left',yanchor:'bottom',
+     showarrow:false, text:' High ('+ref_high+')', font:{size:9,color:'#ff9f0a'}},
+    {x:histDates[0], y:ref_low,  xanchor:'left',yanchor:'top',
+     showarrow:false, text:' Low ('+ref_low+')',  font:{size:9,color:'#ff3b30'}},
+    {x:predDate, y:yMax, xanchor:'center',yanchor:'top',
+     showarrow:false, text:'forecast', font:{size:9,color:'#aeaeb2'}},
+  ];
+
+  const xAxisMax = new Date(predMs + halfMs * 1.15).toISOString().slice(0, 10);
+  Plotly.newPlot('ex-chart', traces, {
+    margin:{l:46,r:14,t:10,b:52},
+    font:{family:'DM Sans,sans-serif',size:11,color:'#6e6e73'},
+    xaxis:{type:'date', range:[histDates[0], xAxisMax],
+           showgrid:true,gridcolor:'rgba(0,0,0,0.05)',zeroline:false},
+    yaxis:{title:unit, range:[yMin,yMax], showgrid:true,gridcolor:'rgba(0,0,0,0.05)',zeroline:false},
+    legend:{orientation:'h',y:-0.22,font:{size:11}},
+    hovermode:'closest',
+    plot_bgcolor:'#fff', paper_bgcolor:'#fff',
+    autosize: true,
+    shapes, annotations,
+  },{responsive:true, displayModeBar:false});
+
+  // Model key pills
+  document.getElementById('ex-mkeys').innerHTML = `
+    <div class="mk-pill">
+      <span class="mk-swatch" style="background:#0071e3"></span>
+      <div>
+        <div class="mk-label">NORMA</div>
+        <div class="mk-val" style="color:#0071e3">${norm.mu.toFixed(1)} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
+        <div class="mk-ci">95% CI: ${norm.ci_lower.toFixed(1)} – ${norm.ci_upper.toFixed(1)}</div>
+      </div>
+    </div>
+    ${gmmOk ? `<div class="mk-pill">
+      <span class="mk-swatch" style="background:#bf5af2"></span>
+      <div>
+        <div class="mk-label">Personalized (GMM)</div>
+        <div class="mk-val" style="color:#bf5af2">${gmm.mu.toFixed(1)} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
+        <div class="mk-ci">95% CI: ${gmm.ci_lower.toFixed(1)} – ${gmm.ci_upper.toFixed(1)}</div>
+      </div>
+    </div>` : ''}
+    <div class="mk-pill">
+      <span class="mk-swatch" style="background:#aeaeb2"></span>
+      <div>
+        <div class="mk-label">Population ref range</div>
+        <div class="mk-val">${ref_low} – ${ref_high} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
+        <div class="mk-ci">Standard reference interval</div>
+      </div>
+    </div>`;
+}
+
+/* ─────────────────────────────────────────
+   Load demo
+───────────────────────────────────────── */
+const DEMO_TESTS = ['PLT','HGB','SODIUM','CREATININE','WBC'];
+let _currentEx = null;
+let _currentData = null;
+
+function predDateFromHorizon(history, days) {
+  if (!history || !history.length) return null;
+  const last = history[history.length - 1].date;
+  const d = new Date(last);
+  d.setDate(d.getDate() + parseInt(days, 10));
+  return d.toISOString().slice(0, 10);
+}
+
+let _tuneSex = 1;  // current what-if sex value
+
+function getTuneParams() {
+  const age  = parseInt(document.getElementById('tune-age')?.value ?? 50, 10);
+  const days = parseInt(document.getElementById('tune-horizon-slider')?.value ?? 90, 10);
+  return { age, sex: _tuneSex, days };
+}
+
+function setTuneSex(val) {
+  _tuneSex = val;
+  document.getElementById('tune-sb-m').classList.toggle('on', val === 0);
+  document.getElementById('tune-sb-f').classList.toggle('on', val === 1);
+  document.getElementById('tune-sex-label').textContent = val === 0 ? 'Male' : 'Female';
+  scheduleTuneUpdate();
+}
+
+function horizonLabelShort(days) {
+  if (days < 30)  return days + ' d';
+  if (days < 365) return Math.round(days / 30) + ' mo';
+  return (days / 365).toFixed(1) + ' yr';
+}
+
+function drawTuneStats(data) {
+  const norm = data.predictions?.['Normal'];
+  if (!norm || norm.error) return;
+  const mu = norm.mu, ciLo = norm.ci_lower, ciHi = norm.ci_upper;
+  const unit = data.unit || '';
+  document.getElementById('tune-norma-val').textContent = `${mu.toFixed(1)} ${unit}`;
+  document.getElementById('tune-ci-val').textContent    = `${ciLo.toFixed(1)}–${ciHi.toFixed(1)}`;
+  document.getElementById('tune-width-val').textContent = `±${((ciHi-ciLo)/2).toFixed(1)} ${unit}`;
+  document.getElementById('tune-pop-val').textContent   =
+    (data.ref_low != null && data.ref_high != null) ? `${data.ref_low}–${data.ref_high}` : '—';
+}
+
+function syncTunePanelFromEx(test, ex, data) {
+  const labKey = (test === 'CREATININE') ? 'CRE' : test;
+  document.querySelectorAll('#tune-lab .sbtn').forEach(b =>
+    b.classList.toggle('on', b.getAttribute('data-lab') === labKey));
+
+  const age = ex.age || 50;
+  document.getElementById('tune-age').value = age;
+  document.getElementById('tune-age-value').textContent = age;
+
+  _tuneSex = ex.sex ?? 1;
+  document.getElementById('tune-sb-m').classList.toggle('on', _tuneSex === 0);
+  document.getElementById('tune-sb-f').classList.toggle('on', _tuneSex === 1);
+  document.getElementById('tune-sex-label').textContent = _tuneSex === 0 ? 'Male' : 'Female';
+
+  const predD  = new Date(ex.pred_date);
+  const lastD  = ex.history?.length ? new Date(ex.history[ex.history.length-1].date) : predD;
+  const days   = Math.max(7, Math.min(730, Math.round((predD - lastD) / 86400000) || 90));
+  document.getElementById('tune-horizon-slider').value = days;
+  document.getElementById('tune-horizon-value').textContent = horizonLabelShort(days);
+
+  if (data) drawTuneStats(data);
+}
+
+let _tuneDebounce = null;
+function scheduleTuneUpdate() {
+  clearTimeout(_tuneDebounce);
+  _tuneDebounce = setTimeout(applyTuneAndRedraw, 280);
+}
+
+async function applyTuneAndRedraw() {
+  if (!_currentEx) return;
+  const { test, ex } = _currentEx;
+  const { age, sex, days } = getTuneParams();
+  const pred_date = predDateFromHorizon(ex.history, days);
+  if (!pred_date) return;
+
+  // Show loading on stats
+  ['tune-norma-val','tune-ci-val','tune-width-val'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.add('loading'); el.textContent = '…';
+  });
+
+  try {
+    const pdR = await fetch('/api/predict', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ test_name: test, sex, age, history: ex.history, pred_date }),
+    });
+    const data = await pdR.json();
+    if (data.error) return;
+    _currentData = data;
+    ['tune-norma-val','tune-ci-val','tune-width-val'].forEach(id =>
+      document.getElementById(id).classList.remove('loading'));
+    drawTuneStats(data);
+    const exUpdated = { ...ex, sex, age, pred_date };
+    renderChart(test, exUpdated, data);
+    document.getElementById('ex-label').textContent =
+      `— ${test}, ${sex === 1 ? 'Female' : 'Male'}, age ${age}`;
+  } catch (e) {
+    ['tune-norma-val','tune-ci-val','tune-width-val'].forEach(id =>
+      document.getElementById(id).classList.remove('loading'));
+  }
+}
+
+const TUNE_LAB_API = { CRE: 'CREATININE' };
+
+async function loadDemo(forceTest) {
+  const test = forceTest || 'LDL';
+  document.getElementById('ex-loading').style.display = 'flex';
+  document.getElementById('ex-content').style.display = 'none';
+  document.getElementById('ex-label').textContent = '';
+  ['ex-ai-wrap','ex-risk-wrap','ex-tune-wrap'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  try {
+    const exR = await fetch(`/api/example/${test}`);
+    const ex  = await exR.json();
+    if (ex.error) return;
+
+    // Use pre-computed predictions bundled in cache (skip separate /api/predict)
+    let data;
+    if (ex.predictions) {
+      data = ex;
+    } else {
+      const pdR = await fetch('/api/predict', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({test_name:test, sex:ex.sex, age:ex.age,
+                              history:ex.history, pred_date:ex.pred_date}),
+      });
+      data = await pdR.json();
+    }
+    if (data.error) return;
+
+    _currentEx = { test, ex };
+    _currentData = data;
+    renderChart(test, ex, data);
+    document.getElementById('ex-label').textContent =
+      `— ${test}, ${ex.sex===1?'Female':'Male'}, age ${ex.age}`;
+    document.getElementById('ex-loading').style.display = 'none';
+    document.getElementById('ex-content').style.display = 'block';
+
+    loadInterpretation(test, ex, data);
+    loadRisk(test, data);
+
+    const tuneWrap = document.getElementById('ex-tune-wrap');
+    if (tuneWrap) { tuneWrap.style.display = 'block'; syncTunePanelFromEx(test, ex, data); }
+  } catch(e) {
+    document.getElementById('ex-loading').innerHTML =
+      '<span style="color:var(--text-3)">Could not load example.</span>';
+  }
+}
+
+function bindTunePanel() {
+  // Lab buttons reload demo for that test
+  document.querySelectorAll('#tune-lab .sbtn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const lab = this.getAttribute('data-lab');
+      loadDemo(TUNE_LAB_API[lab] || lab);
+    });
+  });
+
+  // Age slider
+  const ageEl = document.getElementById('tune-age');
+  if (ageEl) {
+    ageEl.addEventListener('input', function() {
+      document.getElementById('tune-age-value').textContent = this.value;
+      scheduleTuneUpdate();
+    });
+  }
+
+  // Horizon slider
+  const horizonEl = document.getElementById('tune-horizon-slider');
+  if (horizonEl) {
+    horizonEl.addEventListener('input', function() {
+      document.getElementById('tune-horizon-value').textContent =
+        horizonLabelShort(parseInt(this.value, 10));
+      scheduleTuneUpdate();
+    });
+  }
+}
+
+loadDemo();
+bindTunePanel();
+
+/* ── "Normal for whom?" schematic — Fasting Glucose / T2D ──────── */
+(function renderForWhomChart() {
+  var el = document.getElementById('for-whom-chart');
+  if (!el) return;
+
+  // Fasting glucose trajectory: flat baseline, then slow rise
+  // Patient personal setpoint: ~82 mg/dL (low-normal)
+  var months = [0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30];
+  var vals   = [82, 82, 82, 83, 83, 85, 87, 92, 96, 101, 105];
+
+  var popLow = 70, popHigh = 100;   // standard fasting glucose ref range
+  var normaLow = 75, normaHigh = 90; // NORMA personalized range for this patient (~82 setpoint)
+
+  // NORMA flags at month 21 (92 > 90); population flags at month 27 (101 > 100)
+  var normaFlagIdx = 7;  // index of month 21
+  var popFlagIdx   = 9;  // index of month 27
+
+  var traces = [
+    // Population ref filled band
+    { x:[0,30,30,0], y:[popHigh,popHigh,popLow,popLow],
+      fill:'toself', fillcolor:'rgba(174,174,178,0.10)',
+      line:{width:0}, mode:'lines', showlegend:false, hoverinfo:'skip' },
+    // NORMA personalized filled band
+    { x:[0,30,30,0], y:[normaHigh,normaHigh,normaLow,normaLow],
+      fill:'toself', fillcolor:'rgba(0,113,227,0.10)',
+      line:{width:0}, mode:'lines', showlegend:false, hoverinfo:'skip' },
+    // Population upper boundary
+    { x:[0,30], y:[popHigh,popHigh], mode:'lines', showlegend:false, hoverinfo:'skip',
+      line:{color:'rgba(174,174,178,0.8)', width:1.5, dash:'dot'} },
+    // NORMA upper boundary
+    { x:[0,30], y:[normaHigh,normaHigh], mode:'lines', showlegend:false, hoverinfo:'skip',
+      line:{color:'rgba(0,113,227,0.6)', width:1.5, dash:'dash'} },
+    // Normal segment (before NORMA flags)
+    { x: months.slice(0, normaFlagIdx + 1),
+      y: vals.slice(0, normaFlagIdx + 1),
+      mode:'lines+markers', showlegend:false,
+      line:{color:'#3a3a3c', width:2.5},
+      marker:{color:'#3a3a3c', size:6},
+      hovertemplate:'Month %{x}<br>Glucose: %{y} mg/dL<extra></extra>' },
+    // Elevated segment (after NORMA flags)
+    { x: months.slice(normaFlagIdx),
+      y: vals.slice(normaFlagIdx),
+      mode:'lines+markers', showlegend:false,
+      line:{color:'#ff3b30', width:2.5},
+      marker:{color:'#ff3b30', size:6},
+      hovertemplate:'Month %{x}<br>Glucose: %{y} mg/dL<extra></extra>' },
+  ];
+
+  var normaFlagM = months[normaFlagIdx];  // 21
+  var popFlagM   = months[popFlagIdx];    // 27
+
+  var shapes = [
+    { type:'line', x0:normaFlagM, x1:normaFlagM, y0:64, y1:112,
+      line:{color:'#0071e3', width:1.8, dash:'dot'} },
+    { type:'line', x0:popFlagM, x1:popFlagM, y0:64, y1:112,
+      line:{color:'#ff3b30', width:1.8, dash:'dot'} },
+    // Gap bracket at bottom
+    { type:'line', x0:normaFlagM, x1:popFlagM, y0:66, y1:66,
+      line:{color:'#ff9f0a', width:2} },
+    { type:'line', x0:normaFlagM, x1:normaFlagM, y0:64.5, y1:67.5,
+      line:{color:'#ff9f0a', width:2} },
+    { type:'line', x0:popFlagM, x1:popFlagM, y0:64.5, y1:67.5,
+      line:{color:'#ff9f0a', width:2} },
+  ];
+
+  var annotations = [
+    { x:normaFlagM, y:112, xanchor:'center', yanchor:'bottom', showarrow:false,
+      text:'<b>NORMA detects</b><br>rising glucose', font:{size:10, color:'#0071e3'},
+      bgcolor:'rgba(255,255,255,0.92)', borderpad:3 },
+    { x:popFlagM, y:112, xanchor:'center', yanchor:'bottom', showarrow:false,
+      text:'<b>Population ref</b><br>flags "pre-diabetic"', font:{size:10, color:'#ff3b30'},
+      bgcolor:'rgba(255,255,255,0.92)', borderpad:3 },
+    { x:(normaFlagM+popFlagM)/2, y:66, xanchor:'center', yanchor:'top', yshift:-4,
+      showarrow:false,
+      text:'<b>6 months earlier</b>', font:{size:10, color:'#ff9f0a'} },
+    { x:0.5, y:popHigh, xanchor:'left', yanchor:'bottom', showarrow:false,
+      text:'Population normal  (70–100 mg/dL)', font:{size:9, color:'#aeaeb2'} },
+    { x:0.5, y:normaHigh, xanchor:'left', yanchor:'bottom', showarrow:false,
+      text:'NORMA expected for this patient', font:{size:9, color:'#0071e3'} },
+    // "False reassurance" callout in the window between the two flags
+    { x:(normaFlagM+popFlagM)/2, y:95,
+      xanchor:'center', yanchor:'middle', showarrow:false,
+      text:'"Within normal limits"', font:{size:9.5, color:'#6e6e73'},
+      bgcolor:'rgba(255,249,230,0.95)', bordercolor:'rgba(255,159,10,0.5)', borderwidth:1, borderpad:5 },
+  ];
+
+  Plotly.newPlot(el, traces, {
+    margin:{l:54, r:14, t:52, b:44},
+    font:{family:'DM Sans,sans-serif', size:11, color:'#6e6e73'},
+    xaxis:{title:'Months', range:[-1,31.5], showgrid:true, gridcolor:'rgba(0,0,0,0.04)', zeroline:false, dtick:6},
+    yaxis:{title:'Fasting glucose (mg/dL)', range:[62, 116], showgrid:true, gridcolor:'rgba(0,0,0,0.04)', zeroline:false},
+    plot_bgcolor:'#fff', paper_bgcolor:'#fff',
+    showlegend:false, shapes:shapes, annotations:annotations, hovermode:'closest',
+  }, {responsive:true, displayModeBar:false});
+})();
+</script>
+</body>
+</html>

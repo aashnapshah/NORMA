@@ -33,7 +33,7 @@ METRIC_FUNCTIONS = {
 
 def bootstrap_metrics(
     models,
-    exclude_codes=None,
+    exclude=None,
     metrics_to_agg=None,
     bootstrap_samples=1000,
     bootstrap_seed=42,
@@ -41,11 +41,12 @@ def bootstrap_metrics(
 ):
     rng = np.random.RandomState(bootstrap_seed)
     records = []
+    print(f"Bootstrapping metrics for {models}...")
     for model_name, model_fields in models.items():
         path, y_col, pred_col = model_fields
-        
+        print(f"Reading {path}...")
         df = pd.read_csv(path)
-        df = df.query('cid not in @exclude_codes')
+        df = df.query('cid not in @exclude')
         df['Split'] = df['split'].astype(str).str.capitalize()
 
         if code_level:
@@ -94,10 +95,10 @@ def bootstrap_metrics(
                 records.append(record)
     return pd.DataFrame.from_records(records)
 
-def calculate_all_metrics(bootstrap_metrics, exclude_codes):
+def calculate_all_metrics(bootstrap_metrics, exclude):
     all_code_metrics = (
         bootstrap_metrics
-        .query('Code not in @exclude_codes')
+        .query('Code not in @exclude')
         .groupby(['Split', 'Model', 'Train | Test', 'Metric'])['point_estimate']
         .agg(['mean', 'std'])
         .sort_index()
@@ -105,46 +106,20 @@ def calculate_all_metrics(bootstrap_metrics, exclude_codes):
     
     return all_code_metrics
 
-def print_formatted_metrics(all_metrics, metrics_to_agg):
-    splits = ['Train', 'Val', 'Test']
-
-    for split in splits:
-        split_metrics = all_metrics[all_metrics["Split"] == split]
-
-        rows = {}
-        models = split_metrics["Model"].unique()
-        for model in models:
-            subset = split_metrics[(split_metrics["Model"] == model)]
-    
-            entry = {}
-            for metric in metrics_to_agg:
-                metric_row = subset[subset["Metric"] == metric]
-                if not metric_row.empty:
-                    mean_val = metric_row["mean"].iloc[0]
-                    std_val = metric_row["std"].iloc[0]
-                    entry[metric] = f"{mean_val:.1f} ± {std_val:.1f}"
-                else:
-                    entry[metric] = "N/A"
-            rows[model] = entry
-
-        formatted = (
-            pd.DataFrame(rows)
-            .reindex(index=metrics_to_agg)
-        )
-        formatted.columns = pd.MultiIndex.from_tuples(formatted.columns, names=['Model', 'Train | Test'])
-        formatted.index.name = 'Metric'
-        print(f"\nMetrics for {split} split:")
-        print(formatted)
-
-def evaluate_and_save_metrics(preds, model, exclude_codes=None, metrics_to_agg=['MAE', 'MAPE', 'R2', 'MSE'], log_dir='../model/logs/'):
+def evaluate_and_save_metrics(preds, model, exclude=None, 
+                              metrics_to_agg=['MAE', 'MAPE', 'R2', 'MSE'], 
+                              log_dir='../model/logs/', n_bootstraps=100):
     gm = bootstrap_metrics(
         preds,
         code_level=True,
-        exclude_codes=exclude,
+        exclude=exclude,
         metrics_to_agg=metrics,
-        bootstrap_samples=2,
+        bootstrap_samples=n_bootstraps,
     )
-    gm.to_csv(f'{log_dir}/{model}/bootstrap_metrics_by_code.csv', index=False)
+    path = f'{log_dir}/{model}/bootstrap_metrics_by_code.csv'
+    print("Saving bootstrap_metrics_by_code.csv...", path)
+    gm.to_csv(path, index=False)
+    
     print('bootstrap_metrics_by_code.csv saved')
     gm = (
         gm.query('Metric == "R2"')
@@ -155,12 +130,12 @@ def evaluate_and_save_metrics(preds, model, exclude_codes=None, metrics_to_agg=[
     om = bootstrap_metrics(
         preds,
         code_level=False,
-        exclude_codes=exclude,
+        exclude=exclude,
         metrics_to_agg=metrics,
-        bootstrap_samples=2,
+        bootstrap_samples=n_bootstraps,
     )
     om = om.query('Metric != "R2"')[['Split', 'Model', 'Metric', 'mean', 'std']]
-    metrics_df = pd.concat([gm, om]).replace(MODEL, 'NORMA')
+    metrics_df = pd.concat([gm, om]).replace(model, 'NORMA')
     save_path = f'{log_dir}/{model}/bootstrap_metrics.csv'
     metrics_df.to_csv(save_path, index=False)
     print(f"\nMetrics saved to: {save_path}")
@@ -168,26 +143,25 @@ def evaluate_and_save_metrics(preds, model, exclude_codes=None, metrics_to_agg=[
 
 def main(args):
     preds = load_predictions(args.run_ids, args.base, args.source)
-    metrics_df = evaluate_and_save_metrics(preds, args.exclude, args.metrics, args.model, args.log_dir)
+    metrics_df = evaluate_and_save_metrics(preds, args.model, args.exclude, args.metrics, args.log_dir)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--log_dir', type=str, default='/n/data1/hms/dbmi/manrai/aashna/NORMA/model/logs/', help='Directory for log files')
-    parser.add_argument('--model', type=str, default='e4fdacb7', help='Model identifier')
-    parser.add_argument('--run_ids', nargs='+', default=['ARIMA', 'Mean', 'last', 'e4fdacb7'], help='List of run IDs')
+    parser.add_argument('--model', type=str, default='167f05e8', help='Model identifier')
+    parser.add_argument('--run_ids', nargs='+', default=['ARIMA', 'Mean', 'last', '167f05e8'], help='List of run IDs')
     parser.add_argument('--base', type=str, default='combined', help='Base dataset name')
     parser.add_argument('--source', type=str, default='combined', help='Source dataset name')
     parser.add_argument('--metrics', nargs='+', default=['MAE', 'MAPE', 'R2', 'MSE'], help='Metrics to use')
     parser.add_argument('--exclude', nargs='+', default=['CRP', 'GGT', 'LDH'], help='Codes to exclude')
     args = parser.parse_args()
 
-    # assign arguments to variables, maintaining backwards compatibility
-    LOG_DIR = args.log_dir
-    MODEL = args.model
-    RUN_IDS = args.run_ids
-    BASE = args.base
-    SOURCE = args.source
-    METRICS = args.metrics
-    EXCLUDE = args.exclude
+    log_dir = args.log_dir
+    model = args.model
+    run_ids = args.run_ids + [model]
+    base = args.base
+    source = args.source
+    metrics = args.metrics
+    exclude = args.exclude
 
     main(args)

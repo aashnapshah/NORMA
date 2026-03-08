@@ -3,6 +3,8 @@ import sys
 import warnings
 import pandas as pd
 import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 warnings.filterwarnings('ignore')
@@ -21,7 +23,7 @@ from edit import *
 from model import *
 from helpers.plots import *
 
-MODEL = 'e4fdacb7'
+MODEL = '167f05e8'
 RUN_IDS = ['ARIMA', 'Mean', 'last', MODEL]
 BASE = SOURCE = 'combined'
 METRICS = ['MAE', 'MAPE', 'R2', 'MSE']

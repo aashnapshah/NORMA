@@ -23,17 +23,23 @@ CODE_TO_TEST_NAME = {i: test_name for test_name, i in TEST_VOCAB.items()}
 
 class TimeSeriesDataset(Dataset):
     """Dataset for time series forecasting."""
-    
-    def __init__(self, sequences, nstates):
+
+    def __init__(self, sequences, nstates, normalize=False):
         self.seq = sequences
         self.nstates = nstates
-    
+        self.normalize = normalize
+
     def __len__(self):
         return len(self.seq)
-    
+
+    def _get_ref_bounds(self, test_name, sex01):
+        sex_str = 'F' if sex01 == 1 else 'M'
+        low, high, _ = REFERENCE_INTERVALS[test_name][sex_str]
+        return float(low), float(high)
+
     def __getitem__(self, idx):
         seq = self.seq[idx]
-        
+
         x = torch.from_numpy(seq["x"]).float().unsqueeze(-1)
         t = torch.from_numpy(seq["t"]).float().unsqueeze(-1)
         s_raw = np.asarray(seq["s"] if self.nstates == 2 else seq["s3"], dtype=np.int64)
@@ -41,21 +47,31 @@ class TimeSeriesDataset(Dataset):
         if self.nstates == 3:
             s = s + 1  # -1,0,1 -> 0,1,2
 
+        sex_val = 1 if (seq['sex'] == 'F' or seq['sex'] == 1) else 0
+
+        if self.normalize:
+            ref_low, ref_high = self._get_ref_bounds(seq['test_name'], sex_val)
+            span = ref_high - ref_low
+            x = (x - ref_low) / span
+        else:
+            ref_low, ref_high = 0.0, 1.0
+
         x_h = x[:-1]
         t_h = t[:-1]
         s_h = s[:-1]
 
         t_next = t[-1]
-        s_next = s[-1].unsqueeze(0).clone()   
-        x_next = x[-1]   
-        
-        sex_val = 1 if (seq['sex'] == 'F' or seq['sex'] == 1) else 0
+        s_next = s[-1].unsqueeze(0).clone()
+        x_next = x[-1]
+
         sex = torch.tensor([sex_val], dtype=torch.long)
         age = torch.tensor([seq["age"]], dtype=torch.float)
         cid = torch.tensor([seq["cid"]], dtype=torch.long)
-        pids = seq["pid"] 
-        
-        return x_h, s_h, t_h, sex, age, cid, s_next, t_next, x_next, pids
+        pids = seq["pid"]
+        ref_low_t = torch.tensor([ref_low], dtype=torch.float)
+        ref_high_t = torch.tensor([ref_high], dtype=torch.float)
+
+        return x_h, s_h, t_h, sex, age, cid, s_next, t_next, x_next, pids, ref_low_t, ref_high_t
 
 def sample_by_key(seq_list, n, key="cid", seed=0, replace=False):
     rng = random.Random(seed)
@@ -116,7 +132,7 @@ def create_weighted_sampler(sequences):
 
 def collate_fn(batch):
     """Collate function for DataLoader."""
-    x_h, s_h, t_h, sex, age, cid, s_next, t_next, x_next, pids = zip(*batch)
+    x_h, s_h, t_h, sex, age, cid, s_next, t_next, x_next, pids, ref_low, ref_high = zip(*batch)
 
     lengths = [xh.shape[0] for xh in x_h]
     x_h = pad_sequence(x_h, batch_first=True)
@@ -129,6 +145,8 @@ def collate_fn(batch):
     s_next = torch.stack(s_next)
     t_next = torch.stack(t_next)
     x_next = torch.stack(x_next)
+    ref_low = torch.stack(ref_low)
+    ref_high = torch.stack(ref_high)
 
     max_len = x_h.shape[1]
     pad_mask = torch.ones(len(lengths), max_len, dtype=torch.bool)
@@ -137,7 +155,7 @@ def collate_fn(batch):
 
     return {
         'x_h': x_h,
-        't_h': t_h, 
+        't_h': t_h,
         's_h': s_h,
         'sex': sex,
         'age': age,
@@ -145,8 +163,8 @@ def collate_fn(batch):
         's_next': s_next,
         't_next': t_next,
         'x_next': x_next,
-        # 'ref_mu': ref_mu,
-        # 'ref_var': ref_var,
+        'ref_low': ref_low,
+        'ref_high': ref_high,
         'pad_mask': pad_mask,
         'pids': list(pids)
     }
@@ -208,11 +226,11 @@ def load_and_split_data(sequences_path, source, num_patients=None, random_state=
     return train_seq, val_seq, test_seq
 
 
-def create_dataloaders(train_seq, val_seq, test_seq, nstates, batch_size=16, random_state=42):
+def create_dataloaders(train_seq, val_seq, test_seq, nstates, batch_size=16, random_state=42, normalize=False):
     """Create train/val/test dataloaders."""
 
     train_loader = DataLoader(
-        TimeSeriesDataset(train_seq, nstates),
+        TimeSeriesDataset(train_seq, nstates, normalize=normalize),
         batch_size=batch_size,
         sampler=create_weighted_sampler(train_seq),
         collate_fn=collate_fn,
@@ -220,16 +238,16 @@ def create_dataloaders(train_seq, val_seq, test_seq, nstates, batch_size=16, ran
         pin_memory=True,
         persistent_workers=True
     )
-    
+
     val_loader = DataLoader(
-        TimeSeriesDataset(val_seq, nstates), 
+        TimeSeriesDataset(val_seq, nstates, normalize=normalize),
         batch_size=batch_size,
         collate_fn=collate_fn,
         pin_memory=True
     )
-    
+
     test_loader = DataLoader(
-        TimeSeriesDataset(test_seq, nstates), 
+        TimeSeriesDataset(test_seq, nstates, normalize=normalize),
         batch_size=batch_size,
         collate_fn=collate_fn,
         pin_memory=True
