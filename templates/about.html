@@ -274,6 +274,11 @@ coz<!DOCTYPE html>
       padding: 0.75rem 0 0;
       width: 100%;
       min-width: 0;
+      box-sizing: border-box;
+    }
+    .ex-chart-panel .js-plotly-plot,
+    .ex-chart-panel .plot-container {
+      width: 100% !important;
     }
 
     /* Model key pills */
@@ -1046,7 +1051,7 @@ function renderChart(test, ex, data) {
      showarrow:false, text:'forecast', font:{size:9,color:'#aeaeb2'}},
   ];
 
-  const xAxisMax = new Date(predMs + halfMs * 1.15).toISOString().slice(0, 10);
+  const xAxisMax = new Date(predMs + halfMs * 0.4).toISOString().slice(0, 10);
   Plotly.newPlot('ex-chart', traces, {
     margin:{l:46,r:14,t:10,b:52},
     font:{family:'DM Sans,sans-serif',size:11,color:'#6e6e73'},
