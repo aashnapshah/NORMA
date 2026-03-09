@@ -1342,14 +1342,14 @@ function showInterpretPanel() {
   document.getElementById('interpret-card').style.display = 'block';
   document.getElementById('btn-retry').style.display = 'none';
   document.getElementById('interpret-body').innerHTML =
-    '<span style="color:var(--purple);font-size:0.85rem"><i class="bi bi-stars"></i> AI-powered interpretation coming soon.</span>';
+    '<span style="color:var(--text-3);font-size:0.85rem">Coming soon...</span>';
 }
 
 async function requestInterpretation() {
   if (!currentResult || !currentPayload) return;
   document.getElementById('btn-retry').style.display = 'none';
   document.getElementById('interpret-body').innerHTML =
-    '<span style="color:var(--purple);font-size:0.85rem"><i class="bi bi-stars"></i> AI-powered interpretation coming soon.</span>';
+    '<span style="color:var(--text-3);font-size:0.85rem">Coming soon...</span>';
 }
 
 // ── Saved runs ──
