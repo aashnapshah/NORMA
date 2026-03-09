@@ -441,9 +441,10 @@
     .wi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
     @media (max-width: 560px) { .wi-grid { grid-template-columns: 1fr; } }
     .wi-cell {
-      background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-md);
-      padding: 0.75rem 0.9rem;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md);
+      padding: 0.75rem 0.9rem; transition: border-color 0.15s, box-shadow 0.15s;
     }
+    .wi-cell:hover { border-color: rgba(0,113,227,0.2); box-shadow: 0 2px 8px rgba(0,113,227,0.06); }
     .wi-cell-header {
       display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.5rem;
     }
@@ -665,6 +666,7 @@
           <div class="d-flex gap-1">
             <button class="btn-icon" onclick="addRow()"><i class="bi bi-plus-lg"></i> Add</button>
             <button class="btn-icon" onclick="cycleExample()"><i class="bi bi-person-lines-fill"></i> Example</button>
+            <button class="btn-icon" onclick="resetAll()" title="Reset all data"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
           </div>
         </div>
         <table id="history-table">
@@ -750,12 +752,13 @@
     </div>
 
     <!-- What if? Explorer (above AI interpretation) -->
-    <div class="card" id="sens-card" style="display:none">
-      <div class="card-header" style="background:linear-gradient(120deg,#f0f8ff 0%,#f5f0ff 100%)">
-        <i class="bi bi-sliders2" style="color:var(--accent)"></i>
+    <div class="card" id="sens-card" style="display:none;border:1.5px solid rgba(0,113,227,0.2);box-shadow:0 2px 12px rgba(0,113,227,0.08),0 8px 32px rgba(191,90,242,0.06);position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#0071e3,#bf5af2,#30d158)"></div>
+      <div class="card-header" style="background:linear-gradient(135deg,#f0f7ff 0%,#f8f4ff 50%,#f0fff4 100%);border-bottom:1px solid rgba(0,113,227,0.1)">
+        <i class="bi bi-sliders2" style="color:var(--accent);font-size:1.1rem"></i>
         <div>
-          <div style="font-weight:700;line-height:1.25">What if…?</div>
-          <div style="font-size:0.67rem;color:var(--text-3);font-weight:400">See how NORMA adapts when conditions change</div>
+          <div style="font-weight:800;line-height:1.25;font-size:0.95rem;letter-spacing:-0.02em">What if…?</div>
+          <div style="font-size:0.67rem;color:var(--text-3);font-weight:400">Adjust parameters to see how NORMA's prediction changes</div>
         </div>
         <div class="spacer"></div>
         <button class="btn-sm-pill" id="wi-reset-btn" onclick="resetWhatIf()" style="display:none">
@@ -1242,19 +1245,6 @@ function drawChart(payload, data) {
   }
   traces.push(bellTrace(norm.mu, norm.sigma, 'rgba(0,113,227,0.9)', 'rgba(0,113,227,0.12)', 'NORMA'));
 
-  // Mean markers on bell panel
-  traces.push({
-    x:[0], y:[mu], mode:'markers', showlegend:false,
-    marker:{color:'#0071e3',size:7,symbol:'diamond'}, hoverinfo:'skip',
-    xaxis:'x2', yaxis:'y',
-  });
-  if (gmmOk) {
-    traces.push({
-      x:[0], y:[gmmMu], mode:'markers', showlegend:false,
-      marker:{color:'#bf5af2',size:5,symbol:'circle'}, hoverinfo:'skip',
-      xaxis:'x2', yaxis:'y',
-    });
-  }
   // Actual value line on bell panel
   if (actualVal != null) {
     traces.push({
@@ -1286,6 +1276,30 @@ function drawChart(payload, data) {
     {x:pred_date, y:yMax, xanchor:'left', yanchor:'top',
      showarrow:false, text:' forecast', font:{size:9, color:'#aeaeb2'}, xref:'x', yref:'y'},
   ];
+
+  // Classification labels at last observed value
+  const clf = data.classifications || {};
+  const lastVal = histY[histY.length - 1];
+  const lastDate = histX[histX.length - 1];
+  const clfItems = [
+    {label:'Population', value:clf.population, color:'#aeaeb2'},
+    ...(gmmOk ? [{label:'Personalized', value:clf.personalized, color:'#bf5af2'}] : []),
+    {label:'NORMA', value:clf.norma, color:'#0071e3'},
+  ].filter(c => c.value);
+  if (clfItems.length) {
+    const clfColor = v => v === 'Low' ? '#ff3b30' : v === 'High' ? '#ff9f0a' : '#30d158';
+    const clfText = clfItems.map(c =>
+      `<span style="color:${c.color}">${c.label}:</span> <b style="color:${clfColor(c.value)}">${c.value}</b>`
+    ).join('  ·  ');
+    annotations.push({
+      x:lastDate, y:lastVal, xanchor:'left', yanchor:'top',
+      showarrow:true, arrowhead:0, arrowwidth:1, arrowcolor:'rgba(0,0,0,0.15)',
+      ax:20, ay:30,
+      text:clfText, font:{size:10}, bgcolor:'rgba(255,255,255,0.92)',
+      bordercolor:'rgba(0,0,0,0.1)', borderwidth:1, borderpad:5,
+      xref:'x', yref:'y',
+    });
+  }
 
   const layout = {
     margin:{l:46, r:10, t:10, b:52},
@@ -1752,6 +1766,29 @@ function showToast(msg, isError=false) {
   domObserver.observe(main, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
 })();
 
+// ── Reset all ──
+function resetAll() {
+  clearHistory();
+  currentPayload = null;
+  currentResult  = null;
+  document.getElementById('inp-age').value = 45;
+  document.querySelector('input[name="sex"][value="0"]').checked = true;
+  document.getElementById('inp-tnext').value = todayStr();
+  document.getElementById('pred-summary').style.display = 'none';
+  document.getElementById('pred-date-badge').style.display = 'none';
+  document.getElementById('main-chart').innerHTML =
+    '<div class="empty-chart"><div class="empty-chart-icon"><i class="bi bi-activity"></i></div><p>Add history points and click <strong>Predict</strong><br>to visualise the trajectory</p></div>';
+  document.getElementById('sens-card').style.display = 'none';
+  document.getElementById('interpret-card').style.display = 'none';
+  document.getElementById('btn-save').disabled = true;
+  document.getElementById('pid-chip-wrap').style.display = 'none';
+  document.getElementById('chart-title').textContent = 'Lab Value Trajectory';
+  const distChart = document.getElementById('dist-chart');
+  if (distChart) distChart.innerHTML = '';
+  seedDefaults();
+  updateRefPill();
+}
+
 // ── Init ──
 document.getElementById('inp-tnext').value = todayStr();
 seedDefaults();
@@ -1761,6 +1798,16 @@ renderSavedRuns();
 initExampleNav();
 // Re-build when test changes
 document.getElementById('sel-test').addEventListener('change', initExampleNav);
+
+// Auto-load example if ?example=1 in URL
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('example') === '1') {
+    loadExample(0);
+    // Clean URL without reloading
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+})();
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
