@@ -1570,7 +1570,7 @@ async function applyWhatIfAndRedraw() {
       body: JSON.stringify({ test_name: _originalPayload.test_name, sex: _wiSex, age: _wiAge, history }),
     });
     const data = await pdR.json();
-    if (data.error) return;
+    if (data.error) { console.error('/api/predict error:', data.error); showToast('Predict failed: ' + data.error, true); return; }
 
     const payload = { ..._originalPayload, sex: _wiSex, age: _wiAge, history: priorHistory };
     currentPayload = payload;
@@ -1580,7 +1580,7 @@ async function applyWhatIfAndRedraw() {
     drawPredSummary(payload, data);
     drawVerdict(payload, data);
     document.getElementById('wi-reset-btn').style.display = '';
-  } catch(e) { /* silent */ }
+  } catch(e) { console.error('applyWhatIfAndRedraw error:', e); showToast('Prediction failed: ' + e.message, true); }
 }
 
 function resetWhatIf() {
