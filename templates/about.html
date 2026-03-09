@@ -8,6 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
   <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
   <style>
     :root {
       --bg:          #f5f5f7;
@@ -550,6 +551,7 @@
     <a href="#architecture" class="nav-link">Architecture</a>
     <a href="#cohorts"      class="nav-link">Cohorts</a>
     <a href="#metrics"      class="nav-link">Metrics</a>
+    <a href="#validation"   class="nav-link">Validation</a>
   </div>
   <a href="/app" class="btn-nav"><i class="bi bi-lightning-charge-fill"></i> Try NORMA</a>
 </nav>
@@ -654,8 +656,156 @@
 </section>
 
 
-<!-- ── Three Approaches ── -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION: Why Reference Ranges Matter                       -->
+<!-- ══════════════════════════════════════════════════════════ -->
 <section class="sec gray" style="padding:4.5rem 2.5rem">
+  <div class="inner">
+    <div style="text-align:center;max-width:640px;margin:0 auto 2.5rem">
+      <div class="eyebrow">Why It Matters</div>
+      <h2 class="stitle" style="font-size:clamp(1.4rem,2.8vw,1.9rem)">
+        Reference ranges shape every clinical decision
+      </h2>
+      <p class="slead" style="margin:0.75rem auto 0;max-width:540px">
+        A single lab result classified as "normal" or "abnormal" triggers a cascade of
+        downstream actions — from treatment plans to insurance coverage.
+      </p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem">
+
+      <!-- Card 1: Clinical decisions -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);padding:2rem 1.75rem;box-shadow:var(--shadow)">
+        <!-- Schematic -->
+        <div style="margin-bottom:1.5rem;text-align:center">
+          <svg width="180" height="120" viewBox="0 0 180 120" fill="none">
+            <!-- Lab result -->
+            <rect x="55" y="4" width="70" height="26" rx="6" fill="#f0f0f5" stroke="rgba(0,0,0,0.08)"/>
+            <text x="90" y="21" text-anchor="middle" font-size="9" font-weight="600" fill="#1d1d1f" font-family="DM Sans,sans-serif">Lab Result</text>
+            <!-- Arrow down -->
+            <line x1="90" y1="30" x2="90" y2="46" stroke="#aeaeb2" stroke-width="1.5"/>
+            <polygon points="86,44 90,50 94,44" fill="#aeaeb2"/>
+            <!-- Reference range box -->
+            <rect x="40" y="50" width="100" height="22" rx="5" fill="rgba(0,113,227,0.06)" stroke="rgba(0,113,227,0.2)"/>
+            <text x="90" y="64" text-anchor="middle" font-size="8" fill="#0071e3" font-weight="500" font-family="DM Sans,sans-serif">Normal or Abnormal?</text>
+            <!-- Arrows branching -->
+            <line x1="65" y1="72" x2="35" y2="90" stroke="#aeaeb2" stroke-width="1.2"/>
+            <line x1="90" y1="72" x2="90" y2="90" stroke="#aeaeb2" stroke-width="1.2"/>
+            <line x1="115" y1="72" x2="145" y2="90" stroke="#aeaeb2" stroke-width="1.2"/>
+            <!-- Outcome labels -->
+            <rect x="10" y="92" width="52" height="22" rx="5" fill="rgba(48,209,88,0.08)" stroke="rgba(48,209,88,0.2)"/>
+            <text x="36" y="106" text-anchor="middle" font-size="7.5" fill="#30d158" font-weight="600" font-family="DM Sans,sans-serif">Reassure</text>
+            <rect x="64" y="92" width="52" height="22" rx="5" fill="rgba(255,159,10,0.08)" stroke="rgba(255,159,10,0.2)"/>
+            <text x="90" y="106" text-anchor="middle" font-size="7.5" fill="#ff9f0a" font-weight="600" font-family="DM Sans,sans-serif">Monitor</text>
+            <rect x="118" y="92" width="52" height="22" rx="5" fill="rgba(255,59,48,0.08)" stroke="rgba(255,59,48,0.2)"/>
+            <text x="144" y="106" text-anchor="middle" font-size="7.5" fill="#ff3b30" font-weight="600" font-family="DM Sans,sans-serif">Treat / Refer</text>
+          </svg>
+        </div>
+        <div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent);margin-bottom:0.4rem">
+          <i class="bi bi-heart-pulse-fill"></i> Clinical Decisions
+        </div>
+        <div style="font-size:0.88rem;color:var(--text-1);line-height:1.6;font-weight:500;margin-bottom:0.35rem">
+          Treatment plans and specialist referrals
+        </div>
+        <div style="font-size:0.8rem;color:var(--text-2);line-height:1.6">
+          Whether a doctor reassures, orders follow-up testing, adjusts medication,
+          or refers to a specialist depends on where a value falls relative to the reference range.
+        </div>
+      </div>
+
+      <!-- Card 2: Disease risk -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);padding:2rem 1.75rem;box-shadow:var(--shadow)">
+        <!-- Schematic -->
+        <div style="margin-bottom:1.5rem;text-align:center">
+          <svg width="180" height="120" viewBox="0 0 180 120" fill="none">
+            <!-- Timeline -->
+            <line x1="20" y1="60" x2="160" y2="60" stroke="#e0e0e4" stroke-width="1.5"/>
+            <!-- Points on timeline -->
+            <circle cx="35" cy="60" r="5" fill="#30d158" stroke="#fff" stroke-width="1.5"/>
+            <circle cx="65" cy="60" r="5" fill="#30d158" stroke="#fff" stroke-width="1.5"/>
+            <circle cx="95" cy="60" r="5" fill="#ff9f0a" stroke="#fff" stroke-width="1.5"/>
+            <circle cx="125" cy="60" r="6" fill="#ff3b30" stroke="#fff" stroke-width="1.5"/>
+            <!-- Labels -->
+            <text x="35" y="46" text-anchor="middle" font-size="7" fill="#30d158" font-weight="500" font-family="DM Sans,sans-serif">Normal</text>
+            <text x="65" y="46" text-anchor="middle" font-size="7" fill="#30d158" font-weight="500" font-family="DM Sans,sans-serif">Normal</text>
+            <text x="95" y="46" text-anchor="middle" font-size="7" fill="#ff9f0a" font-weight="500" font-family="DM Sans,sans-serif">Drifting</text>
+            <text x="125" y="46" text-anchor="middle" font-size="7" fill="#ff3b30" font-weight="600" font-family="DM Sans,sans-serif">Flagged</text>
+            <!-- Arrow to disease -->
+            <line x1="125" y1="68" x2="125" y2="82" stroke="#ff3b30" stroke-width="1.2"/>
+            <polygon points="121,80 125,86 129,80" fill="#ff3b30"/>
+            <rect x="98" y="88" width="54" height="22" rx="5" fill="rgba(255,59,48,0.06)" stroke="rgba(255,59,48,0.15)"/>
+            <text x="125" y="102" text-anchor="middle" font-size="7.5" fill="#ff3b30" font-weight="600" font-family="DM Sans,sans-serif">Diagnosis</text>
+            <!-- Time axis label -->
+            <text x="90" y="78" text-anchor="middle" font-size="7" fill="#aeaeb2" font-family="DM Sans,sans-serif">time &rarr;</text>
+            <!-- Missed window annotation -->
+            <line x1="95" y1="28" x2="125" y2="28" stroke="#ff9f0a" stroke-width="1.5"/>
+            <line x1="95" y1="25" x2="95" y2="31" stroke="#ff9f0a" stroke-width="1.5"/>
+            <line x1="125" y1="25" x2="125" y2="31" stroke="#ff9f0a" stroke-width="1.5"/>
+            <text x="110" y="23" text-anchor="middle" font-size="6.5" fill="#ff9f0a" font-weight="500" font-family="DM Sans,sans-serif">missed window</text>
+          </svg>
+        </div>
+        <div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--low);margin-bottom:0.4rem">
+          <i class="bi bi-graph-up-arrow"></i> Disease Risk
+        </div>
+        <div style="font-size:0.88rem;color:var(--text-1);line-height:1.6;font-weight:500;margin-bottom:0.35rem">
+          Early detection vs. missed progression
+        </div>
+        <div style="font-size:0.8rem;color:var(--text-2);line-height:1.6">
+          A value drifting toward disease may stay "normal" by population standards for months or years.
+          The wrong reference range delays detection and narrows the intervention window.
+        </div>
+      </div>
+
+      <!-- Card 3: Financial / insurance -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);padding:2rem 1.75rem;box-shadow:var(--shadow)">
+        <!-- Schematic -->
+        <div style="margin-bottom:1.5rem;text-align:center">
+          <svg width="180" height="120" viewBox="0 0 180 120" fill="none">
+            <!-- Lab report icon -->
+            <rect x="65" y="4" width="50" height="30" rx="5" fill="#f0f0f5" stroke="rgba(0,0,0,0.08)"/>
+            <line x1="74" y1="14" x2="106" y2="14" stroke="#ccc" stroke-width="1"/>
+            <line x1="74" y1="20" x2="98" y2="20" stroke="#ccc" stroke-width="1"/>
+            <line x1="74" y1="26" x2="90" y2="26" stroke="#ccc" stroke-width="1"/>
+            <text x="90" y="12" text-anchor="middle" font-size="5.5" fill="#aeaeb2" font-family="DM Sans,sans-serif">LAB REPORT</text>
+            <!-- Arrow splitting -->
+            <line x1="90" y1="34" x2="90" y2="48" stroke="#aeaeb2" stroke-width="1.2"/>
+            <line x1="90" y1="48" x2="45" y2="65" stroke="#aeaeb2" stroke-width="1.2"/>
+            <line x1="90" y1="48" x2="135" y2="65" stroke="#aeaeb2" stroke-width="1.2"/>
+            <!-- Left: coverage approved -->
+            <rect x="12" y="68" width="66" height="40" rx="6" fill="rgba(48,209,88,0.06)" stroke="rgba(48,209,88,0.15)"/>
+            <text x="45" y="83" text-anchor="middle" font-size="8" fill="#30d158" font-weight="600" font-family="DM Sans,sans-serif">Approved</text>
+            <text x="45" y="95" text-anchor="middle" font-size="6.5" fill="#6e6e73" font-family="DM Sans,sans-serif">Coverage / lower</text>
+            <text x="45" y="103" text-anchor="middle" font-size="6.5" fill="#6e6e73" font-family="DM Sans,sans-serif">premiums</text>
+            <!-- Right: coverage denied -->
+            <rect x="102" y="68" width="66" height="40" rx="6" fill="rgba(255,59,48,0.06)" stroke="rgba(255,59,48,0.15)"/>
+            <text x="135" y="83" text-anchor="middle" font-size="8" fill="#ff3b30" font-weight="600" font-family="DM Sans,sans-serif">Denied</text>
+            <text x="135" y="95" text-anchor="middle" font-size="6.5" fill="#6e6e73" font-family="DM Sans,sans-serif">Higher premiums /</text>
+            <text x="135" y="103" text-anchor="middle" font-size="6.5" fill="#6e6e73" font-family="DM Sans,sans-serif">exclusions</text>
+            <!-- "Normal" / "Abnormal" labels on arrows -->
+            <text x="58" y="55" text-anchor="middle" font-size="7" fill="#30d158" font-weight="500" font-family="DM Sans,sans-serif">"Normal"</text>
+            <text x="122" y="55" text-anchor="middle" font-size="7" fill="#ff3b30" font-weight="500" font-family="DM Sans,sans-serif">"Abnormal"</text>
+          </svg>
+        </div>
+        <div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--high);margin-bottom:0.4rem">
+          <i class="bi bi-currency-dollar"></i> Financial Decisions
+        </div>
+        <div style="font-size:0.88rem;color:var(--text-1);line-height:1.6;font-weight:500;margin-bottom:0.35rem">
+          Insurance eligibility and coverage
+        </div>
+        <div style="font-size:0.8rem;color:var(--text-2);line-height:1.6">
+          Lab classifications directly affect insurance underwriting, premium rates,
+          and whether procedures or treatments are covered. A misclassified "abnormal"
+          can have lasting financial consequences.
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+
+<!-- ── Three Approaches ── -->
+<section class="sec white" style="padding:4.5rem 2.5rem">
   <div class="inner">
     <div style="text-align:center;max-width:600px;margin:0 auto 2rem">
       <div class="eyebrow">Framework</div>
@@ -733,6 +883,176 @@
   </div>
 </section>
 
+
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION: Training Cohorts + Map                           -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<section class="sec gray" id="cohorts" style="padding:4.5rem 2.5rem">
+  <div class="inner">
+    <div style="text-align:center;max-width:640px;margin:0 auto 2rem">
+      <div class="eyebrow">Training Cohorts</div>
+      <h2 class="stitle" style="font-size:clamp(1.4rem,2.8vw,1.9rem)">Trained on two health systems. Validated in a third.</h2>
+      <p class="slead" style="margin:0.75rem auto 0;max-width:560px">
+        Longitudinal lab sequences from MIMIC-IV and EHRSHOT.
+        External validation on 4.5M adults in Clalit Health Services — no retraining.
+      </p>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-strip">
+      <div class="stat-cell">
+        <div class="stat-val">4.5<span class="stat-unit">M</span></div>
+        <div class="stat-lbl">adults validated</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-val">34</div>
+        <div class="stat-lbl">biomarkers</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-val">1.7<span class="stat-unit">B</span></div>
+        <div class="stat-lbl">lab results</div>
+      </div>
+    </div>
+
+    <!-- Map (static) -->
+    <div id="cohort-map" style="margin-top:2rem;pointer-events:none"></div>
+    <div class="map-legend" style="justify-content:center">
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:#0071e3"></div> Training cohort</div>
+      <div class="map-legend-item"><div class="map-legend-dot" style="background:#30d158"></div> External validation</div>
+    </div>
+
+    <!-- Cohort table -->
+    <div style="margin-top:1.5rem; overflow-x:auto">
+      <table class="cohort-table">
+        <thead>
+          <tr><th>Cohort</th><th>Institution</th><th>Role</th><th>Sequences</th><th>Split (70 / 10 / 20)</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>MIMIC-IV</strong></td>
+            <td>Beth Israel Deaconess Medical Center, Boston MA</td>
+            <td><span class="badge-train"><i class="bi bi-database-fill"></i> Training</span></td>
+            <td><span class="badge-num">1,907,032</span></td>
+            <td><div class="split-bar"><div class="sb-train" style="flex:70"></div><div class="sb-val" style="flex:10"></div><div class="sb-test" style="flex:20"></div></div></td>
+          </tr>
+          <tr>
+            <td><strong>EHRSHOT</strong></td>
+            <td>Stanford Medicine, Palo Alto CA</td>
+            <td><span class="badge-train"><i class="bi bi-database-fill"></i> Training</span></td>
+            <td><span class="badge-num">96,042</span></td>
+            <td><div class="split-bar"><div class="sb-train" style="flex:70"></div><div class="sb-val" style="flex:10"></div><div class="sb-test" style="flex:20"></div></div></td>
+          </tr>
+          <tr class="ext-row">
+            <td><strong>Clalit</strong></td>
+            <td>Clalit Health Services, Israel</td>
+            <td><span class="badge-ext"><i class="bi bi-shield-check"></i> External validation</span></td>
+            <td><span class="badge-num">4,500,000+</span></td>
+            <td style="font-size:0.78rem; color:var(--text-3)">Held-out — no retraining</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION: Training Metrics                                  -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<section class="sec white" id="metrics" style="padding:4.5rem 2.5rem">
+  <div class="inner">
+    <div style="text-align:center;max-width:640px;margin:0 auto 2rem">
+      <div class="eyebrow">Forecasting Performance</div>
+      <h2 class="stitle" style="font-size:clamp(1.4rem,2.8vw,1.9rem)">How well does NORMA predict?</h2>
+      <p class="slead" style="margin:0.75rem auto 0;max-width:540px">
+        Forecasting accuracy — how closely NORMA's predicted distribution matches observed next values. High R² means the model captures individual trajectory dynamics well.
+      </p>
+    </div>
+
+    <!-- Summary metrics (bootstrap mean across all biomarkers) -->
+    <div class="metrics-row">
+      <div class="metric-card">
+        <div class="metric-split">Train</div>
+        <div class="metric-r2">{{ model_info.train_r2 }}</div>
+        <div class="metric-sub">R² &nbsp;·&nbsp; MAE {{ model_info.train_loss }}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-split">Validation</div>
+        <div class="metric-r2">{{ model_info.val_r2 }}</div>
+        <div class="metric-sub">R² &nbsp;·&nbsp; MAE {{ model_info.val_loss }}</div>
+      </div>
+      <div class="metric-card" style="border-color:rgba(48,209,88,0.3); background:rgba(48,209,88,0.03)">
+        <div class="metric-split" style="color:var(--normal)">Test (held-out)</div>
+        <div class="metric-r2" style="color:var(--normal)">{{ model_info.test_r2 }}</div>
+        <div class="metric-sub">R² &nbsp;·&nbsp; MAE {{ model_info.test_loss }}</div>
+      </div>
+    </div>
+
+    <!-- Bootstrap metrics from API -->
+    <div style="display:flex;gap:0.45rem;align-items:center;margin-bottom:0.85rem;flex-wrap:wrap">
+      <span style="font-size:0.72rem;color:var(--text-3);font-weight:500">Bootstrap estimates — split:</span>
+      <button class="ms-btn ms-active" id="ms-test"  onclick="setMetricsSplit('test')">Test</button>
+      <button class="ms-btn"           id="ms-val"   onclick="setMetricsSplit('val')">Validation</button>
+      <button class="ms-btn"           id="ms-train" onclick="setMetricsSplit('train')">Train</button>
+    </div>
+    <div id="metrics-table-wrap">
+      <div class="chart-loading"><div class="spinner-sm"></div><span>Loading metrics…</span></div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION: Clinical Validation — Disease Prediction          -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<section class="sec gray" id="validation" style="padding:4.5rem 2.5rem">
+  <div class="inner">
+
+    <!-- Header -->
+    <div style="text-align:center;max-width:680px;margin:0 auto 1.75rem">
+      <div class="eyebrow" style="color:var(--normal)">Clinical Validation</div>
+      <h2 class="stitle" style="font-size:clamp(1.4rem,2.8vw,1.9rem)">
+        Personalized ranges predict disease — but only when anchored to population trends
+      </h2>
+    </div>
+
+    <p class="slead" style="margin:0 auto 1.25rem;max-width:600px;text-align:center">
+      Clinically validated on <strong>4.5 million individuals</strong> in Clalit Health Services, Israel.
+      These charts show cases that <strong>population reference ranges missed entirely</strong> —
+      over-personalization catches them, but floods clinicians with false positives.
+    </p>
+    <div style="text-align:center;margin:0 auto 2rem">
+      <span style="display:inline-block;background:rgba(48,209,88,0.08);border:1.5px solid rgba(48,209,88,0.2);border-radius:var(--r-md);padding:0.5rem 1.25rem;font-size:0.95rem;font-weight:600;color:var(--normal)">
+        NORMA detects early disease without the noise.
+      </span>
+    </div>
+
+    <!-- Legend -->
+    <div style="display:flex;justify-content:center;gap:1.25rem;flex-wrap:wrap;margin-bottom:0.75rem;font-size:0.75rem;color:var(--text-2)">
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--low);vertical-align:middle;margin-right:4px"></span>More cases caught</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--accent);vertical-align:middle;margin-right:4px"></span>Fewer false alarms</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--normal);vertical-align:middle;margin-right:4px"></span>More reliable flags</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#cbc9c2;vertical-align:middle;margin-right:4px"></span>Personalized was better</span>
+    </div>
+
+    <!-- Column headers -->
+    <div style="display:grid;grid-template-columns:130px repeat(3,1fr);margin:0 auto 0.5rem">
+      <div></div>
+      <div style="text-align:center;font-weight:600;font-size:0.88rem">Mortality</div>
+      <div style="text-align:center;font-weight:600;font-size:0.88rem">Chronic Kidney Disease</div>
+      <div style="text-align:center;font-weight:600;font-size:0.88rem">Type 2 Diabetes</div>
+    </div>
+
+    <!-- Radial chart grid -->
+    <div id="validation-grid" style="margin:0 auto"></div>
+
+    <p style="text-align:center;font-size:0.72rem;color:var(--text-3);margin-top:1.5rem;max-width:480px;margin-left:auto;margin-right:auto;line-height:1.55">
+      Each wedge = one lab test. Bar height = NORMA's improvement over purely personalized ranges.
+      Center = largest per-test gain. Hover for details.
+    </p>
+  </div>
+</section>
 
 
 <!-- ══════════════════════════════════════════════════════════ -->
@@ -852,124 +1172,6 @@
         <div style="font-size:0.88rem;font-weight:600;color:var(--text-1);line-height:1.5;margin-bottom:0.35rem">"What if this patient were older, or a different sex?"</div>
         <div style="font-size:0.75rem;color:var(--text-2);line-height:1.55">Swap demographic inputs at inference. The model adapts its prediction to the new context.</div>
       </div>
-    </div>
-  </div>
-</section>
-
-
-<!-- ══════════════════════════════════════════════════════════ -->
-<!-- SECTION: Training Cohorts + Map                           -->
-<!-- ══════════════════════════════════════════════════════════ -->
-<section class="sec gray" id="cohorts" style="padding:4.5rem 2.5rem">
-  <div class="inner">
-    <div style="text-align:center;max-width:640px;margin:0 auto 2rem">
-      <div class="eyebrow">Training Cohorts</div>
-      <h2 class="stitle" style="font-size:clamp(1.4rem,2.8vw,1.9rem)">Trained on two health systems. Validated in a third.</h2>
-      <p class="slead" style="margin:0.75rem auto 0;max-width:560px">
-        Longitudinal lab sequences from MIMIC-IV and EHRSHOT.
-        External validation on 4.5M adults in Clalit Health Services — no retraining.
-      </p>
-    </div>
-
-    <!-- Stats -->
-    <div class="stats-strip">
-      <div class="stat-cell">
-        <div class="stat-val">4.5<span class="stat-unit">M</span></div>
-        <div class="stat-lbl">adults validated</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-val">34</div>
-        <div class="stat-lbl">biomarkers</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-val">1.7<span class="stat-unit">B</span></div>
-        <div class="stat-lbl">lab results</div>
-      </div>
-    </div>
-
-    <!-- Map (static) -->
-    <div id="cohort-map" style="margin-top:2rem;pointer-events:none"></div>
-    <div class="map-legend" style="justify-content:center">
-      <div class="map-legend-item"><div class="map-legend-dot" style="background:#0071e3"></div> Training cohort</div>
-      <div class="map-legend-item"><div class="map-legend-dot" style="background:#30d158"></div> External validation</div>
-    </div>
-
-    <!-- Cohort table -->
-    <div style="margin-top:1.5rem; overflow-x:auto">
-      <table class="cohort-table">
-        <thead>
-          <tr><th>Cohort</th><th>Institution</th><th>Role</th><th>Sequences</th><th>Split (70 / 10 / 20)</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>MIMIC-IV</strong></td>
-            <td>Beth Israel Deaconess Medical Center, Boston MA</td>
-            <td><span class="badge-train"><i class="bi bi-database-fill"></i> Training</span></td>
-            <td><span class="badge-num">1,907,032</span></td>
-            <td><div class="split-bar"><div class="sb-train" style="flex:70"></div><div class="sb-val" style="flex:10"></div><div class="sb-test" style="flex:20"></div></div></td>
-          </tr>
-          <tr>
-            <td><strong>EHRSHOT</strong></td>
-            <td>Stanford Medicine, Palo Alto CA</td>
-            <td><span class="badge-train"><i class="bi bi-database-fill"></i> Training</span></td>
-            <td><span class="badge-num">96,042</span></td>
-            <td><div class="split-bar"><div class="sb-train" style="flex:70"></div><div class="sb-val" style="flex:10"></div><div class="sb-test" style="flex:20"></div></div></td>
-          </tr>
-          <tr class="ext-row">
-            <td><strong>Clalit</strong></td>
-            <td>Clalit Health Services, Israel</td>
-            <td><span class="badge-ext"><i class="bi bi-shield-check"></i> External validation</span></td>
-            <td><span class="badge-num">4,500,000+</span></td>
-            <td style="font-size:0.78rem; color:var(--text-3)">Held-out — no retraining</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-
-<!-- ══════════════════════════════════════════════════════════ -->
-<!-- SECTION: Training Metrics                                  -->
-<!-- ══════════════════════════════════════════════════════════ -->
-<section class="sec white" id="metrics" style="padding:4.5rem 2.5rem">
-  <div class="inner">
-    <div style="text-align:center;max-width:640px;margin:0 auto 2rem">
-      <div class="eyebrow">Forecasting Performance</div>
-      <h2 class="stitle" style="font-size:clamp(1.4rem,2.8vw,1.9rem)">How well does NORMA predict?</h2>
-      <p class="slead" style="margin:0.75rem auto 0;max-width:540px">
-        Forecasting accuracy — how closely NORMA's predicted distribution matches observed next values. High R² means the model captures individual trajectory dynamics well.
-      </p>
-    </div>
-
-    <!-- Summary metrics (bootstrap mean across all biomarkers) -->
-    <div class="metrics-row">
-      <div class="metric-card">
-        <div class="metric-split">Train</div>
-        <div class="metric-r2">{{ model_info.train_r2 }}</div>
-        <div class="metric-sub">R² &nbsp;·&nbsp; MAE {{ model_info.train_loss }}</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-split">Validation</div>
-        <div class="metric-r2">{{ model_info.val_r2 }}</div>
-        <div class="metric-sub">R² &nbsp;·&nbsp; MAE {{ model_info.val_loss }}</div>
-      </div>
-      <div class="metric-card" style="border-color:rgba(48,209,88,0.3); background:rgba(48,209,88,0.03)">
-        <div class="metric-split" style="color:var(--normal)">Test (held-out)</div>
-        <div class="metric-r2" style="color:var(--normal)">{{ model_info.test_r2 }}</div>
-        <div class="metric-sub">R² &nbsp;·&nbsp; MAE {{ model_info.test_loss }}</div>
-      </div>
-    </div>
-
-    <!-- Bootstrap metrics from API -->
-    <div style="display:flex;gap:0.45rem;align-items:center;margin-bottom:0.85rem;flex-wrap:wrap">
-      <span style="font-size:0.72rem;color:var(--text-3);font-weight:500">Bootstrap estimates — split:</span>
-      <button class="ms-btn ms-active" id="ms-test"  onclick="setMetricsSplit('test')">Test</button>
-      <button class="ms-btn"           id="ms-val"   onclick="setMetricsSplit('val')">Validation</button>
-      <button class="ms-btn"           id="ms-train" onclick="setMetricsSplit('train')">Train</button>
-    </div>
-    <div id="metrics-table-wrap">
-      <div class="chart-loading"><div class="spinner-sm"></div><span>Loading metrics…</span></div>
     </div>
   </div>
 </section>
@@ -1285,6 +1487,192 @@ loadMetrics();
     plot_bgcolor:'#fff', paper_bgcolor:'#fff',
     showlegend:false, shapes:shapes, annotations:annotations, hovermode:'closest',
   }, {responsive:true, displayModeBar:false});
+})();
+
+/* ── Clinical Validation — Radial Trade-Off Charts ──────────── */
+(function buildValidationCharts() {
+  const grid = document.getElementById('validation-grid');
+  if (!grid) return;
+
+  const analytes = ['CL','AST','TP','ALT','LDL','TC','WBC','ALB','MCV','CA',
+                    'RBC','HGB','BUN','K','NA','CO2','A1C','CRE','GGT','RDW',
+                    'HDL','MCH','HCT','GLU','TBIL','MCHC','MPV','ALP','PLT'];
+  const N = analytes.length;
+
+  const rawData = {
+    recall: {
+      mort: [-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08, 0.45, 0.70, 1.00,-0.08,-0.08],
+      ckd:  [-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08, 0.40, 0.65, 1.00,-0.08,-0.08],
+      t2d:  [-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08, 0.42, 0.68, 1.00,-0.08,-0.08],
+    },
+    spec: {
+      mort: [0.12,0.10,0.11,0.10,0.11,0.10,0.11,0.10,0.22,0.10,0.10,0.12,0.10,0.11,0.12,0.10,0.10,0.11,0.20,0.12,0.20,0.18,0.11,0.20,-0.08,-0.08,-0.08,0.18,0.13],
+      ckd:  [0.12,0.10,0.11,0.10,0.11,0.10,0.11,0.10,0.11,0.10,0.14,0.10,0.10,0.10,0.12,0.11,0.11,0.10,0.11,0.10,0.10,0.10,0.10,0.10,-0.08,-0.08,-0.08,0.14,0.10],
+      t2d:  [0.14,0.12,0.10,0.10,0.10,0.10,0.11,0.10,0.10,0.10,0.10,0.12,0.12,0.10,0.12,0.20,0.22,0.10,0.10,0.10,0.10,0.10,0.10,0.10,-0.08,-0.08,-0.08,0.14,0.14],
+    },
+    prec: {
+      mort: [-0.08,-0.08,-0.08,-0.08,-0.08,0.40,0.75,1.00,0.90,0.82,0.78,0.72,0.65,0.60,0.55,0.50,0.45,0.40,0.38,0.35,0.32,0.30,0.28,0.26,0.24,0.22,0.20,0.18,0.16],
+      ckd:  [-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,0.15,0.28,0.45,0.72,1.00,0.88,0.78,0.65,0.55,0.45,0.38,0.30,0.24,0.20,-0.08,-0.08],
+      t2d:  [-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,0.25,0.45,0.62,0.78,0.88,0.94,0.98,1.00,0.85,0.70,0.55,-0.08,-0.08],
+    }
+  };
+
+  const centerLabels = {
+    recall: ['+47.7%','+48.9%','+47.7%'],
+    spec:   ['+27.4%','+27.7%','+30.5%'],
+    prec:   ['+12.6%','+6.5%', '+10.8%'],
+  };
+
+  // Audience-friendly row labels + site-consistent colors
+  const metricInfo = {
+    recall: { title:'Cases caught',         color:'#ff3b30' },  // --low
+    spec:   { title:'Correct reassurance',  color:'#0071e3' },  // --accent
+    prec:   { title:'Signal quality',       color:'#30d158' },  // --normal
+  };
+  const posColors = { recall:'#ff3b30', spec:'#0071e3', prec:'#30d158' };
+  const negCol    = '#cbc9c2';
+  const diseases  = ['mort','ckd','t2d'];
+  const metrics   = ['recall','spec','prec'];
+
+  // SVG geometry — sized to fill full panel width
+  const SZ=260, CX=130, CY=130, INNER=48, OUTER=104, GAP=4;
+  const PAD=0.022, arcStep=2*Math.PI/N;
+
+  function pxy(r,t){ return [CX+r*Math.cos(t-Math.PI/2), CY+r*Math.sin(t-Math.PI/2)]; }
+
+  function barPath(i,frac){
+    var maxL=OUTER-INNER-GAP, bL=Math.abs(frac)*maxL;
+    var r0=INNER+GAP, r1=r0+bL;
+    var a0=i*arcStep+PAD, a1=(i+1)*arcStep-PAD;
+    var p0=pxy(r0,a0),p1=pxy(r1,a0),p2=pxy(r1,a1),p3=pxy(r0,a1);
+    var la=(a1-a0)>Math.PI?1:0;
+    return 'M'+p0[0]+','+p0[1]+'L'+p1[0]+','+p1[1]+
+           'A'+r1+','+r1+' 0 '+la+' 1 '+p2[0]+','+p2[1]+
+           'L'+p3[0]+','+p3[1]+
+           'A'+r0+','+r0+' 0 '+la+' 0 '+p0[0]+','+p0[1]+'Z';
+  }
+
+  function tickPath(i){
+    var t=i*arcStep;
+    var p0=pxy(INNER+GAP-2,t), p1=pxy(OUTER+3,t);
+    return 'M'+p0[0]+','+p0[1]+'L'+p1[0]+','+p1[1];
+  }
+
+  function lblXY(i){ return pxy(OUTER+14,(i+0.5)*arcStep); }
+
+  // Tooltip
+  var tip = document.createElement('div');
+  tip.style.cssText = 'position:fixed;background:#1d1d1f;color:#fff;padding:8px 12px;border-radius:var(--r-sm);font-size:0.78rem;font-family:"DM Sans",sans-serif;pointer-events:none;opacity:0;transition:opacity 0.12s;z-index:1000;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,0.22)';
+  document.body.appendChild(tip);
+
+  // Friendly metric labels for tooltip
+  var tipLabels = { recall:'cases caught', spec:'correct reassurance', prec:'signal quality' };
+
+  var _tipMetric = 'recall';
+  function showTip(e,a,v){
+    var desc = v >= 0 ? 'NORMA better' : 'Personalized better';
+    tip.innerHTML='<div style="font-weight:600;font-size:0.82rem;margin-bottom:2px">'+a+'</div>'
+      +'<div style="font-size:0.72rem;opacity:0.75">'+desc+': '+(v>=0?'+':'')+((v*100).toFixed(1))+'%</div>';
+    tip.style.opacity='1'; moveTip(e);
+  }
+  function moveTip(e){ tip.style.left=(e.clientX+14)+'px'; tip.style.top=(e.clientY-30)+'px'; }
+  function hideTip(){ tip.style.opacity='0'; }
+
+  metrics.forEach(function(metric) {
+    var row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:130px repeat(3,1fr);align-items:center;margin-bottom:1.5rem';
+
+    // Row label
+    var lbl = document.createElement('div');
+    lbl.style.cssText = 'text-align:right;padding-right:18px';
+    lbl.innerHTML = '<div style="font-weight:600;font-size:0.85rem;color:'+metricInfo[metric].color+'">'+metricInfo[metric].title+'</div>'
+      +'<div style="font-size:0.68rem;color:var(--text-3);margin-top:2px">NORMA vs personalized</div>';
+    row.appendChild(lbl);
+
+    diseases.forEach(function(disease, di) {
+      var vals  = rawData[metric][disease];
+      var posC  = posColors[metric];
+
+      var cell = document.createElement('div');
+      cell.style.cssText = 'display:flex;justify-content:center;align-items:center;padding:6px';
+      var wrap = document.createElement('div');
+      wrap.style.cssText = 'position:relative;width:'+SZ+'px;height:'+SZ+'px';
+
+      var svg = d3.create('svg').attr('width',SZ).attr('height',SZ).attr('viewBox','0 0 '+SZ+' '+SZ);
+
+      // Background
+      svg.append('circle').attr('cx',CX).attr('cy',CY).attr('r',OUTER+18)
+         .attr('fill','var(--surface)').attr('stroke','var(--border)').attr('stroke-width',1);
+      svg.append('circle').attr('cx',CX).attr('cy',CY).attr('r',INNER+GAP)
+         .attr('fill','var(--bg)');
+
+      // Ticks
+      for(var i=0;i<N;i++){
+        svg.append('path').attr('d',tickPath(i)).attr('stroke','var(--border)')
+           .attr('stroke-width',0.5).attr('fill','none');
+      }
+
+      // Sort by value descending
+      var sorted = analytes.map(function(a,i){return{a:a,val:vals[i]};})
+                           .sort(function(x,y){return y.val-x.val;});
+
+      var maxPos = Math.max.apply(null, sorted.map(function(d){return d.val;}).filter(function(v){return v>0;})) || 1e-9;
+
+      // Bars
+      sorted.forEach(function(d,i){
+        var isPos = d.val >= 0;
+        var col   = isPos ? posC : negCol;
+        var normV = isPos ? d.val/maxPos : d.val;
+        var draw  = Math.sign(normV===0?1:normV) * Math.max(Math.abs(normV), isPos?0.05:0.07);
+        var baseOp= isPos ? (d.val>0.08?0.87:0.30) : 0.50;
+
+        svg.append('path').attr('d',barPath(i,draw)).attr('fill',col).attr('opacity',baseOp)
+           .style('cursor','pointer')
+           .on('mouseenter',function(e){
+             d3.select(this).attr('opacity',1).attr('stroke','#1d1d1f').attr('stroke-width',0.7);
+             showTip(e, d.a, d.val);
+           })
+           .on('mousemove',moveTip)
+           .on('mouseleave',function(){
+             d3.select(this).attr('opacity',baseOp).attr('stroke','none');
+             hideTip();
+           });
+      });
+
+      // Outer ring
+      svg.append('circle').attr('cx',CX).attr('cy',CY).attr('r',OUTER)
+         .attr('fill','none').attr('stroke','#d0cdc6').attr('stroke-width',0.6);
+
+      // Labels
+      sorted.forEach(function(d,i){
+        var p = lblXY(i);
+        var anchor = 'middle';
+        if(p[0]>CX+8) anchor='start';
+        if(p[0]<CX-8) anchor='end';
+        svg.append('text').attr('x',p[0]).attr('y',p[1])
+           .attr('text-anchor',anchor).attr('dominant-baseline','middle')
+           .attr('font-size','6px').attr('font-family',"'DM Sans',sans-serif")
+           .attr('fill','var(--text-3)').text(d.a);
+      });
+
+      // Inner circle
+      svg.append('circle').attr('cx',CX).attr('cy',CY).attr('r',INNER)
+         .attr('fill','var(--surface)').attr('stroke','var(--border)').attr('stroke-width',0.8);
+
+      wrap.appendChild(svg.node());
+
+      // Center label
+      var cLabel = document.createElement('div');
+      cLabel.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none';
+      cLabel.innerHTML = '<div style="font-weight:700;font-size:16px;line-height:1;color:'+metricInfo[metric].color+'">'+centerLabels[metric][di]+'</div>'
+        +'<div style="font-size:7.5px;color:var(--text-3);margin-top:3px">best lab \u0394</div>';
+      wrap.appendChild(cLabel);
+      cell.appendChild(wrap);
+      row.appendChild(cell);
+    });
+
+    grid.appendChild(row);
+  });
 })();
 </script>
 </body>

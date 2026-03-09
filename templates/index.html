@@ -1342,43 +1342,14 @@ function showInterpretPanel() {
   document.getElementById('interpret-card').style.display = 'block';
   document.getElementById('btn-retry').style.display = 'none';
   document.getElementById('interpret-body').innerHTML =
-    '<div class="interpret-loading"><div class="dot-pulse"><span></span><span></span><span></span></div>&nbsp;Generating interpretation…</div>';
+    '<span style="color:var(--purple);font-size:0.85rem"><i class="bi bi-stars"></i> AI-powered interpretation coming soon.</span>';
 }
 
 async function requestInterpretation() {
   if (!currentResult || !currentPayload) return;
   document.getElementById('btn-retry').style.display = 'none';
   document.getElementById('interpret-body').innerHTML =
-    '<div class="interpret-loading"><div class="dot-pulse"><span></span><span></span><span></span></div>&nbsp;Generating interpretation…</div>';
-  try {
-    const resp = await fetch('/api/interpret', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        test_name:   currentPayload.test_name,
-        sex:         currentPayload.sex,
-        age:         currentPayload.age,
-        history:     currentPayload.history,
-        pred_date:   currentResult.pred_date,
-        predictions: currentResult.predictions,
-        ref_low:     currentResult.ref_low,
-        ref_high:    currentResult.ref_high,
-        unit:        currentResult.unit,
-      })
-    });
-    const d = await resp.json();
-    const body = document.getElementById('interpret-body');
-    if (d.error) {
-      body.innerHTML = `<span style="color:var(--text-3);font-size:0.8rem"><i class="bi bi-info-circle"></i> ${d.error}</span>`;
-      document.getElementById('btn-retry').style.display = 'inline-flex';
-    } else {
-      body.textContent = d.interpretation;
-      if (currentResult) currentResult._interpretation = d.interpretation;
-    }
-  } catch(e) {
-    document.getElementById('interpret-body').innerHTML =
-      `<span style="color:var(--text-3);font-size:0.8rem">Could not reach interpretation service.</span>`;
-    document.getElementById('btn-retry').style.display = 'inline-flex';
-  }
+    '<span style="color:var(--purple);font-size:0.85rem"><i class="bi bi-stars"></i> AI-powered interpretation coming soon.</span>';
 }
 
 // ── Saved runs ──
