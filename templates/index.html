@@ -437,33 +437,7 @@
     .btn-sm-pill.purple { border-color: rgba(191,90,242,0.3); color: #7b2f9e; }
     .btn-sm-pill.purple:hover { background: #fbf4ff; }
 
-    /* ── Sensitivity / What if explorer ── */
-    .sens-param-group {
-      display: flex; gap: 0; background: var(--bg); border: 1px solid var(--border);
-      border-radius: var(--r-md); overflow: hidden; margin-bottom: 0.75rem;
-    }
-    .sparam-btn {
-      flex: 1; background: none; border: none; border-right: 1px solid var(--border);
-      padding: 0.5rem 0.4rem; cursor: pointer; display: flex; flex-direction: column;
-      align-items: center; gap: 0.18rem; font-size: 0.62rem; font-weight: 600;
-      color: var(--text-2); transition: all 0.15s; font-family: inherit; line-height: 1.2;
-    }
-    .sparam-btn:last-child { border-right: none; }
-    .sparam-btn i { font-size: 1rem; display: block; }
-    .sparam-btn:hover { background: rgba(0,113,227,0.06); color: var(--accent); }
-    .sparam-btn.active { background: var(--accent); color: #fff; }
-    .btn-sm-pill.purple { border-color: rgba(191,90,242,0.3); color: var(--purple); }
-    .btn-sm-pill.purple:hover { background: #fbf4ff; }
-
     /* What if controls */
-    .whatif-stats {
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem;
-      background: var(--bg); border-radius: var(--r-md); padding: 0.75rem 0.85rem;
-      margin-bottom: 1rem;
-    }
-    .wi-stat-val { font-size: 0.92rem; font-weight: 700; color: var(--text-1); letter-spacing: -0.01em; transition: color 0.2s; }
-    .wi-stat-val.loading { color: var(--text-3); }
-    .wi-stat-label { font-size: 0.6rem; color: var(--text-3); margin-top: 0.1rem; text-transform: uppercase; letter-spacing: 0.04em; }
     .whatif-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
     .whatif-range-labels { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--text-3); margin-top: 0.12rem; }
     .wi-val { font-weight: 700; color: var(--accent); }
@@ -475,7 +449,6 @@
     }
     .whatif-seg-btn:hover { border-color: rgba(0,113,227,0.3); color: var(--accent); }
     .whatif-seg-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-    .sweep-label { font-size: 0.66rem; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.45rem; margin-top: 0.25rem; }
 
 
     /* Example loader */
@@ -599,11 +572,6 @@
         </select>
         <div class="ref-pill"><i class="bi bi-rulers"></i><span id="ref-text">—</span></div>
 
-        <!-- Example loader — prominent, right under lab selector -->
-        <div class="example-load-row">
-          <span class="example-load-label"><i class="bi bi-person-lines-fill"></i> Load a patient case</span>
-          <div class="example-nav" id="example-nav"></div>
-        </div>
       </div>
 
       <!-- Demographics -->
@@ -632,6 +600,7 @@
           <div class="section-label mb-0">History</div>
           <div class="d-flex gap-1">
             <button class="btn-icon" onclick="addRow()"><i class="bi bi-plus-lg"></i> Add</button>
+            <button class="btn-icon" onclick="cycleExample()"><i class="bi bi-person-lines-fill"></i> Example</button>
           </div>
         </div>
         <table id="history-table">
@@ -703,26 +672,6 @@
       </div>
       <div class="card-body">
 
-        <!-- Live stats readout -->
-        <div class="whatif-stats">
-          <div>
-            <div class="wi-stat-val" id="wi-mu">—</div>
-            <div class="wi-stat-label">predicted value</div>
-          </div>
-          <div>
-            <div class="wi-stat-val" id="wi-ci">—</div>
-            <div class="wi-stat-label">95% interval</div>
-          </div>
-          <div>
-            <div class="wi-stat-val" id="wi-width">—</div>
-            <div class="wi-stat-label">interval width</div>
-          </div>
-          <div>
-            <div class="wi-stat-val" id="wi-pop">—</div>
-            <div class="wi-stat-label">population range</div>
-          </div>
-        </div>
-
         <!-- Tunable controls -->
         <div style="display:flex;flex-direction:column;gap:0.9rem;margin-bottom:1rem">
 
@@ -749,22 +698,15 @@
             <div class="whatif-range-labels"><span>1 day</span><span>2 years</span></div>
           </div>
 
+          <!-- Noise -->
+          <div>
+            <div style="font-size:0.82rem;margin-bottom:0.3rem">What if there is <span class="wi-val" id="wi-noise-label">0%</span> noise in the trajectory?</div>
+            <input type="range" id="wi-noise" class="whatif-slider" min="0" max="50" value="0">
+            <div class="whatif-range-labels"><span>0%</span><span>50%</span></div>
+          </div>
+
         </div>
 
-        <!-- Sweep chart: full range view -->
-        <div class="sweep-label">Explore across full range</div>
-        <div class="sens-param-group">
-          <button class="sparam-btn active" id="sp-age"     onclick="setSensParam('age')">
-            <i class="bi bi-person"></i>Age
-          </button>
-          <button class="sparam-btn"        id="sp-sex"     onclick="setSensParam('sex')">
-            <i class="bi bi-gender-ambiguous"></i>Sex
-          </button>
-          <button class="sparam-btn"        id="sp-horizon" onclick="setSensParam('horizon')">
-            <i class="bi bi-calendar-range"></i>Horizon
-          </button>
-        </div>
-        <div id="sens-chart" style="width:100%;height:200px"></div>
 
       </div>
     </div>
@@ -873,48 +815,27 @@ function seedDefaults() {
 }
 
 // ── Load example ──
-// ── Example navigator ──
 let _exampleIdx   = 0;
 let _exampleCount = 0;
+
+function cycleExample() {
+  _exampleIdx = (_exampleIdx + 1) % Math.max(_exampleCount, 1);
+  loadExample(_exampleIdx);
+}
 
 async function initExampleNav() {
   const test = document.getElementById('sel-test').value;
   try {
     const resp = await fetch(`/api/example/${test}?idx=0`);
     const data = await resp.json();
-    if (data.n_examples) buildExampleNav(data.n_examples);
+    if (data.n_examples) _exampleCount = data.n_examples;
   } catch(e) {}
-}
-
-function buildExampleNav(n) {
-  _exampleCount = n;
-  const nav = document.getElementById('example-nav');
-  nav.innerHTML = '';
-  for (let i = 0; i < n; i++) {
-    const btn = document.createElement('button');
-    btn.className = 'ex-btn' + (i === 0 ? ' active' : '');
-    btn.textContent = i + 1;
-    btn.title = `Patient example ${i + 1}`;
-    btn.onclick = () => loadExample(i);
-    nav.appendChild(btn);
-  }
-}
-
-function setExampleNavActive(idx) {
-  document.querySelectorAll('.ex-btn').forEach((btn, i) => {
-    btn.classList.toggle('active', i === idx);
-    btn.classList.remove('loading');
-  });
 }
 
 async function loadExample(idx) {
   if (idx === undefined) idx = _exampleIdx;
   const test = document.getElementById('sel-test').value;
   const url  = `/api/example/${test}?idx=${idx}`;
-
-  // Mark button as loading
-  const btns = document.querySelectorAll('.ex-btn');
-  if (btns[idx]) btns[idx].classList.add('loading');
 
   try {
     const resp = await fetch(url);
@@ -944,6 +865,8 @@ async function loadExample(idx) {
       };
       currentPayload = payload;
       currentResult  = data;
+      _originalPayload = JSON.parse(JSON.stringify(payload));
+      _originalResult  = JSON.parse(JSON.stringify(data));
       drawChart(payload, data);
       drawDistChart(payload, data);
       drawPredSummary(payload, data);
@@ -952,17 +875,14 @@ async function loadExample(idx) {
       showInterpretPanel();
       _wiSweeps = data.wi_sweeps || null;
       initWhatIfControls();
-      drawWhatIfStats(data);
       requestInterpretation();
-      runSensitivity();
     }
 
     // Update example navigator state
     _exampleIdx = data.idx ?? idx;
-    if (data.n_examples && !_exampleCount) buildExampleNav(data.n_examples);
-    setExampleNavActive(_exampleIdx);
+    if (data.n_examples) _exampleCount = data.n_examples;
 
-  } catch(e) { showToast('Failed to load example', true); }
+  } catch(e) { console.error('loadExample error:', e); showToast('Failed to load example: ' + e.message, true); }
 }
 
 // ── Predict ──
@@ -985,6 +905,8 @@ async function runPredict() {
     if (data.error) { showToast(data.error, true); return; }
     currentPayload = payload;
     currentResult  = data;
+    _originalPayload = JSON.parse(JSON.stringify(payload));
+    _originalResult  = JSON.parse(JSON.stringify(data));
     _wiSweeps = null;  // manual predict — no pre-computed sweeps
     drawChart(payload, data);
     drawDistChart(payload, data);
@@ -993,9 +915,7 @@ async function runPredict() {
     document.getElementById('btn-save').disabled = false;
     showInterpretPanel();
     initWhatIfControls();
-    drawWhatIfStats(data);
     requestInterpretation();
-    runSensitivity();
   } catch(e) {
     showToast('Prediction failed: ' + e.message, true);
   } finally {
@@ -1012,25 +932,34 @@ function drawPredSummary(payload, data) {
 
   const mu = norm.mu, ciLo = norm.ci_lower, ciHi = norm.ci_upper;
   const gmmOk = gmm && !gmm.error;
+  const actualVal = data.actual_value;
+
+  // Classification badge helper
+  const clf = data.classifications || {};
+  const clfColor = v => v === 'Low' ? 'var(--low)' : v === 'High' ? 'var(--high)' : 'var(--normal)';
+  const clfBadge = v => v ? `<span style="display:inline-block;font-size:0.6rem;font-weight:700;color:${clfColor(v)};border:1px solid ${clfColor(v)};border-radius:4px;padding:0 0.3rem;margin-left:0.3rem">${v}</span>` : '';
 
   const predDateBadge = document.getElementById('pred-date-badge');
   predDateBadge.textContent = `Pred: ${pred_date}`;
   predDateBadge.style.display = '';
   document.getElementById('pred-summary').style.display = 'flex';
 
+  const actualLabel = actualVal != null ? `<div style="font-size:0.67rem;color:var(--text-3);margin-top:0.15rem">Actual: <strong style="color:var(--text-1)">${actualVal.toFixed(1)}</strong> ${unit}</div>` : '';
+
   document.getElementById('pred-summary').innerHTML = `
     <div class="mk-pill">
       <span class="mk-swatch" style="background:#0071e3"></span>
       <div>
-        <div class="mk-label">NORMA</div>
+        <div class="mk-label">NORMA ${clfBadge(clf.norma)}</div>
         <div class="mk-val" style="color:#0071e3">${mu.toFixed(1)} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
         <div class="mk-ci">95% CI: ${ciLo.toFixed(1)} – ${ciHi.toFixed(1)}</div>
+        ${actualLabel}
       </div>
     </div>
     ${gmmOk ? `<div class="mk-pill">
       <span class="mk-swatch" style="background:#bf5af2"></span>
       <div>
-        <div class="mk-label">Personalized (GMM)</div>
+        <div class="mk-label">Personalized (GMM) ${clfBadge(clf.personalized)}</div>
         <div class="mk-val" style="color:#bf5af2">${gmm.mu.toFixed(1)} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
         <div class="mk-ci">95% CI: ${gmm.ci_lower.toFixed(1)} – ${gmm.ci_upper.toFixed(1)}</div>
       </div>
@@ -1038,14 +967,14 @@ function drawPredSummary(payload, data) {
     <div class="mk-pill">
       <span class="mk-swatch" style="background:#aeaeb2"></span>
       <div>
-        <div class="mk-label">Population ref range</div>
+        <div class="mk-label">Population ref range ${clfBadge(clf.population)}</div>
         <div class="mk-val">${ref_low} – ${ref_high} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
         <div class="mk-ci">Standard reference interval</div>
       </div>
     </div>`;
 }
 
-// ── Timeline chart (demo-style: history, ref band, forecast line, annotations) ──
+// ── Timeline chart with separate bell curve panel ──
 function drawChart(payload, data) {
   const { history, test_name, pred_date } = payload;
   const { predictions: preds, gmm_prediction: gmm, ref_low, ref_high, unit } = data;
@@ -1061,45 +990,27 @@ function drawChart(payload, data) {
   const refMu  = (ref_low + ref_high) / 2;
   const refSig = (ref_high - ref_low) / 3.92;
 
-  // Compute scale for bell curve fan (width in ms)
-  const firstMs  = new Date(histX[0]).getTime();
-  const lastMs   = new Date(histX[histX.length - 1]).getTime();
-  const predMs   = new Date(pred_date).getTime();
-  const histSpanDays = (lastMs - firstMs) / 86400000 || 30;
-  const scaleDays    = Math.min(120, Math.max(25, histSpanDays * 0.22));
-  const xDate = ms => new Date(ms).toISOString().slice(0, 10);
+  const actualVal = data.actual_value;
+  const actualDate = data.actual_date || pred_date;
 
-  // Helper: build a vertical KDE "teardrop" trace anchored at pred_date
-  function bellTrace(bellMu, bellSig, color, fillcolor, name) {
-    const ys   = linspace(bellMu - 3.2 * bellSig, bellMu + 3.2 * bellSig, 120);
-    const pdfs = gaussianPdf(ys, bellMu, bellSig);
-    const peak = Math.max(...pdfs);
-    const xs   = pdfs.map(p => xDate(predMs + (p / peak) * scaleDays * 86400000));
-    return {
-      x: [pred_date, ...xs, pred_date],
-      y: [ys[0],     ...ys, ys[ys.length - 1]],
-      fill: 'toself', fillcolor,
-      line: { color, width: 1.5 },
-      mode: 'lines', name,
-      hovertemplate: '%{y:.2f} ' + unit + '<extra>' + name + '</extra>',
-    };
-  }
-
-  const xAxisMax = xDate(predMs + scaleDays * 1.15 * 86400000);
-
-  const allVals = [...histY, mu, ciLo, ciHi, ref_low, ref_high, ...(gmmOk ? [gmmMu] : [])];
-  const pad  = (Math.max(...allVals) - Math.min(...allVals)) * 0.12 || 1;
-  const yMin = Math.min(...allVals) - pad;
-  const yMax = Math.max(...allVals) + pad;
+  const allMu  = [norm.mu, refMu, ...(gmmOk ? [gmmMu] : [])];
+  const allSig = [norm.sigma, refSig, ...(gmmOk ? [gmmSig] : [])];
+  const allVals = [...histY, mu, ciLo, ciHi, ref_low, ref_high, ...(gmmOk ? [gmmMu] : []), ...(actualVal != null ? [actualVal] : [])];
+  const pad  = (Math.max(...allVals) - Math.min(...allVals)) * 0.08 || 1;
+  const yMin = Math.min(...allVals, ...allMu.map((m,i) => m - 3.5*allSig[i])) - pad;
+  const yMax = Math.max(...allVals, ...allMu.map((m,i) => m + 3.5*allSig[i])) + pad;
 
   const traces = [];
 
-  // 1. Ref range shaded band (history region only)
+  // ── Left subplot (xaxis): trajectory ──
+
+  // 1. Ref range shaded band
   traces.push({
     x:[histX[0], pred_date, pred_date, histX[0]],
     y:[ref_high, ref_high, ref_low, ref_low],
     fill:'toself', fillcolor:'rgba(174,174,178,0.07)',
     line:{width:0}, showlegend:false, hoverinfo:'skip', mode:'lines',
+    xaxis:'x', yaxis:'y',
   });
 
   // 2. History line
@@ -1107,6 +1018,7 @@ function drawChart(payload, data) {
     x:histX, y:histY, mode:'lines+markers', name:'History',
     line:{color:'#6e6e73', width:1.5}, marker:{color:'#6e6e73', size:5},
     hovertemplate:'%{x}<br>%{y:.2f} '+unit+'<extra>History</extra>',
+    xaxis:'x', yaxis:'y',
   });
 
   // 3. Dashed connector from last obs to NORMA mean
@@ -1115,51 +1027,109 @@ function drawChart(payload, data) {
     x:[lastD, pred_date], y:[lastV, mu],
     mode:'lines', showlegend:false,
     line:{color:'#0071e3', width:1.2, dash:'dot'}, hoverinfo:'skip',
+    xaxis:'x', yaxis:'y',
   });
 
-  // 4. Vertical KDE bell curves (population → personalized → NORMA, drawn back to front)
-  traces.push(bellTrace(refMu,  refSig,  'rgba(174,174,178,0.9)', 'rgba(174,174,178,0.13)', 'Population'));
-  if (gmmOk) {
-    traces.push(bellTrace(gmmMu, gmmSig, 'rgba(191,90,242,0.8)',  'rgba(191,90,242,0.10)',  'Personalized'));
-  }
-  traces.push(bellTrace(norm.mu, norm.sigma, 'rgba(0,113,227,0.9)', 'rgba(0,113,227,0.12)', 'NORMA'));
-
-  // 5. Mean markers at prediction date
+  // 4. Mean markers at prediction date
   traces.push({
     x:[pred_date], y:[mu], mode:'markers', name:'NORMA mean',
     marker:{color:'#0071e3', size:9, symbol:'diamond'},
     hovertemplate:pred_date+'<br>%{y:.2f} '+unit+' (NORMA)<extra></extra>',
+    xaxis:'x', yaxis:'y',
   });
   if (gmmOk) {
     traces.push({
       x:[pred_date], y:[gmmMu], mode:'markers', name:'GMM mean',
       marker:{color:'#bf5af2', size:7, symbol:'circle'},
       hovertemplate:pred_date+'<br>%{y:.2f} '+unit+' (Personalized)<extra></extra>',
+      xaxis:'x', yaxis:'y',
     });
   }
 
+  // 5. Actual observed value
+  if (actualVal != null) {
+    traces.push({
+      x:[actualDate], y:[actualVal], mode:'markers', name:'Actual',
+      marker:{color:'#ff3b30', size:11, symbol:'star', line:{width:1.5, color:'#fff'}},
+      hovertemplate:actualDate+'<br>%{y:.2f} '+unit+' (Actual)<extra></extra>',
+      xaxis:'x', yaxis:'y',
+    });
+  }
+
+  // ── Right subplot (xaxis2): vertical bell curves ──
+  function bellTrace(bellMu, bellSig, color, fillcolor, name) {
+    const ys   = linspace(bellMu - 3.2 * bellSig, bellMu + 3.2 * bellSig, 120);
+    const pdfs = gaussianPdf(ys, bellMu, bellSig);
+    const peak = Math.max(...pdfs);
+    const xs   = pdfs.map(p => p / peak);  // normalize to 0–1
+    return {
+      x: [0, ...xs, 0], y: [ys[0], ...ys, ys[ys.length - 1]],
+      fill: 'toself', fillcolor,
+      line: { color, width: 1.5 },
+      mode: 'lines', name,
+      hovertemplate: '%{y:.2f} ' + unit + '<extra>' + name + '</extra>',
+      xaxis:'x2', yaxis:'y',
+    };
+  }
+
+  traces.push(bellTrace(refMu, refSig, 'rgba(174,174,178,0.9)', 'rgba(174,174,178,0.13)', 'Population'));
+  if (gmmOk) {
+    traces.push(bellTrace(gmmMu, gmmSig, 'rgba(191,90,242,0.8)', 'rgba(191,90,242,0.10)', 'Personalized'));
+  }
+  traces.push(bellTrace(norm.mu, norm.sigma, 'rgba(0,113,227,0.9)', 'rgba(0,113,227,0.12)', 'NORMA'));
+
+  // Mean markers on bell panel
+  traces.push({
+    x:[0], y:[mu], mode:'markers', showlegend:false,
+    marker:{color:'#0071e3',size:7,symbol:'diamond'}, hoverinfo:'skip',
+    xaxis:'x2', yaxis:'y',
+  });
+  if (gmmOk) {
+    traces.push({
+      x:[0], y:[gmmMu], mode:'markers', showlegend:false,
+      marker:{color:'#bf5af2',size:5,symbol:'circle'}, hoverinfo:'skip',
+      xaxis:'x2', yaxis:'y',
+    });
+  }
+  // Actual value line on bell panel
+  if (actualVal != null) {
+    traces.push({
+      x:[0, 1], y:[actualVal, actualVal], mode:'lines', showlegend:false,
+      line:{color:'#ff3b30', width:1.5, dash:'dash'}, hoverinfo:'skip',
+      xaxis:'x2', yaxis:'y',
+    });
+  }
+
+  // ── Shapes & annotations ──
   const shapes = [
     {type:'line', x0:pred_date, x1:pred_date, y0:yMin, y1:yMax,
-     line:{color:'rgba(0,0,0,0.12)', width:1, dash:'dot'}},
+     line:{color:'rgba(0,0,0,0.12)', width:1, dash:'dot'}, xref:'x', yref:'y'},
     {type:'line', x0:histX[0], x1:pred_date, y0:ref_high, y1:ref_high,
-     line:{color:'rgba(255,159,10,0.45)', width:1, dash:'dot'}},
+     line:{color:'rgba(255,159,10,0.45)', width:1, dash:'dot'}, xref:'x', yref:'y'},
     {type:'line', x0:histX[0], x1:pred_date, y0:ref_low, y1:ref_low,
-     line:{color:'rgba(255,59,48,0.45)', width:1, dash:'dot'}},
+     line:{color:'rgba(255,59,48,0.45)', width:1, dash:'dot'}, xref:'x', yref:'y'},
+    // Ref lines on bell panel
+    {type:'line', x0:0,x1:1, y0:ref_high,y1:ref_high,
+     line:{color:'rgba(255,159,10,0.3)',width:1,dash:'dot'}, xref:'x2', yref:'y'},
+    {type:'line', x0:0,x1:1, y0:ref_low,y1:ref_low,
+     line:{color:'rgba(255,59,48,0.3)',width:1,dash:'dot'}, xref:'x2', yref:'y'},
   ];
   const annotations = [
     {x:histX[0], y:ref_high, xanchor:'left', yanchor:'bottom',
-     showarrow:false, text:' High ('+ref_high+')', font:{size:9, color:'#ff9f0a'}},
+     showarrow:false, text:' High ('+ref_high+')', font:{size:9, color:'#ff9f0a'}, xref:'x', yref:'y'},
     {x:histX[0], y:ref_low,  xanchor:'left', yanchor:'top',
-     showarrow:false, text:' Low ('+ref_low+')',  font:{size:9, color:'#ff3b30'}},
+     showarrow:false, text:' Low ('+ref_low+')',  font:{size:9, color:'#ff3b30'}, xref:'x', yref:'y'},
     {x:pred_date, y:yMax, xanchor:'left', yanchor:'top',
-     showarrow:false, text:' forecast →', font:{size:9, color:'#aeaeb2'}},
+     showarrow:false, text:' forecast', font:{size:9, color:'#aeaeb2'}, xref:'x', yref:'y'},
   ];
 
   const layout = {
-    margin:{l:46, r:14, t:10, b:52},
+    margin:{l:46, r:10, t:10, b:52},
     font:{family:'DM Sans,sans-serif', size:11, color:'#6e6e73'},
-    xaxis:{title:'Date', type:'date', range:[histX[0], xAxisMax],
+    xaxis:{title:'Date', type:'date', domain:[0, 0.72],
            showgrid:true, gridcolor:'rgba(0,0,0,0.05)', zeroline:false},
+    xaxis2:{domain:[0.76, 1], showticklabels:false, showgrid:false, zeroline:false,
+            range:[0, 1.15]},
     yaxis:{title:unit, range:[yMin, yMax], showgrid:true, gridcolor:'rgba(0,0,0,0.05)', zeroline:false},
     legend:{orientation:'h', y:-0.22, font:{size:11}},
     hovermode:'closest',
@@ -1421,16 +1391,27 @@ function scrollToRuns() {
 }
 
 // ── What if? Explorer ──
-let _sensParam  = 'age';
-let _wiAge = 55, _wiSex = 0, _wiHorizon = 30;
+let _wiAge = 55, _wiSex = 0, _wiHorizon = 30, _wiNoise = 0;
 let _wiDebounceTimer = null;
-let _wiSweeps = null;   // pre-computed from example cache: {age: [...], sex: [...], horizon: [...]}
+let _wiSweeps = null;
+let _originalPayload = null;
+let _originalResult  = null;
 
-// Initialise slider values from the current prediction payload
+function addNoiseToHistory(history, noisePct) {
+  if (!noisePct || noisePct <= 0) return history;
+  return history.map(h => {
+    const range = Math.abs(h.value) * (noisePct / 100);
+    const noisy = h.value + (Math.random() * 2 - 1) * range;
+    return { ...h, value: Math.round(noisy * 100) / 100 };
+  });
+}
+
 function initWhatIfControls() {
   if (!currentPayload) return;
+  document.getElementById('sens-card').style.display = 'block';
   _wiAge = currentPayload.age || 55;
   _wiSex = currentPayload.sex || 0;
+  _wiNoise = 0;
 
   const history = currentPayload.history;
   const sorted  = [...history].sort((a,b) => a.date.localeCompare(b.date));
@@ -1438,24 +1419,29 @@ function initWhatIfControls() {
   const predMs  = new Date(currentPayload.pred_date).getTime();
   _wiHorizon = Math.max(1, Math.min(730, Math.round((predMs - lastMs) / 86400000) || 30));
 
-  // Update panel slider values + labels
   document.getElementById('wi-age').value = _wiAge;
   document.getElementById('wi-age-label').textContent = _wiAge;
   setWiSex(_wiSex, false);
   document.getElementById('wi-horizon').value = _wiHorizon;
   document.getElementById('wi-horizon-label').textContent = horizonLabel(_wiHorizon);
+  document.getElementById('wi-noise').value = 0;
+  document.getElementById('wi-noise-label').textContent = '0%';
 
-  // Panel age slider
   document.getElementById('wi-age').oninput = function() {
     _wiAge = parseInt(this.value);
     document.getElementById('wi-age-label').textContent = _wiAge;
     scheduleWiUpdate();
   };
 
-  // Panel horizon slider
   document.getElementById('wi-horizon').oninput = function() {
     _wiHorizon = parseInt(this.value);
     document.getElementById('wi-horizon-label').textContent = horizonLabel(_wiHorizon);
+    scheduleWiUpdate();
+  };
+
+  document.getElementById('wi-noise').oninput = function() {
+    _wiNoise = parseInt(this.value);
+    document.getElementById('wi-noise-label').textContent = _wiNoise + '%';
     scheduleWiUpdate();
   };
 }
@@ -1476,274 +1462,50 @@ function setWiSex(val, update=true) {
 }
 
 function scheduleWiUpdate() {
-  // Instant — no debounce needed since we're reading from cached grid
-  updateWhatIf();
+  clearTimeout(_wiDebounceTimer);
+  _wiDebounceTimer = setTimeout(applyWhatIfAndRedraw, 300);
 }
 
-// Instant what-if lookup from pre-computed sweep cache
-function updateWhatIf() {
-  if (!currentPayload || !currentResult) return;
+async function applyWhatIfAndRedraw() {
+  if (!_originalPayload) return;
 
-  // If no sweep cache (manual predict, not example), fall back gracefully
-  if (!_wiSweeps) {
-    runSensitivity();
-    return;
-  }
+  const history = addNoiseToHistory(_originalPayload.history, _wiNoise);
+  const sorted  = [...history].sort((a,b) => a.date.localeCompare(b.date));
+  const lastMs  = new Date(sorted[sorted.length - 1].date).getTime();
+  const pred_date = new Date(lastMs + _wiHorizon * 86400000).toISOString().slice(0,10);
 
-  // Find nearest point in each sweep axis
-  function nearest(sweep, val) {
-    return sweep.reduce((best, r) =>
-      Math.abs(r.value - val) < Math.abs(best.value - val) ? r : best);
-  }
+  try {
+    const pdR = await fetch('/api/predict', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ test_name: _originalPayload.test_name, sex: _wiSex, age: _wiAge, history, pred_date }),
+    });
+    const data = await pdR.json();
+    if (data.error) return;
 
-  // Pick the sweep axis that most recently changed to drive the stats
-  // Use the last-changed param heuristic: prefer sex match, then age, then horizon
-  const byAge     = nearest(_wiSweeps.age,     _wiAge);
-  const bySex     = nearest(_wiSweeps.sex,     _wiSex);
-  const byHorizon = nearest(_wiSweeps.horizon, _wiHorizon);
-
-  // Blend: use the swept point for the current _sensParam, others from base
-  const primary = _sensParam === 'age'     ? byAge
-                : _sensParam === 'sex'     ? bySex
-                : byHorizon;
-
-  const sorted      = [...currentPayload.history].sort((a,b) => a.date.localeCompare(b.date));
-  const lastMs      = new Date(sorted[sorted.length - 1].date).getTime();
-  const newPredDate = new Date(lastMs + _wiHorizon * 86400000).toISOString().slice(0,10);
-
-  // Build a synthetic data object for the stats/overlay functions
-  const unit = currentResult.unit || '';
-  const wiData = {
-    unit,
-    ref_low:  primary.ref_low,
-    ref_high: primary.ref_high,
-    predictions: { Normal: {
-      mu:       primary.mu,
-      sigma:    primary.sigma,
-      ci_lower: primary.ci_lower,
-      ci_upper: primary.ci_upper,
-    }},
-  };
-
-  drawWhatIfStats(wiData);
-  updateChartWhatIfOverlay(wiData, newPredDate);
-  updatePredSummaryWhatIf(wiData, newPredDate);
-  document.getElementById('wi-reset-btn').style.display = '';
-  runSensitivity();
+    const payload = { ..._originalPayload, sex: _wiSex, age: _wiAge, history, pred_date };
+    currentPayload = payload;
+    currentResult  = data;
+    drawChart(payload, data);
+    drawDistChart(payload, data);
+    drawPredSummary(payload, data);
+    document.getElementById('wi-reset-btn').style.display = '';
+  } catch(e) { /* silent */ }
 }
 
 function resetWhatIf() {
-  // Remove chart overlay
-  const el = document.getElementById('main-chart');
-  if (el && el.data && el.data.length > _baseTraceCount) {
-    Plotly.deleteTraces(el, Array.from({length: el.data.length - _baseTraceCount}, (_,i) => _baseTraceCount + i));
-  }
-  // Restore pred-summary to original prediction
-  if (currentPayload && currentResult) {
-    drawPredSummary(currentPayload, currentResult);
-    drawWhatIfStats(currentResult);
-    initWhatIfControls();
-  }
+  if (!_originalPayload || !_originalResult) return;
+  currentPayload = JSON.parse(JSON.stringify(_originalPayload));
+  currentResult  = JSON.parse(JSON.stringify(_originalResult));
+  drawChart(currentPayload, currentResult);
+  drawDistChart(currentPayload, currentResult);
+  drawPredSummary(currentPayload, currentResult);
+  initWhatIfControls();
   document.getElementById('wi-reset-btn').style.display = 'none';
 }
 
-function updatePredSummaryWhatIf(wiData, wiPredDate) {
-  const norm = wiData.predictions?.['Normal'];
-  if (!norm || norm.error) return;
-  const unit = wiData.unit || '';
-  const mu = norm.mu, ciLo = norm.ci_lower, ciHi = norm.ci_upper;
-
-  // Update the NORMA pill to show the what-if prediction with a tinted background
-  const summary = document.getElementById('pred-summary');
-  if (!summary) return;
-  const nPill = summary.querySelector('.mk-pill');
-  if (!nPill) return;
-  nPill.style.borderColor = 'rgba(48,209,88,0.4)';
-  nPill.style.background  = 'rgba(48,209,88,0.06)';
-  nPill.querySelector('.mk-val').textContent = mu.toFixed(1);
-  nPill.querySelector('.mk-ci').textContent  = `95% CI: ${ciLo.toFixed(1)} – ${ciHi.toFixed(1)}`;
-  // Update pred date badge
-  const badge = document.getElementById('pred-date-badge');
-  if (badge) badge.textContent = `What if: ${wiPredDate}`;
-}
-
-// ── Chart overlay for what-if prediction ──
 let _baseTraceCount = 0;
 
-function updateChartWhatIfOverlay(wiData, wiPredDate) {
-  const el = document.getElementById('main-chart');
-  if (!el || !el.data) return;
 
-  const norm = wiData.predictions?.['Normal'];
-  if (!norm || norm.error) return;
-
-  const wiMu  = norm.mu;
-  const wiLo  = norm.ci_lower;
-  const wiHi  = norm.ci_upper;
-  const unit  = wiData.unit || '';
-  const hist  = currentPayload.history;
-  const lastD = [...hist].sort((a,b) => a.date.localeCompare(b.date)).at(-1).date;
-  const lastV = hist.find(h => h.date === lastD)?.value ?? hist[hist.length-1].value;
-
-  // Check if this is the same as the base prediction (no change needed)
-  const sameDate = wiPredDate === currentPayload.pred_date;
-  const samePred = sameDate &&
-    Math.abs(wiMu - (currentResult.predictions?.Normal?.mu ?? Infinity)) < 0.01;
-  if (samePred) {
-    // Remove overlay if it was there
-    if (el.data.length > _baseTraceCount) {
-      Plotly.deleteTraces(el, Array.from({length: el.data.length - _baseTraceCount}, (_,i) => _baseTraceCount + i));
-    }
-    return;
-  }
-
-  const wiTraces = [
-    // Dashed line from last obs → what-if point
-    {
-      x: [lastD, wiPredDate], y: [lastV, wiMu],
-      mode: 'lines', showlegend: false,
-      line: {color: '#30d158', width: 1.5, dash: 'dash'}, hoverinfo: 'skip',
-    },
-    // CI band
-    {
-      x: [wiPredDate, wiPredDate], y: [wiLo, wiHi],
-      mode: 'lines', showlegend: false,
-      line: {color: 'rgba(48,209,88,0.5)', width: 6}, hoverinfo: 'skip',
-    },
-    // Mean marker
-    {
-      x: [wiPredDate], y: [wiMu],
-      mode: 'markers', name: 'What if…',
-      marker: {color: '#30d158', size: 9, symbol: 'diamond-open',
-               line: {width: 2.5, color: '#30d158'}},
-      hovertemplate: wiPredDate + '<br>%{y:.2f} ' + unit + ' (What if…)<extra></extra>',
-    },
-  ];
-
-  // Remove previous overlay, add new
-  const extraCount = el.data.length - _baseTraceCount;
-  if (extraCount > 0) {
-    Plotly.deleteTraces(el, Array.from({length: extraCount}, (_,i) => _baseTraceCount + i));
-  }
-  Plotly.addTraces(el, wiTraces);
-}
-
-function drawWhatIfStats(data) {
-  const norm = data.predictions?.['Normal'];
-  if (!norm || norm.error) return;
-
-  const mu = norm.mu, ciLo = norm.ci_lower, ciHi = norm.ci_upper;
-  const unit = data.unit || '';
-
-  ['wi-mu','wi-ci','wi-width'].forEach(id => document.getElementById(id).classList.remove('loading'));
-
-  document.getElementById('wi-mu').textContent    = `${mu.toFixed(1)} ${unit}`;
-  document.getElementById('wi-ci').textContent    = `${ciLo.toFixed(1)}–${ciHi.toFixed(1)}`;
-  document.getElementById('wi-width').textContent = `±${((ciHi-ciLo)/2).toFixed(1)} ${unit}`;
-  document.getElementById('wi-pop').textContent   =
-    (data.ref_low != null && data.ref_high != null) ? `${data.ref_low}–${data.ref_high}` : '—';
-}
-
-function setSensParam(param) {
-  _sensParam = param;
-  ['age','sex','horizon'].forEach(p =>
-    document.getElementById(`sp-${p}`).classList.toggle('active', p === param));
-  if (currentPayload && currentResult) runSensitivity();
-}
-
-
-function runSensitivity() {
-  if (!currentPayload || !currentResult) return;
-  document.getElementById('sens-card').style.display = 'block';
-
-  // Use pre-computed sweep cache when available (instant, no API call)
-  if (_wiSweeps && _wiSweeps[_sensParam]) {
-    drawSensChart(_wiSweeps[_sensParam], currentResult.unit || '');
-    return;
-  }
-
-  // Fallback to API for manually-entered (non-example) predictions
-  const { test_name, history } = currentPayload;
-  const sex = _wiSex, age = _wiAge;
-  const sorted  = [...history].sort((a,b) => a.date < b.date ? -1 : 1);
-  const firstMs = new Date(sorted[0].date).getTime();
-  const lastMs  = new Date(sorted[sorted.length - 1].date).getTime();
-  const hist    = sorted.map(h => ({ day: (new Date(h.date).getTime() - firstMs) / 86400000, value: h.value }));
-  const base_t  = (lastMs - firstMs) / 86400000 + _wiHorizon;
-  const sweepValues = _sensParam === 'age' ? [20,30,40,50,60,70,80]
-                    : _sensParam === 'sex' ? [0,1]
-                    : [7,30,60,90,180,365,730];
-
-  fetch('/api/sensitivity', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ test_name, sex, age, history: hist, base_t, param: _sensParam, values: sweepValues }),
-  }).then(r => r.json()).then(data => {
-    if (!data.error) drawSensChart(data.results, data.unit);
-  }).catch(() => {});
-}
-
-function drawSensChart(results, unit) {
-  const ok = results.filter(r => !r.error);
-  if (!ok.length) return;
-
-  const xLabels = ok.map(r => {
-    if (_sensParam === 'age')     return `Age ${r.value}`;
-    if (_sensParam === 'sex')     return r.value ? 'Female' : 'Male';
-    if (_sensParam === 'horizon') return horizonLabel(r.value);
-  });
-
-  const mu    = ok.map(r => r.mu);
-  const ci_lo = ok.map(r => r.ci_lower);
-  const ci_hi = ok.map(r => r.ci_upper);
-  const ref_lo = ok.map(r => r.ref_low);
-  const ref_hi = ok.map(r => r.ref_high);
-
-  const ciErrLo = ok.map((r,i) => mu[i] - ci_lo[i]);
-  const ciErrHi = ok.map((r,i) => ci_hi[i] - mu[i]);
-
-  // Highlight the current what-if value on the sweep
-  const currentVal = _sensParam === 'age' ? _wiAge : _sensParam === 'sex' ? _wiSex : _wiHorizon;
-  const hlIdx = ok.reduce((best, r, i) =>
-    Math.abs(r.value - currentVal) < Math.abs(ok[best].value - currentVal) ? i : best, 0);
-  const markerColors = ok.map((_, i) => i === hlIdx ? '#0071e3' : '#30d158');
-  const markerSizes  = ok.map((_, i) => i === hlIdx ? 10 : 6);
-
-  const traces = [
-    {
-      x: xLabels, y: mu,
-      mode: 'lines+markers', name: 'NORMA μ',
-      line: { color: '#30d158', width: 2 },
-      marker: { color: markerColors, size: markerSizes },
-      error_y: { type:'data', symmetric:false, array: ciErrHi, arrayminus: ciErrLo,
-                 color:'rgba(48,209,88,0.35)', thickness:1.5, width:4 },
-      hovertemplate: '%{x}<br>μ = %{y:.2f} ' + unit + '<extra>NORMA</extra>',
-    },
-    {
-      x: xLabels, y: ref_lo,
-      mode: 'lines', name: 'Pop ref low',
-      line: { color: 'rgba(174,174,178,0.6)', width: 1, dash: 'dot' },
-      hoverinfo: 'skip',
-    },
-    {
-      x: xLabels, y: ref_hi,
-      mode: 'lines', name: 'Pop ref high',
-      line: { color: 'rgba(174,174,178,0.6)', width: 1, dash: 'dot' },
-      fill: 'tonexty', fillcolor: 'rgba(174,174,178,0.07)',
-      hoverinfo: 'skip',
-    },
-  ];
-
-  const paramLabel = { age: 'Age (years)', sex: 'Sex', horizon: 'Time to next test' };
-  Plotly.newPlot('sens-chart', traces, {
-    margin: { l: 42, r: 10, t: 6, b: 38 },
-    font:   { family: 'DM Sans,sans-serif', size: 11, color: '#6e6e73' },
-    xaxis:  { title: paramLabel[_sensParam], showgrid: false },
-    yaxis:  { title: unit, showgrid: true, gridcolor: '#f5f5f7', zeroline: false },
-    legend: { orientation: 'h', y: -0.38, font: { size: 10 } },
-    hovermode: 'closest',
-    plot_bgcolor: '#fff', paper_bgcolor: '#fff',
-  }, { responsive: true, displayModeBar: false });
-}
 
 // ── Utilities ──
 function setLoading(on) {
@@ -1770,7 +1532,6 @@ function showToast(msg, isError=false) {
   // Map card id → readable section name
   const SECTION_NAMES = {
     'chart-card':         'Trajectory',
-    'sens-card':          'What if…?',
     'interpret-card':     'AI Interpretation',
     'saved-runs-section': 'Saved Runs',
   };
@@ -1784,10 +1545,6 @@ function showToast(msg, isError=false) {
       if (entry.isIntersecting && !_revealed.has(entry.target.id)) {
         _revealed.add(entry.target.id);
         entry.target.classList.add('card-reveal');
-        // When What if? card enters view and we have a result, refresh sensitivity
-        if (entry.target.id === 'sens-card' && currentPayload && currentResult) {
-          runSensitivity();
-        }
       }
     });
   }, { root: main, threshold: 0.08 });

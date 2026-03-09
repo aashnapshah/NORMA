@@ -324,21 +324,26 @@ def predict():
     sex01     = int(data['sex'])
     age       = float(data['age'])
     raw_hist  = sorted(data['history'], key=lambda h: h['date'])
-    pred_date = data['pred_date']  # "YYYY-MM-DD", today by default
 
-    if len(raw_hist) < 1:
-        return jsonify({'error': 'Need at least 1 history point'}), 400
+    if len(raw_hist) < 2:
+        return jsonify({'error': 'Need at least 2 history points'}), 400
     if test_name not in TEST_VOCAB:
         return jsonify({'error': f'Unknown test: {test_name}'}), 400
 
+    # Hold out the last data point as actual observed value
+    actual_point = raw_hist[-1]
+    actual_value = float(actual_point['value'])
+    actual_date  = actual_point['date']
+    input_hist   = raw_hist[:-1]
+
     # Convert dates -> days from first measurement
-    first_date = datetime.strptime(raw_hist[0]['date'], '%Y-%m-%d')
+    first_date = datetime.strptime(input_hist[0]['date'], '%Y-%m-%d')
     history = [
         {'day': (datetime.strptime(h['date'], '%Y-%m-%d') - first_date).days,
          'value': float(h['value'])}
-        for h in raw_hist
+        for h in input_hist
     ]
-    t_next = (datetime.strptime(pred_date, '%Y-%m-%d') - first_date).days
+    t_next = (datetime.strptime(actual_date, '%Y-%m-%d') - first_date).days
 
     sex_str = 'F' if sex01 == 1 else 'M'
     low, high, unit = REFERENCE_INTERVALS[test_name][sex_str]
@@ -380,15 +385,35 @@ def predict():
         'ci_upper': high,
     }
 
+    # Classify actual value under each paradigm
+    def classify(val, lo, hi):
+        if val < lo: return 'Low'
+        if val > hi: return 'High'
+        return 'Normal'
+
+    norm_pred = predictions.get('Normal', {})
+    classifications = {
+        'population':    classify(actual_value, low, high),
+        'personalized':  classify(actual_value,
+                                  gmm_prediction.get('ci_lower', low),
+                                  gmm_prediction.get('ci_upper', high)),
+        'norma':         classify(actual_value,
+                                  norm_pred.get('ci_lower', low),
+                                  norm_pred.get('ci_upper', high)),
+    }
+
     return jsonify({
-        'predictions':    predictions,
-        'gmm_prediction': gmm_prediction,
-        'ref_prediction': ref_prediction,
-        'ref_low':        low,
-        'ref_high':       high,
-        'unit':           unit,
-        'pred_date':      pred_date,
-        'dates':          [h['date'] for h in raw_hist],
+        'predictions':     predictions,
+        'gmm_prediction':  gmm_prediction,
+        'ref_prediction':  ref_prediction,
+        'ref_low':         low,
+        'ref_high':        high,
+        'unit':            unit,
+        'pred_date':       actual_date,
+        'actual_value':    actual_value,
+        'actual_date':     actual_date,
+        'classifications': classifications,
+        'dates':           [h['date'] for h in input_hist] + [actual_date],
     })
 
 @app.route('/api/example/<test_name>')
@@ -416,10 +441,33 @@ def example(test_name):
     ]
     pred_date = today.strftime('%Y-%m-%d')
 
+    # Include the actual last observed value for evaluation
+    actual_value = round(x[-1], 2)
+    actual_date  = (first_day + timedelta(days=t[-1])).strftime('%Y-%m-%d')
+
+    # Classify actual value under each paradigm
+    ref_low, ref_high = entry['ref_low'], entry['ref_high']
+    norm_pred = entry['predictions'].get('Normal', {})
+    gmm_pred  = entry['gmm_prediction']
+
+    def classify(val, lo, hi):
+        if val < lo: return 'Low'
+        if val > hi: return 'High'
+        return 'Normal'
+
+    classifications = {
+        'population': classify(actual_value, ref_low, ref_high),
+        'personalized': classify(actual_value, gmm_pred.get('ci_lower', ref_low), gmm_pred.get('ci_upper', ref_high)),
+        'norma': classify(actual_value, norm_pred.get('ci_lower', ref_low), norm_pred.get('ci_upper', ref_high)),
+    }
+
     return jsonify({
         'history':        history,
-        'pred_date':      pred_date,
-        'dates':          [h['date'] for h in history] + [pred_date],
+        'pred_date':      actual_date,
+        'actual_value':   actual_value,
+        'actual_date':    actual_date,
+        'classifications': classifications,
+        'dates':          [h['date'] for h in history] + [actual_date],
         'pid':            entry['pid'],
         'sex':            entry['sex'],
         'age':            entry['age'],
@@ -429,6 +477,7 @@ def example(test_name):
         'ref_low':        entry['ref_low'],
         'ref_high':       entry['ref_high'],
         'unit':           entry['unit'],
+        'wi_sweeps':      entry.get('wi_sweeps'),
         'n_examples':     len(cache),
         'idx':            idx,
     })

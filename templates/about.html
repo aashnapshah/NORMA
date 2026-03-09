@@ -274,11 +274,7 @@ coz<!DOCTYPE html>
       padding: 0.75rem 0 0;
       width: 100%;
       min-width: 0;
-      box-sizing: border-box;
-    }
-    .ex-chart-panel .js-plotly-plot,
-    .ex-chart-panel .plot-container {
-      width: 100% !important;
+      overflow: hidden;
     }
 
     /* Model key pills */
@@ -581,8 +577,8 @@ coz<!DOCTYPE html>
         <span>Live prediction</span>
         <span id="ex-label" style="color:var(--text-3);font-size:0.72rem;margin-left:0.1rem"></span>
         <div style="flex:1"></div>
-        <button onclick="loadDemo(_currentEx?.test || 'LDL')" style="background:none;border:1px solid var(--border);border-radius:var(--r-sm);padding:0.2rem 0.6rem;font-size:0.71rem;color:var(--text-2);cursor:pointer;display:flex;align-items:center;gap:0.28rem">
-          <i class="bi bi-arrow-clockwise"></i> New patient
+        <button onclick="cycleExample()" style="background:none;border:1px solid var(--border);border-radius:var(--r-sm);padding:0.2rem 0.6rem;font-size:0.71rem;color:var(--text-2);cursor:pointer;display:flex;align-items:center;gap:0.28rem">
+          <i class="bi bi-arrow-right-circle"></i> Next example
         </button>
       </div>
 
@@ -628,23 +624,19 @@ coz<!DOCTYPE html>
 
         <!-- What if? interactive explorer -->
         <div class="dpanel" id="ex-tune-wrap" style="display:none;margin-top:1rem">
-          <div class="dpanel-hdr" style="background:linear-gradient(120deg,#f0f8ff 0%,#f5f0ff 100%)">
-            <i class="bi bi-sliders2" style="color:var(--accent)"></i>
-            <div>
-              <div style="font-weight:700">What if…?</div>
-              <div style="font-size:0.67rem;color:var(--text-3);font-weight:400">Adjust parameters and see how NORMA adapts in real time</div>
+          <div class="dpanel-hdr" style="background:linear-gradient(120deg,#f0f8ff 0%,#f5f0ff 100%);display:flex;align-items:center;justify-content:space-between">
+            <div style="display:flex;align-items:center;gap:0.5rem">
+              <i class="bi bi-sliders2" style="color:var(--accent)"></i>
+              <div>
+                <div style="font-weight:700">What if…?</div>
+                <div style="font-size:0.67rem;color:var(--text-3);font-weight:400">Adjust parameters — the chart updates in real time</div>
+              </div>
             </div>
+            <button type="button" onclick="resetTune()" style="background:none;border:1px solid var(--border);border-radius:var(--r-sm);padding:0.2rem 0.6rem;font-size:0.71rem;color:var(--text-2);cursor:pointer;display:flex;align-items:center;gap:0.28rem">
+              <i class="bi bi-arrow-counterclockwise"></i> Reset
+            </button>
           </div>
           <div class="dpanel-body">
-            <!-- Live stats readout -->
-            <div class="wi-stats-row">
-              <div><div class="wi-stat-val" id="tune-norma-val">—</div><div class="wi-stat-lbl">NORMA</div></div>
-              <div><div class="wi-stat-val" id="tune-ci-val">—</div><div class="wi-stat-lbl">95% CI</div></div>
-              <div><div class="wi-stat-val" id="tune-width-val">—</div><div class="wi-stat-lbl">CI width</div></div>
-              <div><div class="wi-stat-val" id="tune-pop-val">—</div><div class="wi-stat-lbl">pop range</div></div>
-            </div>
-
-            <!-- All controls always visible -->
             <div class="wi-controls-grid">
 
               <!-- Age -->
@@ -670,15 +662,11 @@ coz<!DOCTYPE html>
                 <div class="tune-range-ends"><span>1 week</span><span>2 years</span></div>
               </div>
 
-              <!-- hidden lab picker still needed by bindTunePanel -->
-              <div id="tune-lab" style="display:none">
-                <button type="button" class="sbtn" data-lab="HGB">HGB</button>
-                <button type="button" class="sbtn" data-lab="PLT">PLT</button>
-                <button type="button" class="sbtn" data-lab="CRE">CRE</button>
-                <button type="button" class="sbtn" data-lab="GLU">GLU</button>
-                <button type="button" class="sbtn" data-lab="TC">TC</button>
-                <button type="button" class="sbtn" data-lab="SODIUM">SODIUM</button>
-                <button type="button" class="sbtn" data-lab="WBC">WBC</button>
+              <!-- Noise -->
+              <div>
+                <div class="wi-q">What if there is <span class="wi-dval" id="tune-noise-value">0%</span> noise in the trajectory?</div>
+                <input type="range" id="tune-noise" class="tune-slider" min="0" max="50" value="0" step="1">
+                <div class="tune-range-ends"><span>0%</span><span>50%</span></div>
               </div>
 
             </div>
@@ -728,13 +716,11 @@ const LAB_INFO = {
   WBC:  {name:'White Blood Cell Count',            cat:'Hematology', desc:'Total count of circulating immune cells. Elevated in infection or inflammation; reduced in immunosuppression, bone marrow failure, or viral illness.'},
   MCV:  {name:'Mean Corpuscular Volume',           cat:'Hematology', desc:'Average volume of red blood cells. Classifies anemia as microcytic (iron deficiency, thalassemia) or macrocytic (B12/folate deficiency, liver disease).'},
   NA:   {name:'Sodium',                            cat:'Metabolic',  desc:'Primary extracellular electrolyte controlling fluid balance and nerve/muscle function. Imbalance reflects disorders of hydration, kidney function, or hormonal regulation.'},
-  SODIUM:{name:'Sodium',                           cat:'Metabolic',  desc:'Primary extracellular electrolyte controlling fluid balance and nerve/muscle function. Dysnatremia reflects disorders of water homeostasis.'},
   K:    {name:'Potassium',                         cat:'Metabolic',  desc:'Critical intracellular electrolyte essential for cardiac rhythm and muscle contraction. Even small deviations from normal can produce life-threatening arrhythmias.'},
   CL:   {name:'Chloride',                          cat:'Metabolic',  desc:'Principal extracellular anion that works with sodium to maintain fluid balance and plays a key role in acid-base homeostasis.'},
   CO2:  {name:'Carbon Dioxide (Bicarbonate)',      cat:'Metabolic',  desc:'Serum bicarbonate reflects acid-base status. Decreased in metabolic acidosis (DKA, renal failure); increased in metabolic alkalosis (vomiting, diuretic use).'},
   BUN:  {name:'Blood Urea Nitrogen',               cat:'Renal',      desc:'Waste product of protein metabolism, cleared by the kidneys. Elevated with impaired renal function, dehydration, or high protein catabolism.'},
   CRE:  {name:'Creatinine',                        cat:'Renal',      desc:'Muscle breakdown product cleared entirely by glomerular filtration. The gold-standard endogenous marker of kidney function; rises with declining GFR.'},
-  CREATININE:{name:'Creatinine',                   cat:'Renal',      desc:'Muscle breakdown product cleared entirely by glomerular filtration. The gold-standard endogenous marker of kidney function.'},
   GLU:  {name:'Glucose',                           cat:'Metabolic',  desc:'Circulating blood sugar, the primary cellular energy substrate. Central to the diagnosis and management of diabetes; acutely sensitive to recent food intake.'},
   A1C:  {name:'Hemoglobin A1c',                    cat:'Metabolic',  desc:'Glycated hemoglobin reflecting average blood glucose over 2–3 months. Standard diagnostic marker for diabetes and monitor of long-term glycemic control.'},
   CA:   {name:'Calcium',                           cat:'Metabolic',  desc:'Essential mineral for bone mineralization, neuromuscular signaling, and coagulation. Regulated by parathyroid hormone, calcitonin, and vitamin D.'},
@@ -950,29 +936,26 @@ function renderChart(test, ex, data) {
   const refMu = (ref_low+ref_high)/2;
   const refSig= (ref_high-ref_low)/3.92;
 
-  // y-range: trajectory + full extent of rotated bells (mu ± 4σ so curves taper to points)
-  const allVals = [...histValues, norm.mu, ref_low, ref_high, ...(gmmOk ? [gmmMu] : [])];
-  const tailRef = refMu - 4 * refSig;
-  const tailNorm = norm.mu - 4 * norm.sigma;
-  const tailGmm = gmmOk ? gmmMu - 4 * gmmSig : null;
+  // y-range
+  const _actualV = data.actual_value;
+  const allVals = [...histValues, norm.mu, ref_low, ref_high, ...(gmmOk ? [gmmMu] : []), ...(_actualV != null ? [_actualV] : [])];
+  const allMu = [norm.mu, refMu, ...(gmmOk ? [gmmMu] : [])];
+  const allSig = [norm.sigma, refSig, ...(gmmOk ? [gmmSig] : [])];
   const pad = (Math.max(...allVals) - Math.min(...allVals)) * 0.08 || 1;
-  const yMin = Math.min(...allVals, tailRef, tailNorm, ...(gmmOk ? [tailGmm] : [])) - pad;
-  const yMax = Math.max(...allVals, refMu + 4 * refSig, norm.mu + 4 * norm.sigma, ...(gmmOk ? [gmmMu + 4 * gmmSig] : [])) + pad;
-
-  // Scale (ms) for right-side bell curve — ~18% of history span, min 15 days, max 90 days
-  const firstMs = new Date(histDates[0]).getTime();
-  const predMs = new Date(predDate).getTime();
-  const spanMs = predMs - firstMs;
-  const halfMs = Math.max(15 * 86400000, Math.min(90 * 86400000, spanMs * 0.18));
+  const yMin = Math.min(...allVals, ...allMu.map((m,i) => m - 3.5*allSig[i])) - pad;
+  const yMax = Math.max(...allVals, ...allMu.map((m,i) => m + 3.5*allSig[i])) + pad;
 
   const traces = [];
 
-  // 1. Ref range shaded band (full timeline)
+  // ── Left subplot (xaxis): trajectory ──
+
+  // 1. Ref range shaded band
   traces.push({
     x:[histDates[0], predDate, predDate, histDates[0]],
     y:[ref_high, ref_high, ref_low, ref_low],
     fill:'toself', fillcolor:'rgba(174,174,178,0.08)',
     line:{width:0}, showlegend:false, hoverinfo:'skip', mode:'lines',
+    xaxis:'x', yaxis:'y',
   });
 
   // 2. History line
@@ -980,6 +963,7 @@ function renderChart(test, ex, data) {
     x:histDates, y:histValues, mode:'lines+markers', name:'History',
     line:{color:'#6e6e73',width:1.5}, marker:{color:'#6e6e73',size:5},
     hovertemplate:'%{x}<br>%{y:.2f} '+unit+'<extra>History</extra>',
+    xaxis:'x', yaxis:'y',
   });
 
   // 3. Connect last obs to NORMA mean
@@ -989,74 +973,108 @@ function renderChart(test, ex, data) {
     x:[lastD, predDate], y:[lastV, norm.mu],
     mode:'lines', showlegend:false,
     line:{color:'#0071e3',width:1.5,dash:'dot'}, hoverinfo:'skip',
+    xaxis:'x', yaxis:'y',
   });
 
-  // 4. Rotated normal curves at prediction date (bell shape, tapers to points at tails)
-  traces.push(makeRotatedDist(refMu, refSig, predDate, halfMs, '#aeaeb2', 'rgba(174,174,178,0.15)', 'Population ref'));
-  if (gmmOk) traces.push(makeRotatedDist(gmmMu, gmmSig, predDate, halfMs, '#bf5af2', 'rgba(191,90,242,0.15)', 'Personalized'));
-  traces.push(makeRotatedDist(norm.mu, norm.sigma, predDate, halfMs, '#0071e3', 'rgba(0,113,227,0.18)', 'NORMA'));
-
-  // 5. Mean dots at prediction date
+  // 4. Mean dots at prediction date
   traces.push({
     x:[predDate], y:[norm.mu], mode:'markers', name:'NORMA mean',
     marker:{color:'#0071e3',size:9,symbol:'diamond'},
     hovertemplate:predDate+'<br>%{y:.2f} '+unit+' (NORMA)<extra></extra>',
+    xaxis:'x', yaxis:'y',
   });
   if (gmmOk) {
     traces.push({
       x:[predDate], y:[gmmMu], mode:'markers', name:'GMM mean',
       marker:{color:'#bf5af2',size:7,symbol:'circle'},
       hovertemplate:predDate+'<br>%{y:.2f} '+unit+' (Personalized)<extra></extra>',
+      xaxis:'x', yaxis:'y',
     });
   }
 
-  const tickMs = halfMs * 0.14;
-  const tickEndDate = new Date(predMs + tickMs).toISOString().slice(0, 10);
-  const shapes = [
-    // Vertical line at prediction date
-    {type:'line', x0:predDate,x1:predDate, y0:yMin,y1:yMax,
-     line:{color:'rgba(0,0,0,0.1)',width:1,dash:'dot'}},
-    // Ref range boundary lines along timeline
-    {type:'line', x0:histDates[0],x1:predDate, y0:ref_high,y1:ref_high,
-     line:{color:'rgba(255,159,10,0.5)',width:1,dash:'dot'}},
-    {type:'line', x0:histDates[0],x1:predDate, y0:ref_low, y1:ref_low,
-     line:{color:'rgba(255,59,48,0.5)', width:1,dash:'dot'}},
-    // 95% CI tick marks at forecast (small horizontal lines)
-    {type:'line', x0:predDate, x1:tickEndDate, y0:norm.ci_lower, y1:norm.ci_lower,
-     line:{color:'#0071e3', width:1.5}},
-    {type:'line', x0:predDate, x1:tickEndDate, y0:norm.ci_upper, y1:norm.ci_upper,
-     line:{color:'#0071e3', width:1.5}},
-  ];
-  if (gmmOk) {
-    shapes.push(
-      {type:'line', x0:predDate, x1:tickEndDate, y0:gmm.ci_lower, y1:gmm.ci_lower,
-       line:{color:'#bf5af2', width:1.5}},
-      {type:'line', x0:predDate, x1:tickEndDate, y0:gmm.ci_upper, y1:gmm.ci_upper,
-       line:{color:'#bf5af2', width:1.5}}
-    );
+  // 5. Actual observed value
+  const actualVal = data.actual_value;
+  const actualDate = data.actual_date || predDate;
+  if (actualVal != null) {
+    traces.push({
+      x:[actualDate], y:[actualVal], mode:'markers', name:'Actual',
+      marker:{color:'#ff3b30', size:11, symbol:'star', line:{width:1.5, color:'#fff'}},
+      hovertemplate:actualDate+'<br>%{y:.2f} '+unit+' (Actual)<extra></extra>',
+      xaxis:'x', yaxis:'y',
+    });
   }
-  // Population ref 95% (ref_low, ref_high) ticks at forecast
-  shapes.push(
-    {type:'line', x0:predDate, x1:tickEndDate, y0:ref_low, y1:ref_low,
-     line:{color:'#aeaeb2', width:1.2}},
-    {type:'line', x0:predDate, x1:tickEndDate, y0:ref_high, y1:ref_high,
-     line:{color:'#aeaeb2', width:1.2}}
-  );
-  const annotations = [
-    {x:histDates[0], y:ref_high, xanchor:'left',yanchor:'bottom',
-     showarrow:false, text:' High ('+ref_high+')', font:{size:9,color:'#ff9f0a'}},
-    {x:histDates[0], y:ref_low,  xanchor:'left',yanchor:'top',
-     showarrow:false, text:' Low ('+ref_low+')',  font:{size:9,color:'#ff3b30'}},
-    {x:predDate, y:yMax, xanchor:'center',yanchor:'top',
-     showarrow:false, text:'forecast', font:{size:9,color:'#aeaeb2'}},
+
+  // ── Right subplot (xaxis2): vertical bell curves ──
+  function makeVerticalBell(mu, sigma, lineColor, fillColor, name) {
+    const ys = linspace(mu - 3.2 * sigma, mu + 3.2 * sigma, 120);
+    const pdfs = ys.map(y => gaussPDF(y, mu, sigma));
+    const peak = Math.max(...pdfs);
+    const xs = pdfs.map(p => p / peak);  // normalize to 0–1
+    return {
+      x: [0, ...xs, 0], y: [ys[0], ...ys, ys[ys.length-1]],
+      fill:'toself', fillcolor, line:{color:lineColor, width:1.5},
+      name, mode:'lines', xaxis:'x2', yaxis:'y',
+      hovertemplate:'%{y:.2f} '+unit+'<extra>'+name+'</extra>',
+    };
+  }
+
+  traces.push(makeVerticalBell(refMu, refSig, '#aeaeb2', 'rgba(174,174,178,0.15)', 'Population ref'));
+  if (gmmOk) traces.push(makeVerticalBell(gmmMu, gmmSig, '#bf5af2', 'rgba(191,90,242,0.15)', 'Personalized'));
+  traces.push(makeVerticalBell(norm.mu, norm.sigma, '#0071e3', 'rgba(0,113,227,0.18)', 'NORMA'));
+
+  // Mean markers on bell curve panel
+  traces.push({
+    x:[0], y:[norm.mu], mode:'markers', showlegend:false,
+    marker:{color:'#0071e3',size:7,symbol:'diamond'}, hoverinfo:'skip',
+    xaxis:'x2', yaxis:'y',
+  });
+  if (gmmOk) {
+    traces.push({
+      x:[0], y:[gmmMu], mode:'markers', showlegend:false,
+      marker:{color:'#bf5af2',size:5,symbol:'circle'}, hoverinfo:'skip',
+      xaxis:'x2', yaxis:'y',
+    });
+  }
+  // Actual value line on bell panel
+  if (actualVal != null) {
+    traces.push({
+      x:[0, 1], y:[actualVal, actualVal], mode:'lines', showlegend:false,
+      line:{color:'#ff3b30', width:1.5, dash:'dash'}, hoverinfo:'skip',
+      xaxis:'x2', yaxis:'y',
+    });
+  }
+
+  // ── Shapes & annotations (trajectory panel) ──
+  const shapes = [
+    {type:'line', x0:predDate,x1:predDate, y0:yMin,y1:yMax,
+     line:{color:'rgba(0,0,0,0.1)',width:1,dash:'dot'}, xref:'x', yref:'y'},
+    {type:'line', x0:histDates[0],x1:predDate, y0:ref_high,y1:ref_high,
+     line:{color:'rgba(255,159,10,0.5)',width:1,dash:'dot'}, xref:'x', yref:'y'},
+    {type:'line', x0:histDates[0],x1:predDate, y0:ref_low, y1:ref_low,
+     line:{color:'rgba(255,59,48,0.5)', width:1,dash:'dot'}, xref:'x', yref:'y'},
+    // Ref lines on bell panel
+    {type:'line', x0:0,x1:1, y0:ref_high,y1:ref_high,
+     line:{color:'rgba(255,159,10,0.3)',width:1,dash:'dot'}, xref:'x2', yref:'y'},
+    {type:'line', x0:0,x1:1, y0:ref_low,y1:ref_low,
+     line:{color:'rgba(255,59,48,0.3)',width:1,dash:'dot'}, xref:'x2', yref:'y'},
   ];
 
-  const xAxisMax = new Date(predMs + halfMs * 0.4).toISOString().slice(0, 10);
+  const annotations = [
+    {x:histDates[0], y:ref_high, xanchor:'left',yanchor:'bottom',
+     showarrow:false, text:' High ('+ref_high+')', font:{size:9,color:'#ff9f0a'}, xref:'x', yref:'y'},
+    {x:histDates[0], y:ref_low,  xanchor:'left',yanchor:'top',
+     showarrow:false, text:' Low ('+ref_low+')',  font:{size:9,color:'#ff3b30'}, xref:'x', yref:'y'},
+    {x:predDate, y:yMax, xanchor:'center',yanchor:'top',
+     showarrow:false, text:'forecast', font:{size:9,color:'#aeaeb2'}, xref:'x', yref:'y'},
+  ];
+
   Plotly.newPlot('ex-chart', traces, {
-    margin:{l:46,r:14,t:10,b:52},
+    margin:{l:46,r:10,t:10,b:52},
     font:{family:'DM Sans,sans-serif',size:11,color:'#6e6e73'},
-    xaxis:{type:'date', range:[histDates[0], xAxisMax],
+    xaxis:{type:'date', domain:[0, 0.72],
            showgrid:true,gridcolor:'rgba(0,0,0,0.05)',zeroline:false},
+    xaxis2:{domain:[0.76, 1], showticklabels:false, showgrid:false, zeroline:false,
+            range:[0, 1.15]},
     yaxis:{title:unit, range:[yMin,yMax], showgrid:true,gridcolor:'rgba(0,0,0,0.05)',zeroline:false},
     legend:{orientation:'h',y:-0.22,font:{size:11}},
     hovermode:'closest',
@@ -1065,20 +1083,27 @@ function renderChart(test, ex, data) {
     shapes, annotations,
   },{responsive:true, displayModeBar:false});
 
+  // Classification badge helper
+  const clf = data.classifications || {};
+  const clfColor = v => v === 'Low' ? 'var(--low)' : v === 'High' ? 'var(--high)' : 'var(--normal)';
+  const clfBadge = v => v ? `<span style="display:inline-block;font-size:0.6rem;font-weight:700;color:${clfColor(v)};border:1px solid ${clfColor(v)};border-radius:4px;padding:0 0.3rem;margin-left:0.3rem">${v}</span>` : '';
+
   // Model key pills
+  const actualLabel = actualVal != null ? `<div style="font-size:0.67rem;color:var(--text-3);margin-top:0.15rem">Actual: <strong style="color:var(--text-1)">${actualVal.toFixed(1)}</strong> ${unit}</div>` : '';
   document.getElementById('ex-mkeys').innerHTML = `
     <div class="mk-pill">
       <span class="mk-swatch" style="background:#0071e3"></span>
       <div>
-        <div class="mk-label">NORMA</div>
+        <div class="mk-label">NORMA ${clfBadge(clf.norma)}</div>
         <div class="mk-val" style="color:#0071e3">${norm.mu.toFixed(1)} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
         <div class="mk-ci">95% CI: ${norm.ci_lower.toFixed(1)} – ${norm.ci_upper.toFixed(1)}</div>
+        ${actualLabel}
       </div>
     </div>
     ${gmmOk ? `<div class="mk-pill">
       <span class="mk-swatch" style="background:#bf5af2"></span>
       <div>
-        <div class="mk-label">Personalized (GMM)</div>
+        <div class="mk-label">Personalized (GMM) ${clfBadge(clf.personalized)}</div>
         <div class="mk-val" style="color:#bf5af2">${gmm.mu.toFixed(1)} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
         <div class="mk-ci">95% CI: ${gmm.ci_lower.toFixed(1)} – ${gmm.ci_upper.toFixed(1)}</div>
       </div>
@@ -1086,7 +1111,7 @@ function renderChart(test, ex, data) {
     <div class="mk-pill">
       <span class="mk-swatch" style="background:#aeaeb2"></span>
       <div>
-        <div class="mk-label">Population ref range</div>
+        <div class="mk-label">Population ref range ${clfBadge(clf.population)}</div>
         <div class="mk-val">${ref_low} – ${ref_high} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
         <div class="mk-ci">Standard reference interval</div>
       </div>
@@ -1096,9 +1121,12 @@ function renderChart(test, ex, data) {
 /* ─────────────────────────────────────────
    Load demo
 ───────────────────────────────────────── */
-const DEMO_TESTS = ['PLT','HGB','SODIUM','CREATININE','WBC'];
+const DEMO_TESTS = ['PLT','HGB','NA','CRE','WBC'];
 let _currentEx = null;
 let _currentData = null;
+let _originalEx = null;   // stash original example for reset
+let _originalData = null;
+let _exIdx = 0;           // cycling index across all demo tests
 
 function predDateFromHorizon(history, days) {
   if (!history || !history.length) return null;
@@ -1108,12 +1136,13 @@ function predDateFromHorizon(history, days) {
   return d.toISOString().slice(0, 10);
 }
 
-let _tuneSex = 1;  // current what-if sex value
+let _tuneSex = 1;
 
 function getTuneParams() {
-  const age  = parseInt(document.getElementById('tune-age')?.value ?? 50, 10);
-  const days = parseInt(document.getElementById('tune-horizon-slider')?.value ?? 90, 10);
-  return { age, sex: _tuneSex, days };
+  const age   = parseInt(document.getElementById('tune-age')?.value ?? 50, 10);
+  const days  = parseInt(document.getElementById('tune-horizon-slider')?.value ?? 90, 10);
+  const noise = parseInt(document.getElementById('tune-noise')?.value ?? 0, 10);
+  return { age, sex: _tuneSex, days, noise };
 }
 
 function setTuneSex(val) {
@@ -1130,23 +1159,16 @@ function horizonLabelShort(days) {
   return (days / 365).toFixed(1) + ' yr';
 }
 
-function drawTuneStats(data) {
-  const norm = data.predictions?.['Normal'];
-  if (!norm || norm.error) return;
-  const mu = norm.mu, ciLo = norm.ci_lower, ciHi = norm.ci_upper;
-  const unit = data.unit || '';
-  document.getElementById('tune-norma-val').textContent = `${mu.toFixed(1)} ${unit}`;
-  document.getElementById('tune-ci-val').textContent    = `${ciLo.toFixed(1)}–${ciHi.toFixed(1)}`;
-  document.getElementById('tune-width-val').textContent = `±${((ciHi-ciLo)/2).toFixed(1)} ${unit}`;
-  document.getElementById('tune-pop-val').textContent   =
-    (data.ref_low != null && data.ref_high != null) ? `${data.ref_low}–${data.ref_high}` : '—';
+function addNoiseToHistory(history, noisePct) {
+  if (!noisePct || noisePct <= 0) return history;
+  return history.map(h => {
+    const range = Math.abs(h.value) * (noisePct / 100);
+    const noisy = h.value + (Math.random() * 2 - 1) * range;
+    return { ...h, value: Math.round(noisy * 100) / 100 };
+  });
 }
 
 function syncTunePanelFromEx(test, ex, data) {
-  const labKey = (test === 'CREATININE') ? 'CRE' : test;
-  document.querySelectorAll('#tune-lab .sbtn').forEach(b =>
-    b.classList.toggle('on', b.getAttribute('data-lab') === labKey));
-
   const age = ex.age || 50;
   document.getElementById('tune-age').value = age;
   document.getElementById('tune-age-value').textContent = age;
@@ -1162,7 +1184,19 @@ function syncTunePanelFromEx(test, ex, data) {
   document.getElementById('tune-horizon-slider').value = days;
   document.getElementById('tune-horizon-value').textContent = horizonLabelShort(days);
 
-  if (data) drawTuneStats(data);
+  document.getElementById('tune-noise').value = 0;
+  document.getElementById('tune-noise-value').textContent = '0%';
+}
+
+function resetTune() {
+  if (!_originalEx || !_originalData) return;
+  const { test, ex } = _originalEx;
+  _currentEx = { test, ex: { ...ex } };
+  _currentData = { ..._originalData };
+  syncTunePanelFromEx(test, ex, _originalData);
+  renderChart(test, ex, _originalData);
+  document.getElementById('ex-label').textContent =
+    `— ${test}, ${ex.sex===1?'Female':'Male'}, age ${ex.age}`;
 }
 
 let _tuneDebounce = null;
@@ -1172,43 +1206,36 @@ function scheduleTuneUpdate() {
 }
 
 async function applyTuneAndRedraw() {
-  if (!_currentEx) return;
-  const { test, ex } = _currentEx;
-  const { age, sex, days } = getTuneParams();
-  const pred_date = predDateFromHorizon(ex.history, days);
+  if (!_originalEx) return;
+  const { test, ex } = _originalEx;
+  const { age, sex, days, noise } = getTuneParams();
+  const history = addNoiseToHistory(ex.history, noise);
+  const pred_date = predDateFromHorizon(history, days);
   if (!pred_date) return;
-
-  // Show loading on stats
-  ['tune-norma-val','tune-ci-val','tune-width-val'].forEach(id => {
-    const el = document.getElementById(id);
-    el.classList.add('loading'); el.textContent = '…';
-  });
 
   try {
     const pdR = await fetch('/api/predict', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ test_name: test, sex, age, history: ex.history, pred_date }),
+      body: JSON.stringify({ test_name: test, sex, age, history, pred_date }),
     });
     const data = await pdR.json();
     if (data.error) return;
     _currentData = data;
-    ['tune-norma-val','tune-ci-val','tune-width-val'].forEach(id =>
-      document.getElementById(id).classList.remove('loading'));
-    drawTuneStats(data);
-    const exUpdated = { ...ex, sex, age, pred_date };
+    const exUpdated = { ...ex, sex, age, pred_date, history };
+    _currentEx = { test, ex: exUpdated };
     renderChart(test, exUpdated, data);
     document.getElementById('ex-label').textContent =
       `— ${test}, ${sex === 1 ? 'Female' : 'Male'}, age ${age}`;
-  } catch (e) {
-    ['tune-norma-val','tune-ci-val','tune-width-val'].forEach(id =>
-      document.getElementById(id).classList.remove('loading'));
-  }
+  } catch (e) { /* silent */ }
 }
 
-const TUNE_LAB_API = { CRE: 'CREATININE' };
+function cycleExample() {
+  _exIdx = (_exIdx + 1) % DEMO_TESTS.length;
+  loadDemo(DEMO_TESTS[_exIdx]);
+}
 
 async function loadDemo(forceTest) {
-  const test = forceTest || 'LDL';
+  const test = forceTest || DEMO_TESTS[0];
   document.getElementById('ex-loading').style.display = 'flex';
   document.getElementById('ex-content').style.display = 'none';
   document.getElementById('ex-label').textContent = '';
@@ -1221,7 +1248,6 @@ async function loadDemo(forceTest) {
     const ex  = await exR.json();
     if (ex.error) return;
 
-    // Use pre-computed predictions bundled in cache (skip separate /api/predict)
     let data;
     if (ex.predictions) {
       data = ex;
@@ -1237,6 +1263,8 @@ async function loadDemo(forceTest) {
 
     _currentEx = { test, ex };
     _currentData = data;
+    _originalEx = { test, ex: { ...ex, history: [...ex.history] } };
+    _originalData = { ...data };
     renderChart(test, ex, data);
     document.getElementById('ex-label').textContent =
       `— ${test}, ${ex.sex===1?'Female':'Male'}, age ${ex.age}`;
@@ -1249,38 +1277,28 @@ async function loadDemo(forceTest) {
     const tuneWrap = document.getElementById('ex-tune-wrap');
     if (tuneWrap) { tuneWrap.style.display = 'block'; syncTunePanelFromEx(test, ex, data); }
   } catch(e) {
+    console.error('loadDemo error:', e);
     document.getElementById('ex-loading').innerHTML =
       '<span style="color:var(--text-3)">Could not load example.</span>';
   }
 }
 
 function bindTunePanel() {
-  // Lab buttons reload demo for that test
-  document.querySelectorAll('#tune-lab .sbtn').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const lab = this.getAttribute('data-lab');
-      loadDemo(TUNE_LAB_API[lab] || lab);
-    });
+  document.getElementById('tune-age')?.addEventListener('input', function() {
+    document.getElementById('tune-age-value').textContent = this.value;
+    scheduleTuneUpdate();
   });
 
-  // Age slider
-  const ageEl = document.getElementById('tune-age');
-  if (ageEl) {
-    ageEl.addEventListener('input', function() {
-      document.getElementById('tune-age-value').textContent = this.value;
-      scheduleTuneUpdate();
-    });
-  }
+  document.getElementById('tune-horizon-slider')?.addEventListener('input', function() {
+    document.getElementById('tune-horizon-value').textContent =
+      horizonLabelShort(parseInt(this.value, 10));
+    scheduleTuneUpdate();
+  });
 
-  // Horizon slider
-  const horizonEl = document.getElementById('tune-horizon-slider');
-  if (horizonEl) {
-    horizonEl.addEventListener('input', function() {
-      document.getElementById('tune-horizon-value').textContent =
-        horizonLabelShort(parseInt(this.value, 10));
-      scheduleTuneUpdate();
-    });
-  }
+  document.getElementById('tune-noise')?.addEventListener('input', function() {
+    document.getElementById('tune-noise-value').textContent = this.value + '%';
+    scheduleTuneUpdate();
+  });
 }
 
 loadDemo();
