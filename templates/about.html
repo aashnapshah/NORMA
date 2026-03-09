@@ -483,23 +483,27 @@ coz<!DOCTYPE html>
 
 
 <!-- ── Hero ── -->
-<section class="hero">
+<section class="hero" style="padding:5rem 2.5rem 4rem">
   <div class="hero-glow"></div>
-  <div class="hero-in">
-    <h1 class="hero-title">Learning <em>Normal</em> for Routine Laboratory Tests</h1>
-    <p class="hero-sub">
-      A contextual sequence model personalizing lab reference ranges using a patient's
-      longitudinal history, demographics, and clinical state — validated on 4.5 million adults.
-    </p>
-    <div class="hero-ctas">
-      <a href="/app?example=1" class="btn-primary"><i class="bi bi-activity"></i> See a live example</a>
-      <a href="/app"  class="btn-ghost"><i class="bi bi-lightning-charge-fill"></i> Try the tool</a>
+  <div class="hero-in" style="text-align:center;max-width:800px;margin:0 auto">
+    <div style="display:inline-flex;align-items:center;gap:0.4rem;background:rgba(48,209,88,0.1);border:1px solid rgba(48,209,88,0.2);border-radius:999px;padding:0.3rem 0.85rem;font-size:0.68rem;font-weight:600;color:#30d158;margin-bottom:1.5rem">
+      <i class="bi bi-check-circle-fill"></i> Validated on 4.5 million adults
     </div>
-    <div class="hero-stats">
-      <div><div class="h-num">4<span>.5M</span></div><div class="h-lbl">adults in external validation</div></div>
+    <h1 class="hero-title" style="white-space:normal;text-align:center;font-size:clamp(2.2rem,5vw,3.6rem)">
+      Redefining <em>"Normal"</em><br>in Laboratory Medicine
+    </h1>
+    <p class="hero-sub" style="max-width:560px;margin:1.25rem auto 2rem;text-align:center;font-size:1.05rem;line-height:1.75">
+      NORMA personalizes lab interpretation using a patient's history, demographics, and clinical state — detecting meaningful change earlier than static reference ranges.
+    </p>
+    <div class="hero-ctas" style="justify-content:center">
+      <a href="/app?example=1" class="btn-primary" style="padding:0.85rem 2rem;font-size:0.95rem"><i class="bi bi-activity"></i> See a live example</a>
+      <a href="/app"  class="btn-ghost" style="padding:0.85rem 2rem;font-size:0.95rem"><i class="bi bi-lightning-charge-fill"></i> Try NORMA</a>
+    </div>
+    <div class="hero-stats" style="justify-content:center;margin-top:2.5rem;padding-top:2rem">
+      <div><div class="h-num">4<span>.5M</span></div><div class="h-lbl">adults validated</div></div>
       <div><div class="h-num">2<span>.8M</span></div><div class="h-lbl">training sequences</div></div>
-      <div><div class="h-num">{{ model_info.n_tests }}</div><div class="h-lbl">lab biomarkers modeled</div></div>
-      <div><div class="h-num">1<span>.7B</span></div><div class="h-lbl">lab results evaluated</div></div>
+      <div><div class="h-num">{{ model_info.n_tests }}</div><div class="h-lbl">biomarkers</div></div>
+      <div><div class="h-num">1<span>.7B</span></div><div class="h-lbl">lab results</div></div>
     </div>
   </div>
 </section>
@@ -507,49 +511,64 @@ coz<!DOCTYPE html>
 
 
 
-<!-- ── Why not Normal for whom ── -->
-<section class="sec gray">
+<!-- ── The Problem ── -->
+<section class="sec white" style="padding:4.5rem 2.5rem">
   <div class="inner" style="max-width:1100px">
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:3.5rem; align-items:center">
 
-      <!-- Left: text -->
+    <!-- Centered intro -->
+    <div style="text-align:center;max-width:640px;margin:0 auto 3rem">
+      <div class="eyebrow" style="color:var(--low)">The Problem</div>
+      <h2 class="stitle" style="font-size:clamp(1.6rem,3vw,2.2rem)">
+        Normal for <em style="color:var(--accent)">whom</em>?
+      </h2>
+      <p class="slead" style="margin:0.75rem auto 0;max-width:520px">
+        Most lab tests use the same reference range for everyone. But people are different — and meaningful changes often hide inside "normal."
+      </p>
+    </div>
+
+    <!-- Two-column: chart + text -->
+    <div style="display:grid; grid-template-columns:1.1fr 1fr; gap:3rem; align-items:center">
+
+      <!-- Left: schematic chart -->
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-xl); padding:1.25rem 1rem 0.75rem; box-shadow:var(--shadow)">
+        <div id="for-whom-chart" style="width:100%;height:320px"></div>
+        <p style="margin:0.5rem 0.25rem 0.25rem; font-size:0.72rem; color:var(--text-3); line-height:1.55">
+          Fasting glucose in a patient whose trajectory rises slowly but stays <em>within population "normal"</em> — until NORMA flags the deviation <strong>6 months earlier</strong>.
+        </p>
+      </div>
+
+      <!-- Right: problem / solution / impact -->
       <div>
-        <h2 class="stitle">
-          <span class="lead-phrase">Normal for <em>whom</em>?</span><br>
-          A personalized way to interpret blood labs
-        </h2>
-        <p class="slead" style="margin-top:1.25rem">
-          <strong style="color:var(--text-1); font-size:0.7rem; letter-spacing:0.08em; text-transform:uppercase">Problem.</strong>
-          Most routine lab tests use a <strong>one-size-fits-all definition of "normal"</strong>—the same broad, static range for everyone. But people are different, and this approach can <strong>miss early signs of disease or meaningful changes</strong> in an individual’s health.
-        </p>
-        <p class="slead" style="margin-top:1rem">
-          <strong style="color:var(--text-1); font-size:0.7rem; letter-spacing:0.08em; text-transform:uppercase">Solution.</strong>
-          <strong>Personalize interpretation</strong>. <strong>NORMA</strong> learns what’s normal for you by utilizing <strong>repeatable laboratory values and clinical context</strong>. This enables <strong>personalized thresholds</strong> designed around your unique biology.
-        </p>
-        <p class="slead" style="margin-top:1rem">
-          <strong style="color:var(--text-1); font-size:0.7rem; letter-spacing:0.08em; text-transform:uppercase">Impact.</strong>
-          <strong>Screening for hundreds of diseases.</strong> NORMA is <strong>easy to integrate</strong> in existing lab workflows and has been <strong>validated on millions of patients</strong>.
-        </p>
-        <div class="disease-bubbles" style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-top:0.9rem;">
+        <div style="display:flex;flex-direction:column;gap:1.25rem">
+          <div style="padding:1rem 1.25rem;background:rgba(255,59,48,0.04);border:1px solid rgba(255,59,48,0.12);border-radius:var(--r-lg)">
+            <div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--low);margin-bottom:0.35rem">Problem</div>
+            <div style="font-size:0.88rem;color:var(--text-1);line-height:1.65">
+              One-size-fits-all reference ranges <strong>miss early signs of disease</strong> and provide false reassurance when values drift within the population "normal."
+            </div>
+          </div>
+          <div style="padding:1rem 1.25rem;background:rgba(0,113,227,0.04);border:1px solid rgba(0,113,227,0.12);border-radius:var(--r-lg)">
+            <div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent);margin-bottom:0.35rem">Solution</div>
+            <div style="font-size:0.88rem;color:var(--text-1);line-height:1.65">
+              <strong>NORMA</strong> learns what’s normal <em>for each patient</em> using their longitudinal lab values and clinical context — creating <strong>personalized thresholds</strong>.
+            </div>
+          </div>
+          <div style="padding:1rem 1.25rem;background:rgba(48,209,88,0.04);border:1px solid rgba(48,209,88,0.12);border-radius:var(--r-lg)">
+            <div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--normal);margin-bottom:0.35rem">Impact</div>
+            <div style="font-size:0.88rem;color:var(--text-1);line-height:1.65">
+              Earlier detection across <strong>hundreds of conditions</strong> — validated on millions of patients, ready for clinical integration.
+            </div>
+          </div>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:0.35rem; margin-top:1.25rem;">
           <span class="disease-bubble">Anemia</span>
           <span class="disease-bubble">Diabetes</span>
           <span class="disease-bubble">Kidney disease</span>
           <span class="disease-bubble">Liver disease</span>
           <span class="disease-bubble">Dyslipidemia</span>
           <span class="disease-bubble">Thyroid disorders</span>
-          <span class="disease-bubble">Electrolyte imbalance</span>
           <span class="disease-bubble">Infection</span>
           <span class="disease-bubble">Bleeding disorders</span>
         </div>
-      </div>
-
-      <!-- Right: schematic chart -->
-      <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-xl); padding:1.25rem 1rem 0.75rem; box-shadow:var(--shadow)">
-        <div id="for-whom-chart" style="width:100%;height:320px"></div>
-        <p style="margin:0.5rem 0.25rem 0.25rem; font-size:0.72rem; color:var(--text-3); line-height:1.55">
-          Fasting glucose (mg/dL) in a patient with a stable personal setpoint of ~82.
-          Their trajectory rises slowly but stays <em>within population "normal"</em> for months—until NORMA flags the meaningful personal deviation early.
-        </p>
       </div>
 
     </div>
@@ -558,10 +577,12 @@ coz<!DOCTYPE html>
 
 
 <!-- ── Three Approaches ── -->
-<section class="sec white">
+<section class="sec gray" style="padding:4.5rem 2.5rem">
   <div class="inner">
-    <div class="eyebrow">Framework</div>
-    <h2 class="stitle">Three approaches to laboratory interpretation</h2>
+    <div style="text-align:center;max-width:600px;margin:0 auto 2rem">
+      <div class="eyebrow">Framework</div>
+      <h2 class="stitle" style="font-size:clamp(1.4rem,2.8vw,1.9rem)">Three approaches to laboratory interpretation</h2>
+    </div>
     <div class="ap-grid">
 
       <div class="ap-card">
@@ -603,12 +624,14 @@ coz<!DOCTYPE html>
 
     </div><!-- /ap-grid -->
 
-    <!-- Coverage: lab biomarker cards (hover to load live demo below) -->
-    <div style="margin-top:2.5rem">
-      <div class="eyebrow" style="margin-bottom:0.5rem">Coverage — {{ model_info.n_tests }} biomarkers</div>
-      <p style="font-size:0.82rem;color:var(--text-3);margin-bottom:0.9rem">
-        Hover a biomarker to see reference intervals and clinical context.
-      </p>
+    <!-- Coverage: lab biomarker cards -->
+    <div style="margin-top:3rem">
+      <div style="text-align:center;margin-bottom:1.25rem">
+        <div class="eyebrow">Coverage — {{ model_info.n_tests }} biomarkers</div>
+        <p style="font-size:0.82rem;color:var(--text-3)">
+          Hover a biomarker to see its clinical context and reference intervals.
+        </p>
+      </div>
       <div class="labs-scroll-wrap">
         <div class="labs-scroll">
           {% for t in tests %}
@@ -637,20 +660,17 @@ coz<!DOCTYPE html>
 <!-- ══════════════════════════════════════════════════════════ -->
 <!-- SECTION: Architecture                                      -->
 <!-- ══════════════════════════════════════════════════════════ -->
-<section class="sec gray" id="architecture">
+<section class="sec white" id="architecture" style="padding:4.5rem 2.5rem">
   <div class="inner">
-    <div class="eyebrow">How it works</div>
-    <h2 class="stitle">How NORMA works</h2>
-    <p class="slead" style="margin-bottom:0.75rem">
-      <strong>NORMA</strong> — <em>Normal Outcome Range Modeling with Attention</em>.
-    </p>
-
-    <p class="slead">
-      Each patient visit is encoded as five input signals. A causal transformer reads the full history
-      and — queried with a <strong>target clinical state</strong> and forecast horizon — outputs a
-      calibrated probability distribution: predicted mean <em>μ</em> and uncertainty <em>σ</em>.
-      By conditioning on a "healthy" state at inference, deviation from NORMA's expectation becomes the clinical signal.
-    </p>
+    <div style="text-align:center;max-width:680px;margin:0 auto 2.5rem">
+      <div class="eyebrow">How it works</div>
+      <h2 class="stitle" style="font-size:clamp(1.5rem,3vw,2rem)">
+        <span style="color:var(--accent)">NORMA</span> — Normal Outcome Range Modeling with Attention
+      </h2>
+      <p class="slead" style="margin:1rem auto 0;max-width:600px">
+        A causal transformer reads a patient's full lab history and — conditioned on a <strong>target clinical state</strong> — outputs a calibrated prediction: expected value <em>μ</em> and uncertainty <em>σ</em>. Deviation from the "healthy" prediction becomes the clinical signal.
+      </p>
+    </div>
 
     <div class="hla-flow">
 
@@ -777,15 +797,16 @@ coz<!DOCTYPE html>
 <!-- ══════════════════════════════════════════════════════════ -->
 <!-- SECTION: Training Cohorts + Map                           -->
 <!-- ══════════════════════════════════════════════════════════ -->
-<section class="sec white" id="cohorts">
+<section class="sec gray" id="cohorts" style="padding:4.5rem 2.5rem">
   <div class="inner">
-    <div class="eyebrow">Training Cohorts</div>
-    <h2 class="stitle">Trained on two health systems. Validated in a third.</h2>
-    <p class="slead">
-      NORMA was trained on longitudinal lab sequences from MIMIC-IV (Boston) and EHRSHOT (Stanford).
-      External validation was performed on Clalit Health Services (Israel) — the largest integrated
-      health system in Israel — with no model retraining.
-    </p>
+    <div style="text-align:center;max-width:640px;margin:0 auto 2rem">
+      <div class="eyebrow">Training Cohorts</div>
+      <h2 class="stitle" style="font-size:clamp(1.4rem,2.8vw,1.9rem)">Trained on two health systems. Validated in a third.</h2>
+      <p class="slead" style="margin:0.75rem auto 0;max-width:560px">
+        Longitudinal lab sequences from MIMIC-IV and EHRSHOT.
+        External validation on 4.5M adults in Clalit Health Services — no retraining.
+      </p>
+    </div>
 
     <!-- Stats strip -->
     <div class="stats-strip">
@@ -854,40 +875,35 @@ coz<!DOCTYPE html>
 <!-- ══════════════════════════════════════════════════════════ -->
 <!-- SECTION: Training Metrics                                  -->
 <!-- ══════════════════════════════════════════════════════════ -->
-<section class="sec gray" id="metrics">
+<section class="sec white" id="metrics" style="padding:4.5rem 2.5rem">
   <div class="inner">
-    <div class="eyebrow">Forecasting Performance</div>
-    <h2 class="stitle">How well does NORMA predict the next value?</h2>
-    <p class="slead">
-      These metrics evaluate <strong>forecasting accuracy</strong> — how closely NORMA's predicted
-      distribution matches the observed next lab value under a healthy contextual state.
-      High R² indicates the model captures individual trajectory dynamics well.
-      <br><br>
-      <span style="color:var(--text-3)">
-        Clinical validation — whether deviations from NORMA's predicted ranges predict disease
-        outcomes — is evaluated on 4.5 million adults in Clalit Health Services, with no model retraining.
-      </span>
-    </p>
+    <div style="text-align:center;max-width:640px;margin:0 auto 2rem">
+      <div class="eyebrow">Forecasting Performance</div>
+      <h2 class="stitle" style="font-size:clamp(1.4rem,2.8vw,1.9rem)">How well does NORMA predict?</h2>
+      <p class="slead" style="margin:0.75rem auto 0;max-width:540px">
+        Forecasting accuracy — how closely NORMA's predicted distribution matches observed next values. High R² means the model captures individual trajectory dynamics well.
+      </p>
+    </div>
 
-    <!-- Static summary from checkpoint -->
+    <!-- Static summary from bootstrap metrics (averaged over all biomarkers) -->
     <div class="metrics-row">
       <div class="metric-card">
         <div class="metric-split">Train</div>
         <div class="metric-r2">{{ model_info.train_r2 }}</div>
-        <div class="metric-sub">R² &nbsp;·&nbsp; NLL loss {{ model_info.train_loss }}</div>
-        <div class="metric-sub" style="margin-top:0.2rem; color:var(--text-3)">epoch {{ model_info.epoch }}</div>
+        <div class="metric-sub">R² &nbsp;·&nbsp; MAE {{ model_info.train_loss }}</div>
+        <div class="metric-sub" style="margin-top:0.2rem; color:var(--text-3)">bootstrap mean across biomarkers</div>
       </div>
       <div class="metric-card" style="border-color:rgba(0,113,227,0.3); background:rgba(0,113,227,0.03)">
         <div class="metric-split" style="color:var(--accent)">Validation</div>
         <div class="metric-r2" style="color:var(--accent)">{{ model_info.val_r2 }}</div>
-        <div class="metric-sub">R² &nbsp;·&nbsp; NLL loss {{ model_info.val_loss }}</div>
-        <div class="metric-sub" style="margin-top:0.2rem; color:var(--text-3)">early stopping checkpoint</div>
+        <div class="metric-sub">R² &nbsp;·&nbsp; MAE {{ model_info.val_loss }}</div>
+        <div class="metric-sub" style="margin-top:0.2rem; color:var(--text-3)">bootstrap mean across biomarkers</div>
       </div>
       <div class="metric-card">
-        <div class="metric-split">Test (bootstrap)</div>
-        <div class="metric-r2" style="color:var(--text-3)" id="test-r2-live">—</div>
-        <div class="metric-sub">95% CI from bootstrap resampling</div>
-        <div class="metric-sub" style="margin-top:0.2rem; color:var(--text-3)">held-out split</div>
+        <div class="metric-split">Test</div>
+        <div class="metric-r2">{{ model_info.test_r2 }}</div>
+        <div class="metric-sub">R² &nbsp;·&nbsp; MAE {{ model_info.test_loss }}</div>
+        <div class="metric-sub" style="margin-top:0.2rem; color:var(--text-3)">bootstrap mean across biomarkers</div>
       </div>
     </div>
 
@@ -906,15 +922,17 @@ coz<!DOCTYPE html>
 
 
 <!-- ── CTA ── -->
-<section class="sec dark" style="text-align:center">
-  <div class="inner" style="max-width:520px">
-    <div class="eyebrow dim">Explore Further</div>
-    <h2 class="stitle light" style="font-size:clamp(1.4rem,2.8vw,2rem)">Ready to use your own patient data?</h2>
-    <p class="slead light">
-      Enter a lab history, select demographics, and get NORMA's prediction with AI interpretation.
+<section class="sec dark" style="text-align:center;padding:5rem 2.5rem">
+  <div class="inner" style="max-width:560px">
+    <h2 class="stitle light" style="font-size:clamp(1.5rem,3vw,2.2rem);margin-bottom:0.85rem">
+      See it in action.
+    </h2>
+    <p class="slead light" style="font-size:1rem;max-width:420px;margin:0 auto">
+      Enter a lab history and see how NORMA classifies each value differently than population ranges.
     </p>
-    <div class="cta-btns">
-      <a href="/app" class="btn-cta"><i class="bi bi-lightning-charge-fill"></i> Try NORMA</a>
+    <div class="cta-btns" style="margin-top:2.25rem">
+      <a href="/app?example=1" class="btn-cta"><i class="bi bi-activity"></i> See a live example</a>
+      <a href="/app" class="btn-cta-outline"><i class="bi bi-lightning-charge-fill"></i> Try your own data</a>
     </div>
   </div>
 </section>

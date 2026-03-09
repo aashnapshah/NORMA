@@ -562,41 +562,51 @@
     .toast-msg.error { background: rgba(255,59,48,0.9); }
     @keyframes slideUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
 
-    /* ── Labs coverage panel ── */
-    .labs-scroll-wrap {
-      overflow-x: auto; margin-top: 0.5rem; padding-bottom: 0.25rem;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.12) transparent;
+
+    /* ── Purpose banner ── */
+    .purpose-banner {
+      display: flex; gap: 0.85rem; align-items: flex-start;
+      background: linear-gradient(135deg, rgba(0,113,227,0.05) 0%, rgba(48,209,88,0.04) 100%);
+      border: 1px solid rgba(0,113,227,0.12);
+      border-radius: var(--r-xl); padding: 1rem 1.25rem;
     }
-    .labs-scroll-wrap::-webkit-scrollbar { height: 4px; }
-    .labs-scroll-wrap::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 99px; }
-    .labs-scroll { display: flex; gap: 0.3rem; min-width: min-content; padding: 2px; }
-    .lab-card {
-      background: var(--bg); border: 1px solid var(--border);
-      border-radius: var(--r-sm); padding: 0.2rem 0.65rem; cursor: pointer;
-      transition: all 0.15s; min-width: 52px; text-align: center; flex-shrink: 0;
+    .purpose-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--accent); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem; flex-shrink: 0;
     }
-    .lab-card:hover { border-color: var(--accent); background: rgba(0,113,227,0.04); }
-    .lab-card.active {
-      border-color: var(--accent); background: rgba(0,113,227,0.06);
-      box-shadow: 0 0 0 2px rgba(0,113,227,0.1);
+    .purpose-title { font-size: 0.95rem; font-weight: 700; color: var(--text-1); letter-spacing: -0.02em; margin-bottom: 0.2rem; }
+    .purpose-desc { font-size: 0.78rem; color: var(--text-2); line-height: 1.6; }
+
+    /* ── Classification Verdict ── */
+    .verdict-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; }
+    @media (max-width: 640px) { .verdict-grid { grid-template-columns: 1fr; } }
+    .verdict-cell {
+      border: 1.5px solid var(--border); border-radius: var(--r-lg);
+      padding: 1rem; text-align: center; position: relative; overflow: hidden;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
-    .lc-abbr { font-size: 0.68rem; font-weight: 700; color: var(--text-1); letter-spacing: -0.02em; }
-    .lc-cat { font-size: 0.46rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 0.1rem; }
-    .cat-heme  { color: #f43f5e; }
-    .cat-meta  { color: #f59e0b; }
-    .cat-hepat { color: var(--normal); }
-    .cat-lipid { color: var(--purple); }
-    .cat-renal { color: var(--accent); }
-    .cat-other { color: var(--text-3); }
-    .lab-detail {
-      margin-top: 0.75rem;
-      background: var(--bg); border: 1px solid var(--border);
-      border-radius: var(--r-md); padding: 0.75rem 1rem;
+    .verdict-cell::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
     }
-    .ld-abbr { font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); margin-bottom: 0.15rem; }
-    .ld-name { font-size: 0.9rem; font-weight: 700; letter-spacing: -0.025em; color: var(--text-1); }
-    .ld-desc { font-size: 0.78rem; color: var(--text-2); line-height: 1.6; margin-top: 0.35rem; max-width: 720px; }
+    .verdict-cell.v-pop::before { background: #aeaeb2; }
+    .verdict-cell.v-gmm::before { background: #bf5af2; }
+    .verdict-cell.v-norma::before { background: #0071e3; }
+    .verdict-cell.v-norma { border-color: rgba(0,113,227,0.2); box-shadow: 0 2px 12px rgba(0,113,227,0.08); }
+    .verdict-approach { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem; }
+    .verdict-approach.a-pop { color: #aeaeb2; }
+    .verdict-approach.a-gmm { color: #bf5af2; }
+    .verdict-approach.a-norma { color: #0071e3; }
+    .verdict-label {
+      font-size: 1.5rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1; margin-bottom: 0.4rem;
+    }
+    .verdict-label.vl-low { color: var(--low); }
+    .verdict-label.vl-normal { color: var(--normal); }
+    .verdict-label.vl-high { color: var(--high); }
+    .verdict-range { font-size: 0.72rem; color: var(--text-3); line-height: 1.5; }
+    .verdict-range strong { color: var(--text-2); font-weight: 600; }
+    .verdict-explain { font-size: 0.68rem; color: var(--text-3); margin-top: 0.5rem; line-height: 1.45; padding-top: 0.5rem; border-top: 1px solid var(--border); }
   </style>
 </head>
 <body>
@@ -636,7 +646,7 @@
           {% endfor %}
         </select>
         <div class="ref-pill"><i class="bi bi-rulers"></i><span id="ref-text">—</span></div>
-
+        <div id="sidebar-test-info" style="margin-top:0.4rem;font-size:0.72rem;color:var(--text-3);line-height:1.5"></div>
       </div>
 
       <!-- Demographics -->
@@ -705,30 +715,43 @@
   <!-- ─ Main content ─ -->
   <main class="main-content">
 
-    <!-- Biomarker coverage panel -->
-    <div class="card" id="coverage-card">
-      <div class="card-header">
-        <i class="bi bi-grid-3x3-gap" style="color:var(--accent)"></i>
-        <span>Biomarker Coverage</span>
-        <div class="spacer"></div>
-        <span style="font-size:0.67rem;color:var(--text-3)">Select a biomarker</span>
+    <!-- Purpose banner -->
+    <div class="purpose-banner" id="purpose-banner">
+      <div class="purpose-icon"><i class="bi bi-activity"></i></div>
+      <div>
+        <div class="purpose-title">How is this blood test classified?</div>
+        <div class="purpose-desc">Enter a patient's lab history, then click <strong>Predict</strong> to see how three different approaches — population reference ranges, a personalized setpoint model, and NORMA — classify the most recent value as <span style="color:var(--low);font-weight:600">Low</span>, <span style="color:var(--normal);font-weight:600">Normal</span>, or <span style="color:var(--high);font-weight:600">High</span>.</div>
       </div>
-      <div class="card-body">
-        <div class="labs-scroll-wrap">
-          <div class="labs-scroll">
-            {% for t in tests %}
-            <div class="lab-card" id="lc-{{ t }}"
-                 onclick="onLabClick('{{ t }}')">
-              <div class="lc-abbr">{{ t }}</div>
-              <div class="lc-cat" id="lcat-{{ t }}"></div>
-            </div>
-            {% endfor %}
-          </div>
+    </div>
+
+    <!-- Classification Verdict — the main result -->
+    <div class="card" id="verdict-card" style="display:none">
+      <div class="card-header" style="background:linear-gradient(135deg,rgba(0,113,227,0.04) 0%,rgba(48,209,88,0.04) 50%,rgba(191,90,242,0.04) 100%)">
+        <i class="bi bi-clipboard2-pulse" style="color:var(--accent);font-size:1rem"></i>
+        <div>
+          <div style="font-weight:700;line-height:1.25">Classification Verdict</div>
+          <div style="font-size:0.67rem;color:var(--text-3);font-weight:400">How each approach interprets the most recent value</div>
         </div>
-        <div class="lab-detail" id="lab-detail">
-          <div class="ld-abbr" id="ld-abbr"></div>
-          <div class="ld-name" id="ld-name"></div>
-          <div class="ld-desc" id="ld-desc"></div>
+        <div class="spacer"></div>
+        <span id="verdict-value-badge" style="font-size:0.78rem;font-weight:700;color:var(--text-1)"></span>
+      </div>
+      <div class="card-body" style="padding:1rem 1.25rem">
+        <div class="verdict-grid" id="verdict-grid"></div>
+      </div>
+    </div>
+
+    <!-- Biomarker info panel -->
+    <div class="card" id="biomarker-info-card">
+      <div class="card-body" style="padding:0.85rem 1.25rem">
+        <div style="display:flex;align-items:flex-start;gap:0.75rem">
+          <div style="flex-shrink:0;width:32px;height:32px;border-radius:8px;background:rgba(0,113,227,0.08);display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:0.9rem">
+            <i class="bi bi-droplet-half"></i>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)" id="bio-abbr">GLU</div>
+            <div style="font-size:0.92rem;font-weight:700;color:var(--text-1);letter-spacing:-0.02em" id="bio-name">Glucose</div>
+            <div style="font-size:0.78rem;color:var(--text-2);line-height:1.6;margin-top:0.2rem" id="bio-desc">—</div>
+          </div>
         </div>
       </div>
     </div>
@@ -888,48 +911,24 @@ const LAB_INFO = {
   LDL:  {name:'LDL Cholesterol',                   cat:'Lipid',      desc:'"Bad" cholesterol; the primary atherogenic lipoprotein. The principal therapeutic target for cardiovascular disease prevention.'},
   TGL:  {name:'Triglycerides',                     cat:'Lipid',      desc:'Main form of stored dietary fat circulating as VLDL. Elevated with insulin resistance, metabolic syndrome, and alcohol use.'},
 };
-const CAT_CLS = {Hematology:'cat-heme', Metabolic:'cat-meta', Hepatic:'cat-hepat', Lipid:'cat-lipid', Renal:'cat-renal'};
-
-// Populate category labels on lab cards
-document.querySelectorAll('[id^="lcat-"]').forEach(el => {
-  const t = el.id.replace('lcat-','');
+// Update sidebar + biomarker info panel
+function updateSidebarTestInfo() {
+  const t = document.getElementById('sel-test').value;
   const info = LAB_INFO[t];
-  if (info) { el.textContent = info.cat; el.className = 'lc-cat ' + (CAT_CLS[info.cat]||'cat-other'); }
-});
-
-let _activeLab = null;
-
-function onLabClick(t) {
-  // Update the sidebar test dropdown and trigger change
-  const sel = document.getElementById('sel-test');
-  if (sel.value !== t) {
-    sel.value = t;
-    sel.dispatchEvent(new Event('change'));
+  const el = document.getElementById('sidebar-test-info');
+  if (info && el) el.textContent = info.name;
+  // Update the biomarker info card
+  const abbr = document.getElementById('bio-abbr');
+  const name = document.getElementById('bio-name');
+  const desc = document.getElementById('bio-desc');
+  if (abbr && info) {
+    abbr.textContent = t;
+    name.textContent = info.name;
+    desc.textContent = info.desc;
   }
-  selectLab(t);
 }
 
-function selectLab(t) {
-  if (_activeLab) document.getElementById('lc-' + _activeLab)?.classList.remove('active');
-  _activeLab = t;
-  document.getElementById('lc-' + t)?.classList.add('active');
-  const info = LAB_INFO[t] || {name:t, cat:'', desc:'No description available.'};
-  document.getElementById('ld-abbr').textContent = t;
-  document.getElementById('ld-name').textContent = info.name;
-  document.getElementById('ld-desc').textContent = info.desc;
-}
-
-// Sync coverage panel when sel-test dropdown changes
-document.getElementById('sel-test').addEventListener('change', function() {
-  const t = this.value;
-  selectLab(t);
-  // Scroll the lab card into view
-  const card = document.getElementById('lc-' + t);
-  if (card) card.scrollIntoView({behavior:'smooth', block:'nearest', inline:'center'});
-});
-
-// Highlight the initially selected test
-selectLab(document.getElementById('sel-test').value);
+updateSidebarTestInfo();
 
 // ── Navbar ──
 document.getElementById('model-badge').textContent = MINFO.run_id;
@@ -949,7 +948,7 @@ function updateRefPill() {
   const r = REF[test][sexK];
   document.getElementById('ref-text').textContent = `${r.low}–${r.high} ${r.unit}`;
 }
-document.getElementById('sel-test').addEventListener('change', () => { seedDefaults(); updateRefPill(); });
+document.getElementById('sel-test').addEventListener('change', () => { seedDefaults(); updateRefPill(); updateSidebarTestInfo(); });
 document.querySelectorAll('input[name="sex"]').forEach(r => r.addEventListener('change', updateRefPill));
 updateRefPill();
 
@@ -1053,6 +1052,7 @@ async function loadExample(idx) {
       drawChart(payload, data);
       drawDistChart(payload, data);
       drawPredSummary(payload, data);
+      drawVerdict(payload, data);
       document.getElementById('chart-title').textContent = `${test} trajectory`;
       document.getElementById('btn-save').disabled = false;
       showInterpretPanel();
@@ -1094,6 +1094,7 @@ async function runPredict() {
     drawChart(payload, data);
     drawDistChart(payload, data);
     drawPredSummary(payload, data);
+    drawVerdict(payload, data);
     document.getElementById('chart-title').textContent = `${payload.test_name} trajectory`;
     document.getElementById('btn-save').disabled = false;
     showInterpretPanel();
@@ -1157,6 +1158,47 @@ function drawPredSummary(payload, data) {
     </div>`;
 }
 
+// ── Classification Verdict ──
+function drawVerdict(payload, data) {
+  const { predictions: preds, gmm_prediction: gmm, ref_low, ref_high, unit } = data;
+  const norm = preds['Normal'];
+  if (!norm || norm.error) return;
+
+  const clf = data.classifications || {};
+  const gmmOk = gmm && !gmm.error;
+  const lastVal = payload.history.length ? payload.history[payload.history.length - 1].value : null;
+  if (!lastVal && !clf.population) return;
+
+  const clfClass = v => v === 'Low' ? 'vl-low' : v === 'High' ? 'vl-high' : 'vl-normal';
+
+  const valueBadge = document.getElementById('verdict-value-badge');
+  if (lastVal != null) valueBadge.textContent = `Last value: ${lastVal} ${unit}`;
+
+  document.getElementById('verdict-card').style.display = '';
+  document.getElementById('purpose-banner').style.display = 'none';
+
+  document.getElementById('verdict-grid').innerHTML = `
+    <div class="verdict-cell v-pop">
+      <div class="verdict-approach a-pop"><i class="bi bi-people-fill"></i> Population</div>
+      <div class="verdict-label ${clfClass(clf.population)}">${clf.population || '—'}</div>
+      <div class="verdict-range">Range: <strong>${ref_low} – ${ref_high}</strong> ${unit}</div>
+      <div class="verdict-explain">Fixed thresholds from a reference population. Same range for everyone regardless of individual history.</div>
+    </div>
+    ${gmmOk ? `
+    <div class="verdict-cell v-gmm">
+      <div class="verdict-approach a-gmm"><i class="bi bi-person-fill"></i> Personalized</div>
+      <div class="verdict-label ${clfClass(clf.personalized)}">${clf.personalized || '—'}</div>
+      <div class="verdict-range">Range: <strong>${gmm.ci_lower.toFixed(1)} – ${gmm.ci_upper.toFixed(1)}</strong> ${unit}</div>
+      <div class="verdict-explain">Gaussian mixture model fitted to this patient's own history. No population anchor.</div>
+    </div>` : ''}
+    <div class="verdict-cell v-norma">
+      <div class="verdict-approach a-norma"><i class="bi bi-stars"></i> NORMA</div>
+      <div class="verdict-label ${clfClass(clf.norma)}">${clf.norma || '—'}</div>
+      <div class="verdict-range">Range: <strong>${norm.ci_lower.toFixed(1)} – ${norm.ci_upper.toFixed(1)}</strong> ${unit}</div>
+      <div class="verdict-explain">Contextual prediction anchored in population biology and personalized to individual trajectory.</div>
+    </div>`;
+}
+
 // ── Timeline chart with separate bell curve panel ──
 function drawChart(payload, data) {
   const { history, test_name, pred_date } = payload;
@@ -1196,29 +1238,30 @@ function drawChart(payload, data) {
     xaxis:'x', yaxis:'y',
   });
 
-  // 2. History line
+  // 2. History line (all but last point)
+  const lastD = histX[histX.length - 1], lastV = histY[histY.length - 1];
   traces.push({
-    x:histX, y:histY, mode:'lines+markers', name:'History',
+    x:histX.slice(0, -1), y:histY.slice(0, -1), mode:'lines+markers', name:'History',
     line:{color:'#6e6e73', width:1.5}, marker:{color:'#6e6e73', size:5},
     hovertemplate:'%{x}<br>%{y:.2f} '+unit+'<extra>History</extra>',
     xaxis:'x', yaxis:'y',
   });
 
-  // 3. Dashed connector from last obs to prediction date
-  const lastD = histX[histX.length - 1], lastV = histY[histY.length - 1];
+  // 3. Last observed value — highlighted with classification color
+  const clf = data.classifications || {};
+  const lastClfColor = clf.norma === 'Low' ? '#ff3b30' : clf.norma === 'High' ? '#ff9f0a' : '#30d158';
   traces.push({
-    x:[lastD, pred_date], y:[lastV, mu],
-    mode:'lines', showlegend:false,
-    line:{color:'#0071e3', width:1.2, dash:'dot'}, hoverinfo:'skip',
+    x:[lastD], y:[lastV], mode:'markers', name:'Latest',
+    marker:{color:lastClfColor, size:10, line:{width:2, color:'#fff'}},
+    hovertemplate:lastD+'<br>%{y:.2f} '+unit+'<extra>Latest value</extra>',
     xaxis:'x', yaxis:'y',
   });
-
-  // 5. Actual observed value
-  if (actualVal != null) {
+  // Connecting line from second-to-last to last
+  if (histX.length > 1) {
     traces.push({
-      x:[actualDate], y:[actualVal], mode:'markers', name:'Actual',
-      marker:{color:'#ff3b30', size:11, symbol:'star', line:{width:1.5, color:'#fff'}},
-      hovertemplate:actualDate+'<br>%{y:.2f} '+unit+' (Actual)<extra></extra>',
+      x:[histX[histX.length - 2], lastD], y:[histY[histY.length - 2], lastV],
+      mode:'lines', showlegend:false,
+      line:{color:'#6e6e73', width:1.5}, hoverinfo:'skip',
       xaxis:'x', yaxis:'y',
     });
   }
@@ -1245,15 +1288,6 @@ function drawChart(payload, data) {
   }
   traces.push(bellTrace(norm.mu, norm.sigma, 'rgba(0,113,227,0.9)', 'rgba(0,113,227,0.12)', 'NORMA'));
 
-  // Actual value line on bell panel
-  if (actualVal != null) {
-    traces.push({
-      x:[0, 1], y:[actualVal, actualVal], mode:'lines', showlegend:false,
-      line:{color:'#ff3b30', width:1.5, dash:'dash'}, hoverinfo:'skip',
-      xaxis:'x2', yaxis:'y',
-    });
-  }
-
   // ── Shapes & annotations ──
   const shapes = [
     {type:'line', x0:pred_date, x1:pred_date, y0:yMin, y1:yMax,
@@ -1277,26 +1311,23 @@ function drawChart(payload, data) {
      showarrow:false, text:' forecast', font:{size:9, color:'#aeaeb2'}, xref:'x', yref:'y'},
   ];
 
-  // Classification labels at last observed value
-  const clf = data.classifications || {};
-  const lastVal = histY[histY.length - 1];
-  const lastDate = histX[histX.length - 1];
+  // Classification label at last observed value
   const clfItems = [
     {label:'Population', value:clf.population, color:'#aeaeb2'},
     ...(gmmOk ? [{label:'Personalized', value:clf.personalized, color:'#bf5af2'}] : []),
     {label:'NORMA', value:clf.norma, color:'#0071e3'},
   ].filter(c => c.value);
   if (clfItems.length) {
-    const clfColor = v => v === 'Low' ? '#ff3b30' : v === 'High' ? '#ff9f0a' : '#30d158';
+    const clfColorFn = v => v === 'Low' ? '#ff3b30' : v === 'High' ? '#ff9f0a' : '#30d158';
     const clfText = clfItems.map(c =>
-      `<span style="color:${c.color}">${c.label}:</span> <b style="color:${clfColor(c.value)}">${c.value}</b>`
+      `<span style="color:${c.color}">${c.label}:</span> <b style="color:${clfColorFn(c.value)}">${c.value}</b>`
     ).join('  ·  ');
     annotations.push({
-      x:lastDate, y:lastVal, xanchor:'left', yanchor:'top',
+      x:lastD, y:lastV, xanchor:'left', yanchor:'top',
       showarrow:true, arrowhead:0, arrowwidth:1, arrowcolor:'rgba(0,0,0,0.15)',
-      ax:20, ay:30,
-      text:clfText, font:{size:10}, bgcolor:'rgba(255,255,255,0.92)',
-      bordercolor:'rgba(0,0,0,0.1)', borderwidth:1, borderpad:5,
+      ax:20, ay:28,
+      text:clfText, font:{size:10}, bgcolor:'rgba(255,255,255,0.95)',
+      bordercolor:'rgba(0,0,0,0.08)', borderwidth:1, borderpad:5,
       xref:'x', yref:'y',
     });
   }
@@ -1550,6 +1581,7 @@ function restoreRun(id) {
   drawChart(currentPayload, currentResult);
   drawDistChart(currentPayload, currentResult);
   drawPredSummary(currentPayload, currentResult);
+  drawVerdict(currentPayload, currentResult);
   document.getElementById('chart-title').textContent = `${run.test_name} trajectory`;
   document.getElementById('btn-save').disabled = false;
   document.getElementById('interpret-card').style.display = 'block';
@@ -1666,6 +1698,7 @@ async function applyWhatIfAndRedraw() {
     drawChart(payload, data);
     drawDistChart(payload, data);
     drawPredSummary(payload, data);
+    drawVerdict(payload, data);
     document.getElementById('wi-reset-btn').style.display = '';
   } catch(e) { /* silent */ }
 }
@@ -1677,6 +1710,7 @@ function resetWhatIf() {
   drawChart(currentPayload, currentResult);
   drawDistChart(currentPayload, currentResult);
   drawPredSummary(currentPayload, currentResult);
+  drawVerdict(currentPayload, currentResult);
   initWhatIfControls();
   document.getElementById('wi-reset-btn').style.display = 'none';
 }
@@ -1709,10 +1743,11 @@ function showToast(msg, isError=false) {
 
   // Map card id → readable section name
   const SECTION_NAMES = {
+    'verdict-card':       'Classification',
     'chart-card':         'Trajectory',
+    'sens-card':          'What If',
     'interpret-card':     'AI Interpretation',
     'saved-runs-section': 'Saved Runs',
-    'coverage-card':      'Biomarker Coverage',
   };
 
   // Track which cards have already been revealed (avoid re-animating)
@@ -1780,6 +1815,8 @@ function resetAll() {
     '<div class="empty-chart"><div class="empty-chart-icon"><i class="bi bi-activity"></i></div><p>Add history points and click <strong>Predict</strong><br>to visualise the trajectory</p></div>';
   document.getElementById('sens-card').style.display = 'none';
   document.getElementById('interpret-card').style.display = 'none';
+  document.getElementById('verdict-card').style.display = 'none';
+  document.getElementById('purpose-banner').style.display = '';
   document.getElementById('btn-save').disabled = true;
   document.getElementById('pid-chip-wrap').style.display = 'none';
   document.getElementById('chart-title').textContent = 'Lab Value Trajectory';
