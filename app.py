@@ -507,11 +507,11 @@ def about():
 
 @app.route('/training')
 def training():
-    return render_template('training.html', **_methods_context())
+    return redirect('/#architecture')
 
 @app.route('/validation')
 def validation():
-    return redirect('/training')
+    return redirect('/#architecture')
 
 
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')

@@ -388,6 +388,83 @@ coz<!DOCTYPE html>
     .btn-cta-outline:hover { border-color: rgba(255,255,255,0.4); color: #fff; }
 
     [id] { scroll-margin-top: 64px; }
+
+    /* ── Architecture diagram (from training) ── */
+    .hla-flow { display: grid; grid-template-columns: 1fr 44px 1.05fr 44px 0.9fr; align-items: center; gap: 0; margin-top: 1.75rem; }
+    .hla-arrow { display: flex; align-items: center; justify-content: center; }
+    .hla-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--r-lg); padding: 1.25rem 1.3rem; box-shadow: var(--shadow); align-self: stretch; display: flex; flex-direction: column; }
+    .hla-card.encoder { border-color: rgba(0,113,227,0.25); background: linear-gradient(145deg, rgba(0,113,227,0.04) 0%, rgba(191,90,242,0.04) 100%); }
+    .hla-card.output  { border-color: rgba(48,209,88,0.25); background: rgba(48,209,88,0.02); }
+    .hla-title { font-size: 0.57rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.13em; color: var(--text-3); margin-bottom: 0.9rem; display: flex; align-items: center; gap: 0.35rem; }
+    .inp-row { display: flex; align-items: center; gap: 0.65rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+    .inp-row:last-child { border-bottom: none; }
+    .inp-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 0.88rem; flex-shrink: 0; }
+    .inp-label { font-size: 0.82rem; font-weight: 600; color: var(--text-1); line-height: 1.2; }
+    .inp-sub   { font-size: 0.69rem; color: var(--text-2); line-height: 1.3; }
+    .enc-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; margin-bottom: 0.85rem; }
+    .enc-stat { background: rgba(255,255,255,0.75); border: 1px solid var(--border); border-radius: var(--r-md); padding: 0.5rem; text-align: center; }
+    .enc-stat-val { font-size: 1.15rem; font-weight: 800; color: var(--accent); letter-spacing: -0.02em; line-height: 1; }
+    .enc-stat-lbl { font-size: 0.58rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.07em; margin-top: 0.12rem; }
+    .enc-desc { font-size: 0.79rem; color: var(--text-2); line-height: 1.65; }
+    .enc-note { font-size: 0.73rem; color: var(--text-2); background: rgba(0,0,0,0.03); border-radius: var(--r-sm); padding: 0.5rem 0.65rem; margin-top: 0.65rem; line-height: 1.5; }
+    .out-pred { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.75rem; border-radius: var(--r-md); border: 1px solid var(--border); margin-bottom: 0.5rem; }
+    .out-sym { font-size: 1.5rem; font-weight: 800; font-style: italic; line-height: 1; min-width: 22px; text-align: center; }
+    .out-label { font-size: 0.81rem; font-weight: 600; color: var(--text-1); }
+    .out-sub   { font-size: 0.7rem; color: var(--text-2); }
+    .hla-loss { margin-top: auto; padding-top: 0.85rem; }
+    .loss-block-sm { background: rgba(255,249,230,0.9); border: 1px solid rgba(255,159,10,0.3); border-radius: var(--r-md); padding: 0.85rem; text-align: center; }
+    .loss-ey { font-size: 0.56rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--high); margin-bottom: 0.35rem; }
+    .loss-eq-sm { font-size: 0.88rem; font-family: 'SF Mono','Fira Code',ui-monospace,monospace; color: var(--text-1); line-height: 1.5; }
+    .loss-gloss { font-size: 0.7rem; color: var(--text-2); margin-top: 0.4rem; line-height: 1.4; }
+    @media (max-width: 860px) {
+      .hla-flow { grid-template-columns: 1fr; }
+      .hla-arrow { transform: rotate(90deg); padding: 0.25rem 0; }
+    }
+
+    /* ── Stats strip ── */
+    .stats-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--r-xl); overflow: hidden; margin-top: 2rem; }
+    .stat-cell { background: var(--surface); padding: 1.25rem 1.5rem; }
+    .stat-val { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.04em; color: var(--text-1); line-height: 1; }
+    .stat-lbl { font-size: 0.72rem; color: var(--text-2); margin-top: 0.3rem; }
+
+    /* ── Cohort map ── */
+    #cohort-map { width: 100%; height: 420px; }
+    .map-legend { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-2); }
+    .map-legend-item { display: flex; align-items: center; gap: 0.4rem; }
+    .map-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Cohort table ── */
+    .cohort-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; margin-top: 1.5rem; }
+    .cohort-table th { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); padding: 0.5rem 1rem; border-bottom: 2px solid var(--border); text-align: left; }
+    .cohort-table td { padding: 0.7rem 1rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .cohort-table tr:last-child td { border-bottom: none; }
+    .cohort-table tr.ext-row td { background: rgba(48,209,88,0.03); }
+    .badge-train { display: inline-flex; align-items: center; gap: 0.25rem; background: rgba(0,113,227,0.1); color: #004a99; border-radius: 999px; font-size: 0.67rem; font-weight: 700; padding: 0.15rem 0.55rem; }
+    .badge-ext   { display: inline-flex; align-items: center; gap: 0.25rem; background: rgba(48,209,88,0.12); color: #1a7a37; border-radius: 999px; font-size: 0.67rem; font-weight: 700; padding: 0.15rem 0.55rem; }
+    .badge-num   { font-family: 'SF Mono','Fira Code',ui-monospace,monospace; font-size: 0.8rem; font-weight: 600; color: var(--text-1); }
+    .split-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; gap: 1px; margin-top: 0.3rem; min-width: 100px; }
+    .sb-train { background: var(--accent); }
+    .sb-val   { background: var(--purple); }
+    .sb-test  { background: var(--high); }
+
+    /* ── Metrics ── */
+    .metrics-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+    .metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 1.1rem 1.25rem; box-shadow: var(--shadow); }
+    .metric-split { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); margin-bottom: 0.5rem; }
+    .metric-r2 { font-size: 2rem; font-weight: 800; letter-spacing: -0.04em; color: var(--text-1); line-height: 1; }
+    .metric-sub { font-size: 0.72rem; color: var(--text-2); margin-top: 0.3rem; }
+    .ms-btn { background: none; border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text-3); font-size: 0.68rem; font-weight: 600; padding: 0.22rem 0.65rem; cursor: pointer; transition: all 0.12s; font-family: inherit; }
+    .ms-btn:hover { color: var(--text-1); border-color: rgba(0,0,0,0.15); }
+    .ms-btn.ms-active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .compare-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    .compare-table th { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); padding: 0.5rem 0.85rem; border-bottom: 2px solid var(--border); text-align: left; }
+    .compare-table td { padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .compare-table tr:last-child td { border-bottom: none; }
+    .compare-table tr.norma-row td { background: rgba(48,209,88,0.04); }
+    .badge-norma { display: inline-flex; align-items: center; gap: 0.25rem; background: rgba(48,209,88,0.1); color: #1a7a37; border-radius: 999px; font-size: 0.68rem; font-weight: 700; padding: 0.15rem 0.55rem; border: 1px solid rgba(48,209,88,0.2); }
+    .chart-loading { display: flex; align-items: center; justify-content: center; height: 180px; gap: 0.5rem; color: var(--text-3); font-size: 0.85rem; }
+    .spinner-sm { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -397,8 +474,9 @@ coz<!DOCTYPE html>
   <a href="/" class="nav-brand"><span class="nav-dot"></span>NORMA</a>
   <div class="nav-spacer"></div>
   <div class="nav-links">
-    <a href="#demo"      class="nav-link">Example</a>
-    <a href="/training" class="nav-link">Training</a>
+    <a href="#architecture" class="nav-link">Architecture</a>
+    <a href="#cohorts"      class="nav-link">Cohorts</a>
+    <a href="#metrics"      class="nav-link">Metrics</a>
   </div>
   <a href="/app" class="btn-nav"><i class="bi bi-lightning-charge-fill"></i> Try NORMA</a>
 </nav>
@@ -529,7 +607,7 @@ coz<!DOCTYPE html>
     <div style="margin-top:2.5rem">
       <div class="eyebrow" style="margin-bottom:0.5rem">Coverage — {{ model_info.n_tests }} biomarkers</div>
       <p style="font-size:0.82rem;color:var(--text-3);margin-bottom:0.9rem">
-        Hover a biomarker to see a live patient example in the demo below.
+        Hover a biomarker to see reference intervals and clinical context.
       </p>
       <div class="labs-scroll-wrap">
         <div class="labs-scroll">
@@ -555,130 +633,273 @@ coz<!DOCTYPE html>
 </section>
 
 
-<!-- ── Live Demo ── -->
-<section class="sec gray" id="demo">
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION: Architecture                                      -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<section class="sec gray" id="architecture">
   <div class="inner">
-    <div class="eyebrow">Live Example</div>
-    <div class="live-example-header">
-      <h2 class="stitle">
-        <span style="display:flex;align-items:center;gap:0.5rem">
-          <i class="bi bi-activity" style="color:var(--normal);font-size:1.5em"></i>
-          NORMA interprets a real patient trajectory
-        </span>
-      </h2>
+    <div class="eyebrow">How it works</div>
+    <h2 class="stitle">How NORMA works</h2>
+    <p class="slead" style="margin-bottom:0.75rem">
+      <strong>NORMA</strong> — <em>Normal Outcome Range Modeling with Attention</em>.
+    </p>
+
+    <p class="slead">
+      Each patient visit is encoded as five input signals. A causal transformer reads the full history
+      and — queried with a <strong>target clinical state</strong> and forecast horizon — outputs a
+      calibrated probability distribution: predicted mean <em>μ</em> and uncertainty <em>σ</em>.
+      By conditioning on a "healthy" state at inference, deviation from NORMA's expectation becomes the clinical signal.
+    </p>
+
+    <div class="hla-flow">
+
+      <!-- Col 1: Inputs -->
+      <div class="hla-card">
+        <div class="hla-title"><i class="bi bi-arrow-right-circle" style="color:var(--accent)"></i> Patient History Inputs</div>
+
+        <div class="inp-row">
+          <div class="inp-icon" style="background:rgba(0,113,227,0.1)">🧪</div>
+          <div><div class="inp-label">Lab value</div><div class="inp-sub">Numeric measurement at each visit</div></div>
+        </div>
+        <div class="inp-row">
+          <div class="inp-icon" style="background:rgba(255,159,10,0.12)">📊</div>
+          <div><div class="inp-label">Clinical state</div><div class="inp-sub">Low / Normal / High at each time step</div></div>
+        </div>
+        <div class="inp-row">
+          <div class="inp-icon" style="background:rgba(0,193,168,0.12)">⏱</div>
+          <div><div class="inp-label">Irregular time intervals</div><div class="inp-sub">Variable gaps between visits via Time2Vec</div></div>
+        </div>
+        <div class="inp-row">
+          <div class="inp-icon" style="background:rgba(48,209,88,0.12)">👤</div>
+          <div><div class="inp-label">Age &amp; sex</div><div class="inp-sub">Demographic context shared across history</div></div>
+        </div>
+        <div class="inp-row">
+          <div class="inp-icon" style="background:rgba(191,90,242,0.1)">🔬</div>
+          <div><div class="inp-label">Lab test identity</div><div class="inp-sub">Which biomarker is being measured</div></div>
+        </div>
+
+        <div style="margin-top:1rem; padding:0.65rem 0.75rem; background:rgba(255,159,10,0.07); border:1px solid rgba(255,159,10,0.2); border-radius:var(--r-md); font-size:0.77rem; color:var(--text-2); line-height:1.5">
+          <i class="bi bi-crosshair" style="color:var(--high)"></i>
+          <strong style="color:var(--text-1)"> Query token</strong> — additionally specifies
+          the <em>target clinical state</em> and <em>forecast horizon</em> to condition the prediction
+        </div>
+      </div>
+
+      <!-- Arrow -->
+      <div class="hla-arrow">
+        <svg width="44" height="28" viewBox="0 0 44 28">
+          <defs><marker id="mha1" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L6,3 Z" fill="#0071e3"/>
+          </marker></defs>
+          <line x1="4" y1="14" x2="38" y2="14" stroke="#0071e3" stroke-width="2.2" marker-end="url(#mha1)"/>
+        </svg>
+      </div>
+
+      <!-- Col 2: Transformer Encoder -->
+      <div class="hla-card encoder">
+        <div class="hla-title"><i class="bi bi-cpu" style="color:var(--accent)"></i> Causal Transformer Encoder</div>
+        <div class="enc-stat-grid">
+          <div class="enc-stat"><div class="enc-stat-val">8</div><div class="enc-stat-lbl">Layers</div></div>
+          <div class="enc-stat"><div class="enc-stat-val">4</div><div class="enc-stat-lbl">Heads</div></div>
+          <div class="enc-stat"><div class="enc-stat-val">64</div><div class="enc-stat-lbl">Dim</div></div>
+          <div class="enc-stat"><div class="enc-stat-val">565K</div><div class="enc-stat-lbl">Params</div></div>
+        </div>
+        <div class="enc-desc">
+          Reads the patient's full laboratory history as an ordered sequence.
+          <strong>Causal masking</strong> ensures each time step only attends to past observations — no future leakage.
+        </div>
+        <div class="enc-note">
+          <i class="bi bi-arrow-return-right" style="color:var(--accent)"></i>
+          The <strong>last hidden state</strong> (from the query token) is a compact representation
+          of the patient's trajectory, conditioned on when and what to predict next.
+        </div>
+      </div>
+
+      <!-- Arrow -->
+      <div class="hla-arrow">
+        <svg width="44" height="28" viewBox="0 0 44 28">
+          <defs><marker id="mha2" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L6,3 Z" fill="#30d158"/>
+          </marker></defs>
+          <line x1="4" y1="14" x2="38" y2="14" stroke="#30d158" stroke-width="2.2" marker-end="url(#mha2)"/>
+        </svg>
+      </div>
+
+      <!-- Col 3: Predictions + Loss -->
+      <div class="hla-card output">
+        <div class="hla-title"><i class="bi bi-bullseye" style="color:var(--normal)"></i> Prediction</div>
+
+        <div class="out-pred" style="border-color:rgba(0,113,227,0.2); background:rgba(0,113,227,0.04)">
+          <div class="out-sym" style="color:var(--accent)">μ</div>
+          <div><div class="out-label">Predicted mean</div><div class="out-sub">Expected next lab value</div></div>
+        </div>
+
+        <div class="out-pred" style="border-color:rgba(191,90,242,0.2); background:rgba(191,90,242,0.04)">
+          <div class="out-sym" style="color:var(--purple)">σ</div>
+          <div><div class="out-label">Predicted uncertainty</div><div class="out-sub">Confidence narrows with more data;<br>widens over longer horizons</div></div>
+        </div>
+
+        <div style="font-size:0.77rem; color:var(--text-2); text-align:center; padding:0.4rem 0; line-height:1.4">
+          Together: a <strong>95% predictive interval</strong><br>personalized to each patient
+        </div>
+
+        <div class="hla-loss">
+          <div class="loss-block-sm">
+            <div class="loss-ey"><i class="bi bi-calculator"></i> Gaussian NLL Loss</div>
+            <div class="loss-eq-sm">ℒ = ½ [ log σ² + (y − μ)² / σ² ]</div>
+            <div class="loss-gloss">
+              Jointly optimizes accuracy <em>(y − μ)²</em><br>and calibration <em>log σ²</em>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /hla-flow -->
+
+    <!-- Contextual query callout -->
+    <div style="margin-top:2rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div style="background:var(--surface);border:1.5px solid rgba(48,209,88,0.35);border-radius:var(--r-lg);padding:1rem 1.25rem">
+        <div style="font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--normal);margin-bottom:0.5rem">Contextual query — healthy state</div>
+        <div style="font-size:0.88rem;font-weight:600;color:var(--text-1);line-height:1.5">"What value would we expect if this patient were healthy?"</div>
+        <div style="font-size:0.72rem;color:var(--text-2);margin-top:0.4rem;line-height:1.55">Set state = Normal at inference. Deviation from this expectation is a clinically meaningful signal — narrower than population ranges, anchored to the individual's history.</div>
+      </div>
+      <div style="background:var(--surface);border:1.5px solid rgba(191,90,242,0.3);border-radius:var(--r-lg);padding:1rem 1.25rem">
+        <div style="font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--purple);margin-bottom:0.5rem">Conditional query — what if?</div>
+        <div style="font-size:0.88rem;font-weight:600;color:var(--text-1);line-height:1.5">"What if this patient were older, or a different sex?"</div>
+        <div style="font-size:0.72rem;color:var(--text-2);margin-top:0.4rem;line-height:1.55">Swap static demographic inputs at inference time. The model adapts its prediction to the new context — enabling sensitivity analysis and personalized what-if exploration.</div>
+      </div>
     </div>
-    <style>
-      .live-example-header { margin-bottom: 1.3rem; }
-    </style>
+  </div>
+</section>
 
-    <div class="demo-card">
-      <div class="demo-hdr">
-        <span class="live-dot"></span>
-        <span>Live prediction</span>
-        <span id="ex-label" style="color:var(--text-3);font-size:0.72rem;margin-left:0.1rem"></span>
-        <div style="flex:1"></div>
-        <button onclick="cycleExample()" style="background:none;border:1px solid var(--border);border-radius:var(--r-sm);padding:0.2rem 0.6rem;font-size:0.71rem;color:var(--text-2);cursor:pointer;display:flex;align-items:center;gap:0.28rem">
-          <i class="bi bi-arrow-right-circle"></i> Next example
-        </button>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION: Training Cohorts + Map                           -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<section class="sec white" id="cohorts">
+  <div class="inner">
+    <div class="eyebrow">Training Cohorts</div>
+    <h2 class="stitle">Trained on two health systems. Validated in a third.</h2>
+    <p class="slead">
+      NORMA was trained on longitudinal lab sequences from MIMIC-IV (Boston) and EHRSHOT (Stanford).
+      External validation was performed on Clalit Health Services (Israel) — the largest integrated
+      health system in Israel — with no model retraining.
+    </p>
+
+    <!-- Stats strip -->
+    <div class="stats-strip">
+      <div class="stat-cell">
+        <div class="stat-val">4.5M</div>
+        <div class="stat-lbl">Adults in external validation</div>
       </div>
-
-      <div id="ex-loading" class="ex-loading">
-        <div class="spinner"></div><span>Loading example…</span>
+      <div class="stat-cell">
+        <div class="stat-val">34</div>
+        <div class="stat-lbl">Laboratory biomarkers modeled</div>
       </div>
-
-      <div id="ex-content" style="display:none">
-
-        <!-- Trajectory with rotated distributions at forecast date -->
-        <div class="ex-chart-panel">
-          <div id="ex-chart" style="width:100%;height:360px"></div>
-        </div>
-
-        <!-- Model keys -->
-        <div class="model-keys" id="ex-mkeys"></div>
-
-        <!-- AI Interpretation -->
-        <div id="ex-ai-wrap" style="display:none">
-          <div class="dpanel">
-            <div class="dpanel-hdr ai"><i class="bi bi-stars"></i> AI Interpretation</div>
-            <div class="dpanel-body">
-              <div class="interp-text" id="ex-ai-body">
-                <span style="color:var(--text-3)">Generating…</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Disease Risk -->
-        <div id="ex-risk-wrap" style="display:none">
-          <div class="dpanel">
-            <div class="dpanel-hdr risk"><i class="bi bi-shield-exclamation" style="color:var(--high)"></i> Disease Risk Context</div>
-            <div class="dpanel-body">
-              <div class="risk-what" id="ex-risk-what"></div>
-              <div class="risk-bar-wrap" id="ex-risk-bar"></div>
-              <div class="risk-cols" id="ex-risk-cols">
-                <span style="color:var(--text-3);font-size:0.82rem">Loading…</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- What if? interactive explorer -->
-        <div class="dpanel" id="ex-tune-wrap" style="display:none;margin-top:1rem">
-          <div class="dpanel-hdr" style="background:linear-gradient(120deg,#f0f8ff 0%,#f5f0ff 100%);display:flex;align-items:center;justify-content:space-between">
-            <div style="display:flex;align-items:center;gap:0.5rem">
-              <i class="bi bi-sliders2" style="color:var(--accent)"></i>
-              <div>
-                <div style="font-weight:700">What if…?</div>
-                <div style="font-size:0.67rem;color:var(--text-3);font-weight:400">Adjust parameters — the chart updates in real time</div>
-              </div>
-            </div>
-            <button type="button" onclick="resetTune()" style="background:none;border:1px solid var(--border);border-radius:var(--r-sm);padding:0.2rem 0.6rem;font-size:0.71rem;color:var(--text-2);cursor:pointer;display:flex;align-items:center;gap:0.28rem">
-              <i class="bi bi-arrow-counterclockwise"></i> Reset
-            </button>
-          </div>
-          <div class="dpanel-body">
-            <div class="wi-controls-grid">
-
-              <!-- Age -->
-              <div>
-                <div class="wi-q">What if the patient is <span class="wi-dval" id="tune-age-value">50</span> years old?</div>
-                <input type="range" id="tune-age" class="tune-slider" min="18" max="85" value="50" step="1">
-                <div class="tune-range-ends"><span>18</span><span>85 yrs</span></div>
-              </div>
-
-              <!-- Sex -->
-              <div>
-                <div class="wi-q">What if the biological sex is <span class="wi-dval" id="tune-sex-label">Female</span>?</div>
-                <div class="tune-seg">
-                  <button type="button" class="tune-seg-btn" id="tune-sb-m" onclick="setTuneSex(0)">Male</button>
-                  <button type="button" class="tune-seg-btn on" id="tune-sb-f" onclick="setTuneSex(1)">Female</button>
-                </div>
-              </div>
-
-              <!-- Horizon -->
-              <div>
-                <div class="wi-q">What if the next test is in <span class="wi-dval" id="tune-horizon-value">90 d</span>?</div>
-                <input type="range" id="tune-horizon-slider" class="tune-slider" min="7" max="730" value="90" step="1">
-                <div class="tune-range-ends"><span>1 week</span><span>2 years</span></div>
-              </div>
-
-              <!-- Noise -->
-              <div>
-                <div class="wi-q">What if there is <span class="wi-dval" id="tune-noise-value">0%</span> noise in the trajectory?</div>
-                <input type="range" id="tune-noise" class="tune-slider" min="0" max="50" value="0" step="1">
-                <div class="tune-range-ends"><span>0%</span><span>50%</span></div>
-              </div>
-
-            </div>
-          </div>
-        </div>
-
-        <div class="demo-footer">
-          <a href="/app" class="btn-primary" style="font-size:0.875rem;padding:0.68rem 1.45rem;box-shadow:none">
-            <i class="bi bi-lightning-charge-fill"></i> Try NORMA with your own data
-          </a>
-        </div>
+      <div class="stat-cell">
+        <div class="stat-val">1.7B</div>
+        <div class="stat-lbl">Lab results evaluated</div>
       </div>
+    </div>
+
+    <!-- Map -->
+    <div style="margin-top:2rem; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-xl); padding:1.25rem; box-shadow:var(--shadow)">
+      <div id="cohort-map"></div>
+      <div class="map-legend">
+        <div class="map-legend-item"><div class="map-legend-dot" style="background:#0071e3"></div> Training cohort</div>
+        <div class="map-legend-item"><div class="map-legend-dot" style="background:#30d158"></div> External validation</div>
+        <div class="map-legend-item" style="color:var(--text-3); font-size:0.73rem">Marker size ∝ sample size. Hover for details.</div>
+      </div>
+    </div>
+
+    <!-- Cohort table -->
+    <div style="margin-top:1.5rem; overflow-x:auto">
+      <table class="cohort-table">
+        <thead>
+          <tr><th>Cohort</th><th>Institution</th><th>Role</th><th>Sequences</th><th>Train / Val / Test</th><th>70/10/20 split</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>MIMIC-IV</strong></td>
+            <td>Beth Israel Deaconess Medical Center, Boston MA</td>
+            <td><span class="badge-train"><i class="bi bi-database-fill"></i> Training</span></td>
+            <td><span class="badge-num">1,907,032</span></td>
+            <td style="font-size:0.78rem; color:var(--text-2)">1,334,921 / 190,704 / 381,407</td>
+            <td><div class="split-bar"><div class="sb-train" style="flex:70"></div><div class="sb-val" style="flex:10"></div><div class="sb-test" style="flex:20"></div></div></td>
+          </tr>
+          <tr>
+            <td><strong>EHRSHOT</strong></td>
+            <td>Stanford Medicine, Palo Alto CA</td>
+            <td><span class="badge-train"><i class="bi bi-database-fill"></i> Training</span></td>
+            <td><span class="badge-num">96,042</span></td>
+            <td style="font-size:0.78rem; color:var(--text-2)">67,228 / 9,605 / 19,209</td>
+            <td><div class="split-bar"><div class="sb-train" style="flex:70"></div><div class="sb-val" style="flex:10"></div><div class="sb-test" style="flex:20"></div></div></td>
+          </tr>
+          <tr class="ext-row">
+            <td><strong>Clalit</strong></td>
+            <td>Clalit Health Services, Israel</td>
+            <td><span class="badge-ext"><i class="bi bi-shield-check"></i> External validation</span></td>
+            <td><span class="badge-num">4,500,000+</span></td>
+            <td style="font-size:0.78rem; color:var(--text-2)">No retraining</td>
+            <td style="font-size:0.78rem; color:var(--text-3)">Held-out</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION: Training Metrics                                  -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<section class="sec gray" id="metrics">
+  <div class="inner">
+    <div class="eyebrow">Forecasting Performance</div>
+    <h2 class="stitle">How well does NORMA predict the next value?</h2>
+    <p class="slead">
+      These metrics evaluate <strong>forecasting accuracy</strong> — how closely NORMA's predicted
+      distribution matches the observed next lab value under a healthy contextual state.
+      High R² indicates the model captures individual trajectory dynamics well.
+      <br><br>
+      <span style="color:var(--text-3)">
+        Clinical validation — whether deviations from NORMA's predicted ranges predict disease
+        outcomes — is evaluated on 4.5 million adults in Clalit Health Services, with no model retraining.
+      </span>
+    </p>
+
+    <!-- Static summary from checkpoint -->
+    <div class="metrics-row">
+      <div class="metric-card">
+        <div class="metric-split">Train</div>
+        <div class="metric-r2">{{ model_info.train_r2 }}</div>
+        <div class="metric-sub">R² &nbsp;·&nbsp; NLL loss {{ model_info.train_loss }}</div>
+        <div class="metric-sub" style="margin-top:0.2rem; color:var(--text-3)">epoch {{ model_info.epoch }}</div>
+      </div>
+      <div class="metric-card" style="border-color:rgba(0,113,227,0.3); background:rgba(0,113,227,0.03)">
+        <div class="metric-split" style="color:var(--accent)">Validation</div>
+        <div class="metric-r2" style="color:var(--accent)">{{ model_info.val_r2 }}</div>
+        <div class="metric-sub">R² &nbsp;·&nbsp; NLL loss {{ model_info.val_loss }}</div>
+        <div class="metric-sub" style="margin-top:0.2rem; color:var(--text-3)">early stopping checkpoint</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-split">Test (bootstrap)</div>
+        <div class="metric-r2" style="color:var(--text-3)" id="test-r2-live">—</div>
+        <div class="metric-sub">95% CI from bootstrap resampling</div>
+        <div class="metric-sub" style="margin-top:0.2rem; color:var(--text-3)">held-out split</div>
+      </div>
+    </div>
+
+    <!-- Bootstrap metrics from API -->
+    <div style="display:flex;gap:0.45rem;align-items:center;margin-bottom:0.85rem;flex-wrap:wrap">
+      <span style="font-size:0.72rem;color:var(--text-3);font-weight:500">Bootstrap estimates — split:</span>
+      <button class="ms-btn ms-active" id="ms-test"  onclick="setMetricsSplit('test')">Test</button>
+      <button class="ms-btn"           id="ms-val"   onclick="setMetricsSplit('val')">Validation</button>
+      <button class="ms-btn"           id="ms-train" onclick="setMetricsSplit('train')">Train</button>
+    </div>
+    <div id="metrics-table-wrap">
+      <div class="chart-loading"><div class="spinner-sm"></div><span>Loading metrics…</span></div>
     </div>
   </div>
 </section>
@@ -693,8 +914,7 @@ coz<!DOCTYPE html>
       Enter a lab history, select demographics, and get NORMA's prediction with AI interpretation.
     </p>
     <div class="cta-btns">
-      <a href="/app"   class="btn-cta"><i class="bi bi-lightning-charge-fill"></i> Try NORMA</a>
-      <a href="/training" class="btn-cta-outline"><i class="bi bi-cpu"></i> Training & Validation</a>
+      <a href="/app" class="btn-cta"><i class="bi bi-lightning-charge-fill"></i> Try NORMA</a>
     </div>
   </div>
 </section>
@@ -748,22 +968,10 @@ document.querySelectorAll('[id^="lcat-"]').forEach(el => {
 });
 
 let _activeLab = null;
-let _labHoverTimer = null;
 
-// Called on lab card hover: update detail panel immediately, debounce demo load
 function onLabHover(t) {
   selectLab(t);
-  clearTimeout(_labHoverTimer);
-  _labHoverTimer = setTimeout(() => {
-    loadDemo(t);
-    // Smooth-scroll to demo section on first hover after page load
-    if (!_demoHasScrolled) {
-      _demoHasScrolled = true;
-      document.getElementById('demo')?.scrollIntoView({behavior:'smooth', block:'start'});
-    }
-  }, 350);
 }
-let _demoHasScrolled = false;
 
 function selectLab(t) {
   if (_activeLab) document.getElementById('lc-' + _activeLab)?.classList.remove('active');
@@ -782,527 +990,132 @@ function selectLab(t) {
   document.getElementById('lab-detail').classList.add('show');
 }
 
-function var_accent() { return '#0071e3'; }
-
-/* ─────────────────────────────────────────
-   Disease risk
-───────────────────────────────────────── */
-async function loadRisk(test, data) {
-  const wrap = document.getElementById('ex-risk-wrap');
-  const cols = document.getElementById('ex-risk-cols');
-  const what = document.getElementById('ex-risk-what');
-  const bar  = document.getElementById('ex-risk-bar');
-  wrap.style.display = 'block';
-  cols.innerHTML = '<span style="color:var(--text-3);font-size:0.82rem">Loading…</span>';
-  what.textContent = ''; bar.innerHTML = '';
-  try {
-    const r = await fetch(`/api/disease_risk/${encodeURIComponent(test)}`);
-    const d = await r.json();
-    if (d.error) { cols.innerHTML = `<span style="color:var(--text-3);font-size:0.8rem">${d.error}</span>`; return; }
-    what.textContent = d.what_it_measures || '';
-    const {ref_low:rl, ref_high:rh} = data;
-    bar.innerHTML = `
-      <div class="risk-bar-lbl"><span>Low (&lt;${rl})</span><span>Normal (${rl}–${rh})</span><span>High (&gt;${rh})</span></div>
-      <div class="risk-bar">
-        <div class="risk-bar-l" style="width:25%"></div>
-        <div class="risk-bar-n" style="width:50%"></div>
-        <div class="risk-bar-h" style="width:25%"></div>
-      </div>`;
-    const items = arr => (arr||[]).map(i=>`
-      <div class="risk-item">
-        <div class="risk-disease">${i.disease||''}</div>
-        <div class="risk-desc">${i.description||''}</div>
-        <div class="risk-cite"><i class="bi bi-journal-text"></i> ${i.citation||''}</div>
-      </div>`).join('');
-    cols.innerHTML = `
-      <div><div class="risk-col-hd lo"><i class="bi bi-arrow-down-circle-fill"></i> If Too Low</div>${items(d.low_risks)}</div>
-      <div><div class="risk-col-hd hi"><i class="bi bi-arrow-up-circle-fill"></i> If Too High</div>${items(d.high_risks)}</div>`;
-  } catch(e) {
-    cols.innerHTML = '<span style="color:var(--text-3)">Could not load risk information.</span>';
-  }
-}
-
-/* ─────────────────────────────────────────
-   AI interpretation
-───────────────────────────────────────── */
-async function loadInterpretation(test, ex, data) {
-  const wrap = document.getElementById('ex-ai-wrap');
-  const body = document.getElementById('ex-ai-body');
-  wrap.style.display = 'block';
-  body.innerHTML = '<span style="color:var(--text-3)">Generating interpretation…</span>';
-  try {
-    const r = await fetch('/api/interpret', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        test_name:test, sex:ex.sex, age:ex.age,
-        history:ex.history, pred_date:ex.pred_date,
-        predictions:data.predictions, gmm_prediction:data.gmm_prediction,
-        ref_low:data.ref_low, ref_high:data.ref_high, unit:data.unit,
-      }),
-    });
-    const d = await r.json();
-    body.textContent = d.error || d.interpretation;
-  } catch(e) {
-    body.innerHTML = '<span style="color:var(--text-3)">Could not reach interpretation service.</span>';
-  }
-}
-
-/* ─────────────────────────────────────────
-   Gaussian helpers
-───────────────────────────────────────── */
-function gaussPDF(x, mu, sig) {
-  return Math.exp(-0.5 * ((x-mu)/sig)**2) / (sig * Math.sqrt(2*Math.PI));
-}
-
-function linspace(a, b, n) {
-  return Array.from({length:n}, (_, i) => a + (b - a) * i / (n - 1));
-}
-
-// Right-side KDE bell curve: teardrop shape anchored at predDate, opening to the right
-function makeRotatedDist(mu, sigma, predDate, scaleMs, lineColor, fillColor, name) {
-  const ys = linspace(mu - 3.2 * sigma, mu + 3.2 * sigma, 120);
-  const pdfs = ys.map(y => gaussPDF(y, mu, sigma));
-  const peak = gaussPDF(mu, mu, sigma);
-  const predMs = new Date(predDate).getTime();
-  const toDate = ms => new Date(ms).toISOString().slice(0, 10);
-  const xs = pdfs.map(p => toDate(predMs + (p / peak) * scaleMs));
-  return {
-    x: [predDate, ...xs, predDate],
-    y: [ys[0],     ...ys, ys[ys.length - 1]],
-    fill: 'toself', fillcolor: fillColor,
-    line: { color: lineColor, width: 1.5 },
-    name, mode: 'lines',
-    hovertemplate: '%{y:.2f}<extra>' + name + '</extra>',
+/* ── Cohort map ─────────────────────────────────────────────── */
+(function buildMap() {
+  const sites = [
+    { name: 'MIMIC-IV', inst: 'Beth Israel Deaconess Medical Center', city: 'Boston, MA',
+      lat: 42.335, lon: -71.107, role: 'Training',
+      sequences: 1907032, patients: '~40K adults',
+      train: 1334921, val: 190704, test: 381407, color: '#0071e3', size: 26 },
+    { name: 'EHRSHOT', inst: 'Stanford Medicine', city: 'Palo Alto, CA',
+      lat: 37.442, lon: -122.143, role: 'Training',
+      sequences: 96042, patients: '~7K adults',
+      train: 67228, val: 9605, test: 19209, color: '#0071e3', size: 14 },
+    { name: 'Clalit Health Services', inst: 'Clalit Health Services', city: 'Israel',
+      lat: 31.77, lon: 35.22, role: 'External Validation',
+      sequences: null, patients: '4.5M adults',
+      train: null, val: null, test: null, color: '#30d158', size: 40 },
+  ];
+  const customdata = sites.map(s => ({
+    inst: s.inst, city: s.city, role: s.role, patients: s.patients,
+    seq: s.sequences ? s.sequences.toLocaleString() : 'N/A',
+    train: s.train ? s.train.toLocaleString() : '\u2014',
+    val:   s.val   ? s.val.toLocaleString()   : '\u2014',
+    test:  s.test  ? s.test.toLocaleString()  : '\u2014',
+  }));
+  const trace = {
+    type: 'scattergeo', mode: 'markers+text',
+    lat: sites.map(s => s.lat), lon: sites.map(s => s.lon),
+    text: sites.map(s => s.name),
+    textposition: sites.map((s, i) => i === 2 ? 'top right' : 'top center'),
+    textfont: { family: 'DM Sans,sans-serif', size: 11, color: sites.map(s => s.color) },
+    customdata,
+    hovertemplate:
+      '<b>%{text}</b><br>%{customdata.inst}<br>%{customdata.city}<br><br>' +
+      '<b>Role:</b> %{customdata.role}<br><b>Patients:</b> %{customdata.patients}<br>' +
+      '<b>Sequences:</b> %{customdata.seq}<br>' +
+      '<b>Train / Val / Test:</b> %{customdata.train} / %{customdata.val} / %{customdata.test}<extra></extra>',
+    marker: { size: sites.map(s => s.size), color: sites.map(s => s.color), opacity: 0.88, line: { color: '#fff', width: 2 } },
   };
-}
+  Plotly.newPlot('cohort-map', [trace], {
+    margin: { l:0, r:0, t:0, b:0 }, paper_bgcolor: '#fff',
+    geo: {
+      scope: 'world', projection: { type: 'natural earth' },
+      showland: true, landcolor: '#f0f0f5', showocean: true, oceancolor: '#e8f2ff',
+      showcoastlines: true, coastlinecolor: '#ccc', showcountries: true, countrycolor: '#ddd',
+      showframe: false, lonaxis: { range: [-140, 60] }, lataxis: { range: [20, 60] }, bgcolor: '#fff',
+    },
+  }, { responsive: true, displayModeBar: false });
+})();
 
-function drawExDistChart(test, data) {
-  const {predictions:preds, gmm_prediction:gmm, ref_low, ref_high, unit} = data;
-  const norm = preds['Normal'];
-  if (!norm || norm.error) return;
-  const gmmOk = gmm && !gmm.error;
-  const gmmMu = gmmOk ? gmm.mu : null;
-  const gmmSig = gmmOk ? gmm.sigma : null;
-  const refMu = (ref_low + ref_high) / 2;
-  const refSig = (ref_high - ref_low) / 3.92;
-  const allMu = [norm.mu, refMu, ...(gmmOk ? [gmmMu] : [])];
-  const allSig = [norm.sigma, refSig, ...(gmmOk ? [gmmSig] : [])];
-  const xLo = Math.min(...allMu.map((m, i) => m - 4 * allSig[i]));
-  const xHi = Math.max(...allMu.map((m, i) => m + 4 * allSig[i]));
-  const xs = linspace(xLo, xHi, 300);
-  const trace = (xsArr, mu, sigma, color, fillColor, name) => ({
-    x: xsArr,
-    y: xsArr.map(x => gaussPDF(x, mu, sigma)),
-    mode: 'lines', name,
-    line: {color, width: 2},
-    fill: 'tozeroy', fillcolor: fillColor,
-    hovertemplate: '<b>' + name + '</b><br>value = %{x:.2f}<br>density = %{y:.4f}<extra></extra>',
-  });
-  const traces = [
-    trace(xs, refMu, refSig, '#aeaeb2', 'rgba(174,174,178,0.08)', 'Population'),
-  ];
-  if (gmmOk) traces.push(trace(xs, gmmMu, gmmSig, '#bf5af2', 'rgba(191,90,242,0.1)', 'Personalized'));
-  traces.push(trace(xs, norm.mu, norm.sigma, '#0071e3', 'rgba(0,113,227,0.12)', 'NORMA'));
-  const yMax = Math.max(...traces.flatMap(t => t.y)) * 1.2;
-  Plotly.newPlot('ex-dist-chart', traces, {
-    margin: {l: 44, r: 14, t: 8, b: 44},
-    font: {family: 'DM Sans,sans-serif', size: 11, color: '#6e6e73'},
-    xaxis: {title: test + ' (' + unit + ')', showgrid: true, gridcolor: 'rgba(0,0,0,0.05)', zeroline: false},
-    yaxis: {title: 'Density', range: [0, yMax], showgrid: false, zeroline: false, showticklabels: false},
-    legend: {orientation: 'h', y: -0.28, font: {size: 11}},
-    hovermode: 'x unified',
-    plot_bgcolor: '#fff', paper_bgcolor: '#fff',
-    shapes: [
-      {type: 'line', x0: ref_low, x1: ref_low, y0: 0, y1: yMax, line: {color: 'rgba(174,174,178,0.5)', width: 1, dash: 'dot'}},
-      {type: 'line', x0: ref_high, x1: ref_high, y0: 0, y1: yMax, line: {color: 'rgba(174,174,178,0.5)', width: 1, dash: 'dot'}},
-    ],
-  }, {responsive: true, displayModeBar: false});
-}
+/* ── Metrics API ─────────────────────────────────────────────── */
+let _metricsData = null;
+let _metricsSplit = 'test';
 
-/* ─────────────────────────────────────────
-   Main chart
-───────────────────────────────────────── */
-function renderChart(test, ex, data) {
-  const {predictions:preds, gmm_prediction:gmm, ref_low, ref_high, unit} = data;
-  const norm = preds['Normal'];
-  if (!norm || norm.error) return;
-
-  const histDates  = ex.history.map(h => h.date);
-  const histValues = ex.history.map(h => h.value);
-  const predDate   = ex.pred_date;
-  const gmmOk = gmm && !gmm.error;
-  const gmmMu = gmmOk ? gmm.mu : null;
-  const gmmSig= gmmOk ? gmm.sigma : null;
-  const refMu = (ref_low+ref_high)/2;
-  const refSig= (ref_high-ref_low)/3.92;
-
-  // y-range
-  const _actualV = data.actual_value;
-  const allVals = [...histValues, norm.mu, ref_low, ref_high, ...(gmmOk ? [gmmMu] : []), ...(_actualV != null ? [_actualV] : [])];
-  const allMu = [norm.mu, refMu, ...(gmmOk ? [gmmMu] : [])];
-  const allSig = [norm.sigma, refSig, ...(gmmOk ? [gmmSig] : [])];
-  const pad = (Math.max(...allVals) - Math.min(...allVals)) * 0.08 || 1;
-  const yMin = Math.min(...allVals, ...allMu.map((m,i) => m - 3.5*allSig[i])) - pad;
-  const yMax = Math.max(...allVals, ...allMu.map((m,i) => m + 3.5*allSig[i])) + pad;
-
-  const traces = [];
-
-  // ── Left subplot (xaxis): trajectory ──
-
-  // 1. Ref range shaded band
-  traces.push({
-    x:[histDates[0], predDate, predDate, histDates[0]],
-    y:[ref_high, ref_high, ref_low, ref_low],
-    fill:'toself', fillcolor:'rgba(174,174,178,0.08)',
-    line:{width:0}, showlegend:false, hoverinfo:'skip', mode:'lines',
-    xaxis:'x', yaxis:'y',
-  });
-
-  // 2. History line
-  traces.push({
-    x:histDates, y:histValues, mode:'lines+markers', name:'History',
-    line:{color:'#6e6e73',width:1.5}, marker:{color:'#6e6e73',size:5},
-    hovertemplate:'%{x}<br>%{y:.2f} '+unit+'<extra>History</extra>',
-    xaxis:'x', yaxis:'y',
-  });
-
-  // 3. Connect last obs to NORMA mean
-  const lastD = histDates[histDates.length-1];
-  const lastV = histValues[histValues.length-1];
-  traces.push({
-    x:[lastD, predDate], y:[lastV, norm.mu],
-    mode:'lines', showlegend:false,
-    line:{color:'#0071e3',width:1.5,dash:'dot'}, hoverinfo:'skip',
-    xaxis:'x', yaxis:'y',
-  });
-
-  // 4. Mean dots at prediction date
-  traces.push({
-    x:[predDate], y:[norm.mu], mode:'markers', name:'NORMA mean',
-    marker:{color:'#0071e3',size:9,symbol:'diamond'},
-    hovertemplate:predDate+'<br>%{y:.2f} '+unit+' (NORMA)<extra></extra>',
-    xaxis:'x', yaxis:'y',
-  });
-  if (gmmOk) {
-    traces.push({
-      x:[predDate], y:[gmmMu], mode:'markers', name:'GMM mean',
-      marker:{color:'#bf5af2',size:7,symbol:'circle'},
-      hovertemplate:predDate+'<br>%{y:.2f} '+unit+' (Personalized)<extra></extra>',
-      xaxis:'x', yaxis:'y',
-    });
-  }
-
-  // 5. Actual observed value
-  const actualVal = data.actual_value;
-  const actualDate = data.actual_date || predDate;
-  if (actualVal != null) {
-    traces.push({
-      x:[actualDate], y:[actualVal], mode:'markers', name:'Actual',
-      marker:{color:'#ff3b30', size:11, symbol:'star', line:{width:1.5, color:'#fff'}},
-      hovertemplate:actualDate+'<br>%{y:.2f} '+unit+' (Actual)<extra></extra>',
-      xaxis:'x', yaxis:'y',
-    });
-  }
-
-  // ── Right subplot (xaxis2): vertical bell curves ──
-  function makeVerticalBell(mu, sigma, lineColor, fillColor, name) {
-    const ys = linspace(mu - 3.2 * sigma, mu + 3.2 * sigma, 120);
-    const pdfs = ys.map(y => gaussPDF(y, mu, sigma));
-    const peak = Math.max(...pdfs);
-    const xs = pdfs.map(p => p / peak);  // normalize to 0–1
-    return {
-      x: [0, ...xs, 0], y: [ys[0], ...ys, ys[ys.length-1]],
-      fill:'toself', fillcolor, line:{color:lineColor, width:1.5},
-      name, mode:'lines', xaxis:'x2', yaxis:'y',
-      hovertemplate:'%{y:.2f} '+unit+'<extra>'+name+'</extra>',
-    };
-  }
-
-  traces.push(makeVerticalBell(refMu, refSig, '#aeaeb2', 'rgba(174,174,178,0.15)', 'Population ref'));
-  if (gmmOk) traces.push(makeVerticalBell(gmmMu, gmmSig, '#bf5af2', 'rgba(191,90,242,0.15)', 'Personalized'));
-  traces.push(makeVerticalBell(norm.mu, norm.sigma, '#0071e3', 'rgba(0,113,227,0.18)', 'NORMA'));
-
-  // Mean markers on bell curve panel
-  traces.push({
-    x:[0], y:[norm.mu], mode:'markers', showlegend:false,
-    marker:{color:'#0071e3',size:7,symbol:'diamond'}, hoverinfo:'skip',
-    xaxis:'x2', yaxis:'y',
-  });
-  if (gmmOk) {
-    traces.push({
-      x:[0], y:[gmmMu], mode:'markers', showlegend:false,
-      marker:{color:'#bf5af2',size:5,symbol:'circle'}, hoverinfo:'skip',
-      xaxis:'x2', yaxis:'y',
-    });
-  }
-  // Actual value line on bell panel
-  if (actualVal != null) {
-    traces.push({
-      x:[0, 1], y:[actualVal, actualVal], mode:'lines', showlegend:false,
-      line:{color:'#ff3b30', width:1.5, dash:'dash'}, hoverinfo:'skip',
-      xaxis:'x2', yaxis:'y',
-    });
-  }
-
-  // ── Shapes & annotations (trajectory panel) ──
-  const shapes = [
-    {type:'line', x0:predDate,x1:predDate, y0:yMin,y1:yMax,
-     line:{color:'rgba(0,0,0,0.1)',width:1,dash:'dot'}, xref:'x', yref:'y'},
-    {type:'line', x0:histDates[0],x1:predDate, y0:ref_high,y1:ref_high,
-     line:{color:'rgba(255,159,10,0.5)',width:1,dash:'dot'}, xref:'x', yref:'y'},
-    {type:'line', x0:histDates[0],x1:predDate, y0:ref_low, y1:ref_low,
-     line:{color:'rgba(255,59,48,0.5)', width:1,dash:'dot'}, xref:'x', yref:'y'},
-    // Ref lines on bell panel
-    {type:'line', x0:0,x1:1, y0:ref_high,y1:ref_high,
-     line:{color:'rgba(255,159,10,0.3)',width:1,dash:'dot'}, xref:'x2', yref:'y'},
-    {type:'line', x0:0,x1:1, y0:ref_low,y1:ref_low,
-     line:{color:'rgba(255,59,48,0.3)',width:1,dash:'dot'}, xref:'x2', yref:'y'},
-  ];
-
-  const annotations = [
-    {x:histDates[0], y:ref_high, xanchor:'left',yanchor:'bottom',
-     showarrow:false, text:' High ('+ref_high+')', font:{size:9,color:'#ff9f0a'}, xref:'x', yref:'y'},
-    {x:histDates[0], y:ref_low,  xanchor:'left',yanchor:'top',
-     showarrow:false, text:' Low ('+ref_low+')',  font:{size:9,color:'#ff3b30'}, xref:'x', yref:'y'},
-    {x:predDate, y:yMax, xanchor:'center',yanchor:'top',
-     showarrow:false, text:'forecast', font:{size:9,color:'#aeaeb2'}, xref:'x', yref:'y'},
-  ];
-
-  Plotly.newPlot('ex-chart', traces, {
-    margin:{l:46,r:10,t:10,b:52},
-    font:{family:'DM Sans,sans-serif',size:11,color:'#6e6e73'},
-    xaxis:{type:'date', domain:[0, 0.72],
-           showgrid:true,gridcolor:'rgba(0,0,0,0.05)',zeroline:false},
-    xaxis2:{domain:[0.76, 1], showticklabels:false, showgrid:false, zeroline:false,
-            range:[0, 1.15]},
-    yaxis:{title:unit, range:[yMin,yMax], showgrid:true,gridcolor:'rgba(0,0,0,0.05)',zeroline:false},
-    legend:{orientation:'h',y:-0.22,font:{size:11}},
-    hovermode:'closest',
-    plot_bgcolor:'#fff', paper_bgcolor:'#fff',
-    autosize: true,
-    shapes, annotations,
-  },{responsive:true, displayModeBar:false});
-
-  // Classification badge helper
-  const clf = data.classifications || {};
-  const clfColor = v => v === 'Low' ? 'var(--low)' : v === 'High' ? 'var(--high)' : 'var(--normal)';
-  const clfBadge = v => v ? `<span style="display:inline-block;font-size:0.6rem;font-weight:700;color:${clfColor(v)};border:1px solid ${clfColor(v)};border-radius:4px;padding:0 0.3rem;margin-left:0.3rem">${v}</span>` : '';
-
-  // Model key pills
-  const actualLabel = actualVal != null ? `<div style="font-size:0.67rem;color:var(--text-3);margin-top:0.15rem">Actual: <strong style="color:var(--text-1)">${actualVal.toFixed(1)}</strong> ${unit}</div>` : '';
-  document.getElementById('ex-mkeys').innerHTML = `
-    <div class="mk-pill">
-      <span class="mk-swatch" style="background:#0071e3"></span>
-      <div>
-        <div class="mk-label">NORMA ${clfBadge(clf.norma)}</div>
-        <div class="mk-val" style="color:#0071e3">${norm.mu.toFixed(1)} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
-        <div class="mk-ci">95% CI: ${norm.ci_lower.toFixed(1)} – ${norm.ci_upper.toFixed(1)}</div>
-        ${actualLabel}
-      </div>
-    </div>
-    ${gmmOk ? `<div class="mk-pill">
-      <span class="mk-swatch" style="background:#bf5af2"></span>
-      <div>
-        <div class="mk-label">Personalized (GMM) ${clfBadge(clf.personalized)}</div>
-        <div class="mk-val" style="color:#bf5af2">${gmm.mu.toFixed(1)} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
-        <div class="mk-ci">95% CI: ${gmm.ci_lower.toFixed(1)} – ${gmm.ci_upper.toFixed(1)}</div>
-      </div>
-    </div>` : ''}
-    <div class="mk-pill">
-      <span class="mk-swatch" style="background:#aeaeb2"></span>
-      <div>
-        <div class="mk-label">Population ref range ${clfBadge(clf.population)}</div>
-        <div class="mk-val">${ref_low} – ${ref_high} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
-        <div class="mk-ci">Standard reference interval</div>
-      </div>
-    </div>`;
-}
-
-/* ─────────────────────────────────────────
-   Load demo
-───────────────────────────────────────── */
-const DEMO_TESTS = ['PLT','HGB','NA','CRE','WBC'];
-let _currentEx = null;
-let _currentData = null;
-let _originalEx = null;   // stash original example for reset
-let _originalData = null;
-let _exIdx = 0;           // cycling index across all demo tests
-
-function predDateFromHorizon(history, days) {
-  if (!history || !history.length) return null;
-  const last = history[history.length - 1].date;
-  const d = new Date(last);
-  d.setDate(d.getDate() + parseInt(days, 10));
-  return d.toISOString().slice(0, 10);
-}
-
-let _tuneSex = 1;
-
-function getTuneParams() {
-  const age   = parseInt(document.getElementById('tune-age')?.value ?? 50, 10);
-  const days  = parseInt(document.getElementById('tune-horizon-slider')?.value ?? 90, 10);
-  const noise = parseInt(document.getElementById('tune-noise')?.value ?? 0, 10);
-  return { age, sex: _tuneSex, days, noise };
-}
-
-function setTuneSex(val) {
-  _tuneSex = val;
-  document.getElementById('tune-sb-m').classList.toggle('on', val === 0);
-  document.getElementById('tune-sb-f').classList.toggle('on', val === 1);
-  document.getElementById('tune-sex-label').textContent = val === 0 ? 'Male' : 'Female';
-  scheduleTuneUpdate();
-}
-
-function horizonLabelShort(days) {
-  if (days < 30)  return days + ' d';
-  if (days < 365) return Math.round(days / 30) + ' mo';
-  return (days / 365).toFixed(1) + ' yr';
-}
-
-function addNoiseToHistory(history, noisePct) {
-  if (!noisePct || noisePct <= 0) return history;
-  return history.map(h => {
-    const range = Math.abs(h.value) * (noisePct / 100);
-    const noisy = h.value + (Math.random() * 2 - 1) * range;
-    return { ...h, value: Math.round(noisy * 100) / 100 };
-  });
-}
-
-function syncTunePanelFromEx(test, ex, data) {
-  const age = ex.age || 50;
-  document.getElementById('tune-age').value = age;
-  document.getElementById('tune-age-value').textContent = age;
-
-  _tuneSex = ex.sex ?? 1;
-  document.getElementById('tune-sb-m').classList.toggle('on', _tuneSex === 0);
-  document.getElementById('tune-sb-f').classList.toggle('on', _tuneSex === 1);
-  document.getElementById('tune-sex-label').textContent = _tuneSex === 0 ? 'Male' : 'Female';
-
-  const predD  = new Date(ex.pred_date);
-  const lastD  = ex.history?.length ? new Date(ex.history[ex.history.length-1].date) : predD;
-  const days   = Math.max(7, Math.min(730, Math.round((predD - lastD) / 86400000) || 90));
-  document.getElementById('tune-horizon-slider').value = days;
-  document.getElementById('tune-horizon-value').textContent = horizonLabelShort(days);
-
-  document.getElementById('tune-noise').value = 0;
-  document.getElementById('tune-noise-value').textContent = '0%';
-}
-
-function resetTune() {
-  if (!_originalEx || !_originalData) return;
-  const { test, ex } = _originalEx;
-  _currentEx = { test, ex: { ...ex } };
-  _currentData = { ..._originalData };
-  syncTunePanelFromEx(test, ex, _originalData);
-  renderChart(test, ex, _originalData);
-  document.getElementById('ex-label').textContent =
-    `— ${test}, ${ex.sex===1?'Female':'Male'}, age ${ex.age}`;
-}
-
-let _tuneDebounce = null;
-function scheduleTuneUpdate() {
-  clearTimeout(_tuneDebounce);
-  _tuneDebounce = setTimeout(applyTuneAndRedraw, 280);
-}
-
-async function applyTuneAndRedraw() {
-  if (!_originalEx) return;
-  const { test, ex } = _originalEx;
-  const { age, sex, days, noise } = getTuneParams();
-  const history = addNoiseToHistory(ex.history, noise);
-  const pred_date = predDateFromHorizon(history, days);
-  if (!pred_date) return;
-
+async function loadMetrics() {
   try {
-    const pdR = await fetch('/api/predict', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ test_name: test, sex, age, history, pred_date }),
-    });
-    const data = await pdR.json();
-    if (data.error) return;
-    _currentData = data;
-    const exUpdated = { ...ex, sex, age, pred_date, history };
-    _currentEx = { test, ex: exUpdated };
-    renderChart(test, exUpdated, data);
-    document.getElementById('ex-label').textContent =
-      `— ${test}, ${sex === 1 ? 'Female' : 'Male'}, age ${age}`;
-  } catch (e) { /* silent */ }
-}
-
-function cycleExample() {
-  _exIdx = (_exIdx + 1) % DEMO_TESTS.length;
-  loadDemo(DEMO_TESTS[_exIdx]);
-}
-
-async function loadDemo(forceTest) {
-  const test = forceTest || DEMO_TESTS[0];
-  document.getElementById('ex-loading').style.display = 'flex';
-  document.getElementById('ex-content').style.display = 'none';
-  document.getElementById('ex-label').textContent = '';
-  ['ex-ai-wrap','ex-risk-wrap','ex-tune-wrap'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = 'none';
-  });
-  try {
-    const exR = await fetch(`/api/example/${test}`);
-    const ex  = await exR.json();
-    if (ex.error) return;
-
-    let data;
-    if (ex.predictions) {
-      data = ex;
-    } else {
-      const pdR = await fetch('/api/predict', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({test_name:test, sex:ex.sex, age:ex.age,
-                              history:ex.history, pred_date:ex.pred_date}),
-      });
-      data = await pdR.json();
-    }
-    if (data.error) return;
-
-    _currentEx = { test, ex };
-    _currentData = data;
-    _originalEx = { test, ex: { ...ex, history: [...ex.history] } };
-    _originalData = { ...data };
-    renderChart(test, ex, data);
-    document.getElementById('ex-label').textContent =
-      `— ${test}, ${ex.sex===1?'Female':'Male'}, age ${ex.age}`;
-    document.getElementById('ex-loading').style.display = 'none';
-    document.getElementById('ex-content').style.display = 'block';
-
-    loadInterpretation(test, ex, data);
-    loadRisk(test, data);
-
-    const tuneWrap = document.getElementById('ex-tune-wrap');
-    if (tuneWrap) { tuneWrap.style.display = 'block'; syncTunePanelFromEx(test, ex, data); }
+    const resp = await fetch('/api/metrics');
+    _metricsData = await resp.json();
+    renderTrainTable();
   } catch(e) {
-    console.error('loadDemo error:', e);
-    document.getElementById('ex-loading').innerHTML =
-      '<span style="color:var(--text-3)">Could not load example.</span>';
+    document.getElementById('metrics-table-wrap').innerHTML =
+      '<p style="color:var(--text-3);font-size:0.85rem;padding:1rem 0">Could not load bootstrap metrics.</p>';
   }
 }
 
-function bindTunePanel() {
-  document.getElementById('tune-age')?.addEventListener('input', function() {
-    document.getElementById('tune-age-value').textContent = this.value;
-    scheduleTuneUpdate();
+function setMetricsSplit(split) {
+  _metricsSplit = split;
+  ['test','val','train'].forEach(s => {
+    document.getElementById('ms-' + s).classList.toggle('ms-active', s === split);
   });
-
-  document.getElementById('tune-horizon-slider')?.addEventListener('input', function() {
-    document.getElementById('tune-horizon-value').textContent =
-      horizonLabelShort(parseInt(this.value, 10));
-    scheduleTuneUpdate();
-  });
-
-  document.getElementById('tune-noise')?.addEventListener('input', function() {
-    document.getElementById('tune-noise-value').textContent = this.value + '%';
-    scheduleTuneUpdate();
-  });
+  if (_metricsData) renderTrainTable();
 }
 
-loadDemo();
-bindTunePanel();
+function renderTrainTable() {
+  const all = (_metricsData.overall || []).filter(r =>
+    (r.Split || r.split || '').toLowerCase() === _metricsSplit
+  );
+  if (!all.length) {
+    document.getElementById('metrics-table-wrap').innerHTML =
+      '<p style="color:var(--text-3);font-size:0.85rem;padding:1rem 0">No data for this split.</p>';
+    return;
+  }
+  const byModel = {};
+  all.forEach(r => {
+    const model  = r.Model  || r.model  || '?';
+    const metric = r.Metric || r.metric || '?';
+    if (!byModel[model]) byModel[model] = {};
+    byModel[model][metric] = r;
+  });
+  const metricCols = ['R2','MAE','MAPE'];
+  const models = Object.keys(byModel).sort((a,b) => a === 'NORMA' ? -1 : 1);
+  let html = `<div style="overflow-x:auto"><table class="compare-table">
+    <thead><tr><th>Model</th>${metricCols.map(m =>
+      `<th>${m} <span style="font-weight:400;font-size:0.72rem;color:var(--text-3)">(mean \u00b1 std)</span></th>`
+    ).join('')}</tr></thead><tbody>`;
+  models.forEach(model => {
+    const isN = model === 'NORMA';
+    html += `<tr${isN ? ' class="norma-row"' : ''}><td>${isN
+      ? `<span class="badge-norma"><i class="bi bi-stars"></i> ${model}</span>`
+      : model}</td>`;
+    metricCols.forEach(met => {
+      const r = byModel[model]?.[met];
+      if (!r) { html += '<td>\u2014</td>'; return; }
+      const mu  = +r.mean;
+      const std = r.std != null ? +r.std : null;
+      html += `<td>${mu.toFixed(3)}${std != null
+        ? `<div style="font-size:0.65rem;color:var(--text-3)">\u00b1 ${std.toFixed(3)}</div>` : ''}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  document.getElementById('metrics-table-wrap').innerHTML = html;
+  if (_metricsSplit === 'test') {
+    const normaR2 = byModel['NORMA']?.['R2'];
+    if (normaR2) {
+      const card = document.getElementById('test-r2-live');
+      if (card) {
+        card.style.color = 'var(--text-1)';
+        const std = normaR2.std != null ? `<div style="font-size:0.75rem;font-weight:500;color:var(--text-3);margin-top:0.15rem">\u00b1 ${(+normaR2.std).toFixed(3)}</div>` : '';
+        card.innerHTML = `${(+normaR2.mean).toFixed(3)}${std}`;
+      }
+    }
+  }
+}
+
+loadMetrics();
+
+
 
 /* ── "Normal for whom?" schematic — Fasting Glucose / T2D ──────── */
 (function renderForWhomChart() {

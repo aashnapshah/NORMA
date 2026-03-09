@@ -438,14 +438,42 @@
     .btn-sm-pill.purple:hover { background: #fbf4ff; }
 
     /* What if controls */
-    .whatif-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
-    .whatif-range-labels { display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--text-3); margin-top: 0.12rem; }
+    .wi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
+    @media (max-width: 560px) { .wi-grid { grid-template-columns: 1fr; } }
+    .wi-cell {
+      background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-md);
+      padding: 0.75rem 0.9rem;
+    }
+    .wi-cell-header {
+      display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.5rem;
+    }
+    .wi-cell-icon {
+      width: 26px; height: 26px; border-radius: 7px; display: flex;
+      align-items: center; justify-content: center; font-size: 0.72rem; flex-shrink: 0;
+    }
+    .wi-cell-title { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+    .wi-cell-value { font-size: 1.1rem; font-weight: 800; color: var(--accent); letter-spacing: -0.03em; line-height: 1; margin-bottom: 0.45rem; }
+    .whatif-slider {
+      width: 100%; cursor: pointer; -webkit-appearance: none; appearance: none;
+      height: 4px; border-radius: 2px; background: var(--border); outline: none;
+    }
+    .whatif-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+      background: var(--accent); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+      cursor: pointer;
+    }
+    .whatif-slider::-moz-range-thumb {
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--accent); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+      cursor: pointer;
+    }
+    .whatif-range-labels { display: flex; justify-content: space-between; font-size: 0.58rem; color: var(--text-3); margin-top: 0.2rem; }
     .wi-val { font-weight: 700; color: var(--accent); }
-    .whatif-seg { display: flex; gap: 0.3rem; margin-top: 0.25rem; }
+    .whatif-seg { display: flex; gap: 0.3rem; }
     .whatif-seg-btn {
-      background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-sm);
-      padding: 0.2rem 0.75rem; font-size: 0.76rem; cursor: pointer; transition: all 0.12s;
-      font-family: inherit; color: var(--text-2);
+      flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-sm);
+      padding: 0.35rem 0.75rem; font-size: 0.76rem; cursor: pointer; transition: all 0.12s;
+      font-family: inherit; color: var(--text-2); text-align: center;
     }
     .whatif-seg-btn:hover { border-color: rgba(0,113,227,0.3); color: var(--accent); }
     .whatif-seg-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
@@ -532,6 +560,42 @@
     }
     .toast-msg.error { background: rgba(255,59,48,0.9); }
     @keyframes slideUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+
+    /* ── Labs coverage panel ── */
+    .labs-scroll-wrap {
+      overflow-x: auto; margin-top: 0.5rem; padding-bottom: 0.25rem;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.12) transparent;
+    }
+    .labs-scroll-wrap::-webkit-scrollbar { height: 4px; }
+    .labs-scroll-wrap::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 99px; }
+    .labs-scroll { display: flex; gap: 0.3rem; min-width: min-content; padding: 2px; }
+    .lab-card {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--r-sm); padding: 0.2rem 0.65rem; cursor: pointer;
+      transition: all 0.15s; min-width: 52px; text-align: center; flex-shrink: 0;
+    }
+    .lab-card:hover { border-color: var(--accent); background: rgba(0,113,227,0.04); }
+    .lab-card.active {
+      border-color: var(--accent); background: rgba(0,113,227,0.06);
+      box-shadow: 0 0 0 2px rgba(0,113,227,0.1);
+    }
+    .lc-abbr { font-size: 0.68rem; font-weight: 700; color: var(--text-1); letter-spacing: -0.02em; }
+    .lc-cat { font-size: 0.46rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 0.1rem; }
+    .cat-heme  { color: #f43f5e; }
+    .cat-meta  { color: #f59e0b; }
+    .cat-hepat { color: var(--normal); }
+    .cat-lipid { color: var(--purple); }
+    .cat-renal { color: var(--accent); }
+    .cat-other { color: var(--text-3); }
+    .lab-detail {
+      margin-top: 0.75rem;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--r-md); padding: 0.75rem 1rem;
+    }
+    .ld-abbr { font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); margin-bottom: 0.15rem; }
+    .ld-name { font-size: 0.9rem; font-weight: 700; letter-spacing: -0.025em; color: var(--text-1); }
+    .ld-desc { font-size: 0.78rem; color: var(--text-2); line-height: 1.6; margin-top: 0.35rem; max-width: 720px; }
   </style>
 </head>
 <body>
@@ -567,7 +631,7 @@
         <div class="section-label">Lab Test</div>
         <select id="sel-test" class="form-select form-select-sm">
           {% for t in tests %}
-          <option value="{{ t }}" {% if t == 'PLT' %}selected{% endif %}>{{ t }}</option>
+          <option value="{{ t }}" {% if t == 'GLU' %}selected{% endif %}>{{ t }}</option>
           {% endfor %}
         </select>
         <div class="ref-pill"><i class="bi bi-rulers"></i><span id="ref-text">—</span></div>
@@ -639,6 +703,34 @@
   <!-- ─ Main content ─ -->
   <main class="main-content">
 
+    <!-- Biomarker coverage panel -->
+    <div class="card" id="coverage-card">
+      <div class="card-header">
+        <i class="bi bi-grid-3x3-gap" style="color:var(--accent)"></i>
+        <span>Biomarker Coverage</span>
+        <div class="spacer"></div>
+        <span style="font-size:0.67rem;color:var(--text-3)">Select a biomarker</span>
+      </div>
+      <div class="card-body">
+        <div class="labs-scroll-wrap">
+          <div class="labs-scroll">
+            {% for t in tests %}
+            <div class="lab-card" id="lc-{{ t }}"
+                 onclick="onLabClick('{{ t }}')">
+              <div class="lc-abbr">{{ t }}</div>
+              <div class="lc-cat" id="lcat-{{ t }}"></div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="lab-detail" id="lab-detail">
+          <div class="ld-abbr" id="ld-abbr"></div>
+          <div class="ld-name" id="ld-name"></div>
+          <div class="ld-desc" id="ld-desc"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Chart + Prediction summary (combined) -->
     <div class="card chart-card" id="chart-card">
       <div class="card-header">
@@ -670,21 +762,27 @@
           <i class="bi bi-arrow-counterclockwise"></i> Reset
         </button>
       </div>
-      <div class="card-body">
-
-        <!-- Tunable controls -->
-        <div style="display:flex;flex-direction:column;gap:0.9rem;margin-bottom:1rem">
+      <div class="card-body" style="padding:0.75rem 1rem">
+        <div class="wi-grid">
 
           <!-- Age -->
-          <div>
-            <div style="font-size:0.82rem;margin-bottom:0.3rem">What if the patient is <span class="wi-val" id="wi-age-label">55</span> years old?</div>
+          <div class="wi-cell">
+            <div class="wi-cell-header">
+              <div class="wi-cell-icon" style="background:rgba(0,113,227,0.1);color:var(--accent)"><i class="bi bi-calendar3"></i></div>
+              <div class="wi-cell-title">Age</div>
+            </div>
+            <div class="wi-cell-value" id="wi-age-label">55</div>
             <input type="range" id="wi-age" class="whatif-slider" min="18" max="85" value="55">
             <div class="whatif-range-labels"><span>18 yrs</span><span>85 yrs</span></div>
           </div>
 
           <!-- Sex -->
-          <div>
-            <div style="font-size:0.82rem;margin-bottom:0.3rem">What if the biological sex is <span class="wi-val" id="wi-sex-label">Male</span>?</div>
+          <div class="wi-cell">
+            <div class="wi-cell-header">
+              <div class="wi-cell-icon" style="background:rgba(191,90,242,0.1);color:var(--purple)"><i class="bi bi-gender-ambiguous"></i></div>
+              <div class="wi-cell-title">Biological Sex</div>
+            </div>
+            <div class="wi-cell-value" id="wi-sex-label">Male</div>
             <div class="whatif-seg">
               <button class="whatif-seg-btn active" id="wi-sex-m" onclick="setWiSex(0)">Male</button>
               <button class="whatif-seg-btn" id="wi-sex-f" onclick="setWiSex(1)">Female</button>
@@ -692,22 +790,28 @@
           </div>
 
           <!-- Horizon -->
-          <div>
-            <div style="font-size:0.82rem;margin-bottom:0.3rem">What if the next test is in <span class="wi-val" id="wi-horizon-label">30 days</span>?</div>
+          <div class="wi-cell">
+            <div class="wi-cell-header">
+              <div class="wi-cell-icon" style="background:rgba(48,209,88,0.1);color:var(--normal)"><i class="bi bi-clock"></i></div>
+              <div class="wi-cell-title">Prediction Horizon</div>
+            </div>
+            <div class="wi-cell-value" id="wi-horizon-label">30 days</div>
             <input type="range" id="wi-horizon" class="whatif-slider" min="1" max="730" value="30">
             <div class="whatif-range-labels"><span>1 day</span><span>2 years</span></div>
           </div>
 
           <!-- Noise -->
-          <div>
-            <div style="font-size:0.82rem;margin-bottom:0.3rem">What if there is <span class="wi-val" id="wi-noise-label">0%</span> noise in the trajectory?</div>
+          <div class="wi-cell">
+            <div class="wi-cell-header">
+              <div class="wi-cell-icon" style="background:rgba(255,159,10,0.1);color:var(--high)"><i class="bi bi-soundwave"></i></div>
+              <div class="wi-cell-title">Trajectory Noise</div>
+            </div>
+            <div class="wi-cell-value" id="wi-noise-label">0%</div>
             <input type="range" id="wi-noise" class="whatif-slider" min="0" max="50" value="0">
             <div class="whatif-range-labels"><span>0%</span><span>50%</span></div>
           </div>
 
         </div>
-
-
       </div>
     </div>
 
@@ -747,6 +851,82 @@
 <script>
 const REF   = {{ ref_json | safe }};
 const MINFO = {{ model_info | safe }};
+
+// ── Lab coverage panel ──
+const LAB_INFO = {
+  HCT:  {name:'Hematocrit',                       cat:'Hematology', desc:'Fraction of blood volume occupied by red blood cells. Low values indicate anemia; elevated values may suggest polycythemia or dehydration.'},
+  HGB:  {name:'Hemoglobin',                        cat:'Hematology', desc:'Iron-containing protein in red blood cells that transports oxygen. The primary marker of anemia and erythrocytosis.'},
+  MCH:  {name:'Mean Corpuscular Hemoglobin',       cat:'Hematology', desc:'Average mass of hemoglobin per red blood cell. Used with MCV to classify anemia subtypes.'},
+  MCHC: {name:'Mean Corpuscular Hemoglobin Conc.', cat:'Hematology', desc:'Hemoglobin concentration within red blood cells. Low in iron-deficiency; elevated in hereditary spherocytosis.'},
+  MPV:  {name:'Mean Platelet Volume',              cat:'Hematology', desc:'Average size of platelets, reflecting bone marrow platelet production and turnover.'},
+  PLT:  {name:'Platelet Count',                    cat:'Hematology', desc:'Number of platelets per µL. Critical for hemostasis — thrombocytopenia increases bleeding risk; thrombocytosis may indicate reactive or clonal processes.'},
+  RBC:  {name:'Red Blood Cell Count',              cat:'Hematology', desc:'Number of red blood cells per µL. Used with hemoglobin and hematocrit to characterize anemia severity and type.'},
+  RDW:  {name:'Red Cell Distribution Width',       cat:'Hematology', desc:'Coefficient of variation in red cell volume. Elevated early in nutritional deficiencies (iron, B12, folate).'},
+  WBC:  {name:'White Blood Cell Count',            cat:'Hematology', desc:'Total count of circulating immune cells. Elevated in infection or inflammation; reduced in immunosuppression or bone marrow failure.'},
+  MCV:  {name:'Mean Corpuscular Volume',           cat:'Hematology', desc:'Average volume of red blood cells. Classifies anemia as microcytic or macrocytic.'},
+  NA:   {name:'Sodium',                            cat:'Metabolic',  desc:'Primary extracellular electrolyte controlling fluid balance and nerve/muscle function.'},
+  K:    {name:'Potassium',                         cat:'Metabolic',  desc:'Critical intracellular electrolyte essential for cardiac rhythm and muscle contraction.'},
+  CL:   {name:'Chloride',                          cat:'Metabolic',  desc:'Principal extracellular anion that works with sodium to maintain fluid balance and acid-base homeostasis.'},
+  CO2:  {name:'Carbon Dioxide (Bicarbonate)',      cat:'Metabolic',  desc:'Serum bicarbonate reflects acid-base status. Decreased in metabolic acidosis; increased in metabolic alkalosis.'},
+  BUN:  {name:'Blood Urea Nitrogen',               cat:'Renal',      desc:'Waste product of protein metabolism, cleared by the kidneys. Elevated with impaired renal function or dehydration.'},
+  CRE:  {name:'Creatinine',                        cat:'Renal',      desc:'Muscle breakdown product cleared by glomerular filtration. The gold-standard endogenous marker of kidney function.'},
+  GLU:  {name:'Glucose',                           cat:'Metabolic',  desc:'Circulating blood sugar, the primary cellular energy substrate. Central to diagnosis and management of diabetes.'},
+  A1C:  {name:'Hemoglobin A1c',                    cat:'Metabolic',  desc:'Glycated hemoglobin reflecting average blood glucose over 2–3 months. Standard diagnostic marker for diabetes.'},
+  CA:   {name:'Calcium',                           cat:'Metabolic',  desc:'Essential mineral for bone mineralization, neuromuscular signaling, and coagulation.'},
+  ALT:  {name:'Alanine Aminotransferase',          cat:'Hepatic',    desc:'Enzyme predominantly found in hepatocytes. The most specific serum marker of hepatocellular injury.'},
+  AST:  {name:'Aspartate Aminotransferase',        cat:'Hepatic',    desc:'Enzyme present in liver, heart, and skeletal muscle. Elevated in hepatocellular injury and myocardial infarction.'},
+  ALP:  {name:'Alkaline Phosphatase',              cat:'Hepatic',    desc:'Enzyme from liver, bone, intestine, and placenta. Markedly elevated in cholestasis and bone disease.'},
+  TBIL: {name:'Total Bilirubin',                   cat:'Hepatic',    desc:'End product of hemoglobin catabolism processed by the liver. Elevated in hepatic dysfunction or hemolysis.'},
+  DBIL: {name:'Direct (Conjugated) Bilirubin',     cat:'Hepatic',    desc:'Bilirubin conjugated by the liver for biliary excretion. Elevated in hepatic and obstructive jaundice.'},
+  ALB:  {name:'Albumin',                           cat:'Hepatic',    desc:'Most abundant plasma protein, synthesized by the liver. A sensitive marker of hepatic synthetic function and nutritional status.'},
+  TP:   {name:'Total Protein',                     cat:'Hepatic',    desc:'Combined albumin and globulin levels. Reflects liver synthesis, immune globulin production, and nutritional status.'},
+  TC:   {name:'Total Cholesterol',                 cat:'Lipid',      desc:'Sum of LDL, HDL, and VLDL cholesterol. Elevated levels are a major risk factor for atherosclerotic cardiovascular disease.'},
+  HDL:  {name:'HDL Cholesterol',                   cat:'Lipid',      desc:'"Good" cholesterol. Mediates reverse cholesterol transport. Higher levels are protective against cardiovascular disease.'},
+  LDL:  {name:'LDL Cholesterol',                   cat:'Lipid',      desc:'"Bad" cholesterol; the primary atherogenic lipoprotein. The principal therapeutic target for cardiovascular disease prevention.'},
+  TGL:  {name:'Triglycerides',                     cat:'Lipid',      desc:'Main form of stored dietary fat circulating as VLDL. Elevated with insulin resistance, metabolic syndrome, and alcohol use.'},
+};
+const CAT_CLS = {Hematology:'cat-heme', Metabolic:'cat-meta', Hepatic:'cat-hepat', Lipid:'cat-lipid', Renal:'cat-renal'};
+
+// Populate category labels on lab cards
+document.querySelectorAll('[id^="lcat-"]').forEach(el => {
+  const t = el.id.replace('lcat-','');
+  const info = LAB_INFO[t];
+  if (info) { el.textContent = info.cat; el.className = 'lc-cat ' + (CAT_CLS[info.cat]||'cat-other'); }
+});
+
+let _activeLab = null;
+
+function onLabClick(t) {
+  // Update the sidebar test dropdown and trigger change
+  const sel = document.getElementById('sel-test');
+  if (sel.value !== t) {
+    sel.value = t;
+    sel.dispatchEvent(new Event('change'));
+  }
+  selectLab(t);
+}
+
+function selectLab(t) {
+  if (_activeLab) document.getElementById('lc-' + _activeLab)?.classList.remove('active');
+  _activeLab = t;
+  document.getElementById('lc-' + t)?.classList.add('active');
+  const info = LAB_INFO[t] || {name:t, cat:'', desc:'No description available.'};
+  document.getElementById('ld-abbr').textContent = t;
+  document.getElementById('ld-name').textContent = info.name;
+  document.getElementById('ld-desc').textContent = info.desc;
+}
+
+// Sync coverage panel when sel-test dropdown changes
+document.getElementById('sel-test').addEventListener('change', function() {
+  const t = this.value;
+  selectLab(t);
+  // Scroll the lab card into view
+  const card = document.getElementById('lc-' + t);
+  if (card) card.scrollIntoView({behavior:'smooth', block:'nearest', inline:'center'});
+});
+
+// Highlight the initially selected test
+selectLab(document.getElementById('sel-test').value);
 
 // ── Navbar ──
 document.getElementById('model-badge').textContent = MINFO.run_id;
@@ -1021,7 +1201,7 @@ function drawChart(payload, data) {
     xaxis:'x', yaxis:'y',
   });
 
-  // 3. Dashed connector from last obs to NORMA mean
+  // 3. Dashed connector from last obs to prediction date
   const lastD = histX[histX.length - 1], lastV = histY[histY.length - 1];
   traces.push({
     x:[lastD, pred_date], y:[lastV, mu],
@@ -1029,22 +1209,6 @@ function drawChart(payload, data) {
     line:{color:'#0071e3', width:1.2, dash:'dot'}, hoverinfo:'skip',
     xaxis:'x', yaxis:'y',
   });
-
-  // 4. Mean markers at prediction date
-  traces.push({
-    x:[pred_date], y:[mu], mode:'markers', name:'NORMA mean',
-    marker:{color:'#0071e3', size:9, symbol:'diamond'},
-    hovertemplate:pred_date+'<br>%{y:.2f} '+unit+' (NORMA)<extra></extra>',
-    xaxis:'x', yaxis:'y',
-  });
-  if (gmmOk) {
-    traces.push({
-      x:[pred_date], y:[gmmMu], mode:'markers', name:'GMM mean',
-      marker:{color:'#bf5af2', size:7, symbol:'circle'},
-      hovertemplate:pred_date+'<br>%{y:.2f} '+unit+' (Personalized)<extra></extra>',
-      xaxis:'x', yaxis:'y',
-    });
-  }
 
   // 5. Actual observed value
   if (actualVal != null) {
@@ -1534,6 +1698,7 @@ function showToast(msg, isError=false) {
     'chart-card':         'Trajectory',
     'interpret-card':     'AI Interpretation',
     'saved-runs-section': 'Saved Runs',
+    'coverage-card':      'Biomarker Coverage',
   };
 
   // Track which cards have already been revealed (avoid re-animating)
