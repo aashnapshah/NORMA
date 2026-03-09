@@ -30,7 +30,7 @@
       --r-sm:    7px;
       --sidebar-w: 296px;
       --nav-h:   48px;
-      --shadow:  0 1px 0 rgba(0,0,0,0.04), 0 2px 20px rgba(0,0,0,0.06);
+      --shadow:  0 1px 3px rgba(0,0,0,0.06), 0 4px 24px rgba(0,0,0,0.08);
     }
 
     *, *::before, *::after { box-sizing: border-box; }
@@ -127,7 +127,6 @@
       font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
       border: 1px solid var(--border);
     }
-    .nav-stat { color: var(--text-3); font-size: 0.72rem; }
     .nav-spacer { flex: 1; }
 
     .btn-nav {
@@ -535,6 +534,29 @@
     }
     .run-card-del:hover { color: var(--low); }
 
+    /* ── Classification grid ── */
+    .clf-grid {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0;
+    }
+    @media (max-width: 640px) { .clf-grid { grid-template-columns: 1fr; } }
+    .clf-panel {
+      padding: 1rem 1.15rem; text-align: center; position: relative;
+      border-right: 1px solid var(--border);
+    }
+    .clf-panel:last-child { border-right: none; }
+    .clf-approach {
+      font-size: 0.56rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; margin-bottom: 0.35rem;
+    }
+    .clf-value {
+      font-size: 1.6rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1;
+      margin-bottom: 0.3rem;
+    }
+    .clf-range {
+      font-size: 0.7rem; color: var(--text-3); line-height: 1.45;
+    }
+    .clf-range strong { color: var(--text-2); font-weight: 600; }
+
     /* ── Spinner ── */
     .spin-wrap { display: none; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--text-3); }
     .spin-wrap.active { display: flex; }
@@ -566,7 +588,7 @@
     /* ── Purpose banner ── */
     .purpose-banner {
       display: flex; gap: 0.85rem; align-items: flex-start;
-      background: linear-gradient(135deg, rgba(0,113,227,0.05) 0%, rgba(48,209,88,0.04) 100%);
+      background: linear-gradient(135deg, rgba(0,113,227,0.03) 0%, rgba(48,209,88,0.02) 100%);
       border: 1px solid rgba(0,113,227,0.12);
       border-radius: var(--r-xl); padding: 1rem 1.25rem;
     }
@@ -579,34 +601,6 @@
     .purpose-title { font-size: 0.95rem; font-weight: 700; color: var(--text-1); letter-spacing: -0.02em; margin-bottom: 0.2rem; }
     .purpose-desc { font-size: 0.78rem; color: var(--text-2); line-height: 1.6; }
 
-    /* ── Classification Verdict ── */
-    .verdict-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; }
-    @media (max-width: 640px) { .verdict-grid { grid-template-columns: 1fr; } }
-    .verdict-cell {
-      border: 1.5px solid var(--border); border-radius: var(--r-lg);
-      padding: 1rem; text-align: center; position: relative; overflow: hidden;
-      transition: border-color 0.2s, box-shadow 0.2s;
-    }
-    .verdict-cell::before {
-      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-    }
-    .verdict-cell.v-pop::before { background: #aeaeb2; }
-    .verdict-cell.v-gmm::before { background: #bf5af2; }
-    .verdict-cell.v-norma::before { background: #0071e3; }
-    .verdict-cell.v-norma { border-color: rgba(0,113,227,0.2); box-shadow: 0 2px 12px rgba(0,113,227,0.08); }
-    .verdict-approach { font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem; }
-    .verdict-approach.a-pop { color: #aeaeb2; }
-    .verdict-approach.a-gmm { color: #bf5af2; }
-    .verdict-approach.a-norma { color: #0071e3; }
-    .verdict-label {
-      font-size: 1.5rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1; margin-bottom: 0.4rem;
-    }
-    .verdict-label.vl-low { color: var(--low); }
-    .verdict-label.vl-normal { color: var(--normal); }
-    .verdict-label.vl-high { color: var(--high); }
-    .verdict-range { font-size: 0.72rem; color: var(--text-3); line-height: 1.5; }
-    .verdict-range strong { color: var(--text-2); font-weight: 600; }
-    .verdict-explain { font-size: 0.68rem; color: var(--text-3); margin-top: 0.5rem; line-height: 1.45; padding-top: 0.5rem; border-top: 1px solid var(--border); }
   </style>
 </head>
 <body>
@@ -618,8 +612,6 @@
     NORMA
   </a>
   <span class="nav-badge" id="model-badge">—</span>
-  <span class="nav-stat" id="stat-r2"></span>
-  <span class="nav-stat" id="stat-loss"></span>
   <div class="nav-spacer"></div>
   <span id="scroll-section-label"></span>
   <a href="/" class="btn-nav"><i class="bi bi-info-circle"></i> About</a>
@@ -649,6 +641,8 @@
         <div id="sidebar-test-info" style="margin-top:0.4rem;font-size:0.72rem;color:var(--text-3);line-height:1.5"></div>
       </div>
 
+      <hr style="border:none;border-top:1px solid var(--border);margin:0.25rem 0 0.15rem">
+
       <!-- Demographics -->
       <div>
         <div class="section-label">Patient</div>
@@ -669,6 +663,8 @@
         </div>
       </div>
 
+      <hr style="border:none;border-top:1px solid var(--border);margin:0.25rem 0 0.15rem">
+
       <!-- History -->
       <div style="flex:1">
         <div class="history-header">
@@ -676,7 +672,6 @@
           <div class="d-flex gap-1">
             <button class="btn-icon" onclick="addRow()"><i class="bi bi-plus-lg"></i> Add</button>
             <button class="btn-icon" onclick="cycleExample()"><i class="bi bi-person-lines-fill"></i> Example</button>
-            <button class="btn-icon" onclick="resetAll()" title="Reset all data"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
           </div>
         </div>
         <table id="history-table">
@@ -686,17 +681,16 @@
         <div id="pid-chip-wrap" style="display:none" class="mt-1">
           <span class="pid-chip"><i class="bi bi-person-badge"></i> <span id="pid-text"></span></span>
         </div>
+
       </div>
 
-      <!-- Prediction date -->
-      <div>
-        <div class="section-label">Prediction</div>
-        <label class="form-label">Predict on</label>
-        <input type="date" id="inp-tnext" class="form-control form-control-sm">
-        <div class="spin-wrap mt-2" id="spinner">
-          <div class="spinner-border spinner-border-sm" role="status"></div>
-          <span>Running model…</span>
-        </div>
+      <!-- Spinner -->
+      <div class="spin-wrap mt-2" id="spinner">
+        <div class="spinner-border spinner-border-sm" role="status"></div>
+        <span>Running model…</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.68rem;color:var(--text-3);line-height:1.45">
+        The <strong style="color:var(--text-2)">last entry</strong> is held out as the value to classify. All prior entries are used as history.
       </div>
 
 
@@ -704,11 +698,16 @@
 
     <div class="sidebar-footer">
       <button class="btn-primary" id="btn-predict" onclick="runPredict()">
-        <i class="bi bi-lightning-charge-fill"></i> Predict
+        <i class="bi bi-lightning-charge-fill"></i> Classify
       </button>
-      <button class="btn-secondary" id="btn-save" onclick="saveCurrentRun()" disabled>
-        <i class="bi bi-bookmark-plus"></i> Save Run
-      </button>
+      <div style="display:flex;gap:0.5rem">
+        <button class="btn-secondary" id="btn-save" onclick="saveCurrentRun()" disabled style="flex:1">
+          <i class="bi bi-bookmark-plus"></i> Save Run
+        </button>
+        <button class="btn-secondary" onclick="resetAll()" style="flex:1">
+          <i class="bi bi-arrow-counterclockwise"></i> Reset
+        </button>
+      </div>
     </div>
   </aside>
 
@@ -719,26 +718,11 @@
     <div class="purpose-banner" id="purpose-banner">
       <div class="purpose-icon"><i class="bi bi-activity"></i></div>
       <div>
-        <div class="purpose-title">How is this blood test classified?</div>
-        <div class="purpose-desc">Enter a patient's lab history, then click <strong>Predict</strong> to see how three different approaches — population reference ranges, a personalized setpoint model, and NORMA — classify the most recent value as <span style="color:var(--low);font-weight:600">Low</span>, <span style="color:var(--normal);font-weight:600">Normal</span>, or <span style="color:var(--high);font-weight:600">High</span>.</div>
+        <div class="purpose-title">How is the latest value classified?</div>
+        <div class="purpose-desc">Enter a patient's lab history. The <strong>last entry</strong> is the value to classify — click <strong>Classify</strong> to see how population ranges, a personalized model, and NORMA each interpret it.</div>
       </div>
     </div>
 
-    <!-- Classification Verdict — the main result -->
-    <div class="card" id="verdict-card" style="display:none">
-      <div class="card-header" style="background:linear-gradient(135deg,rgba(0,113,227,0.04) 0%,rgba(48,209,88,0.04) 50%,rgba(191,90,242,0.04) 100%)">
-        <i class="bi bi-clipboard2-pulse" style="color:var(--accent);font-size:1rem"></i>
-        <div>
-          <div style="font-weight:700;line-height:1.25">Classification Verdict</div>
-          <div style="font-size:0.67rem;color:var(--text-3);font-weight:400">How each approach interprets the most recent value</div>
-        </div>
-        <div class="spacer"></div>
-        <span id="verdict-value-badge" style="font-size:0.78rem;font-weight:700;color:var(--text-1)"></span>
-      </div>
-      <div class="card-body" style="padding:1rem 1.25rem">
-        <div class="verdict-grid" id="verdict-grid"></div>
-      </div>
-    </div>
 
     <!-- Biomarker info panel -->
     <div class="card" id="biomarker-info-card">
@@ -756,21 +740,30 @@
       </div>
     </div>
 
-    <!-- Chart + Prediction summary (combined) -->
+    <!-- Classification results -->
+    <div id="clf-card" class="card" style="display:none">
+      <div class="card-header" style="background:linear-gradient(135deg,rgba(0,113,227,0.03) 0%,rgba(48,209,88,0.02) 100%)">
+        <i class="bi bi-clipboard2-pulse" style="color:var(--accent)"></i>
+        <span>Classification</span>
+        <div class="spacer"></div>
+        <span id="clf-actual-badge" class="ref-pill" style="font-size:0.66rem"></span>
+      </div>
+      <div id="clf-panels" class="clf-grid"></div>
+    </div>
+
+    <!-- Chart -->
     <div class="card chart-card" id="chart-card">
       <div class="card-header">
         <i class="bi bi-chart-line" style="color:var(--accent)"></i>
         <span id="chart-title">Lab Value Trajectory</span>
-        <div class="spacer"></div>
-        <span id="pred-date-badge" class="ref-pill" style="font-size:0.66rem;display:none"></span>
       </div>
       <div id="main-chart">
         <div class="empty-chart">
           <div class="empty-chart-icon"><i class="bi bi-activity"></i></div>
-          <p>Add history points and click <strong>Predict</strong><br>to visualise the trajectory</p>
+          <p>Add history points and click <strong>Classify</strong><br>to visualise the trajectory</p>
         </div>
       </div>
-      <!-- Model key pills shown below chart after prediction -->
+      <!-- Prediction detail pills below chart -->
       <div class="model-keys" id="pred-summary" style="display:none;border-top:1px solid var(--border)"></div>
     </div>
 
@@ -932,8 +925,6 @@ updateSidebarTestInfo();
 
 // ── Navbar ──
 document.getElementById('model-badge').textContent = MINFO.run_id;
-document.getElementById('stat-r2').textContent    = `R² ${MINFO.val_r2}`;
-document.getElementById('stat-loss').textContent  = `Loss ${MINFO.val_loss}`;
 
 // ── State ──
 let currentPayload = null;
@@ -993,7 +984,6 @@ function seedDefaults() {
   };
   const pts = defs[document.getElementById('sel-test').value] || [{d:90,v:''}];
   pts.forEach(p => addRow(ago(p.d), p.v));
-  document.getElementById('inp-tnext').value = todayStr();
 }
 
 // ── Load example ──
@@ -1027,7 +1017,10 @@ async function loadExample(idx) {
     // Populate history table + form fields
     clearHistory();
     data.history.forEach(h => addRow(h.date, h.value));
-    document.getElementById('inp-tnext').value = data.pred_date;
+    // Add the held-out actual value as the last history row
+    if (data.actual_date && data.actual_value !== undefined) {
+      addRow(data.actual_date, data.actual_value);
+    }
     if (data.sex !== undefined) {
       document.querySelector(`input[name="sex"][value="${data.sex}"]`).checked = true;
       updateRefPill();
@@ -1050,7 +1043,7 @@ async function loadExample(idx) {
       _originalPayload = JSON.parse(JSON.stringify(payload));
       _originalResult  = JSON.parse(JSON.stringify(data));
       drawChart(payload, data);
-      drawDistChart(payload, data);
+  
       drawPredSummary(payload, data);
       drawVerdict(payload, data);
       document.getElementById('chart-title').textContent = `${test} trajectory`;
@@ -1071,13 +1064,12 @@ async function loadExample(idx) {
 // ── Predict ──
 async function runPredict() {
   const history = getHistory();
-  if (history.length < 1) { showToast('Add at least 1 history point', true); return; }
+  if (history.length < 2) { showToast('Need at least 2 history points (the last is the value to classify)', true); return; }
   const payload = {
     test_name: document.getElementById('sel-test').value,
     sex:       parseInt(document.querySelector('input[name="sex"]:checked').value),
     age:       parseFloat(document.getElementById('inp-age').value),
     history,
-    pred_date: document.getElementById('inp-tnext').value || todayStr(),
   };
   setLoading(true);
   try {
@@ -1086,13 +1078,16 @@ async function runPredict() {
     });
     const data = await resp.json();
     if (data.error) { showToast(data.error, true); return; }
+    // Strip the held-out last value from payload.history so drawing functions
+    // treat it as prior history only (the classified value comes from data.actual_value)
+    payload.history = payload.history.slice(0, -1);
     currentPayload = payload;
     currentResult  = data;
     _originalPayload = JSON.parse(JSON.stringify(payload));
     _originalResult  = JSON.parse(JSON.stringify(data));
     _wiSweeps = null;  // manual predict — no pre-computed sweeps
     drawChart(payload, data);
-    drawDistChart(payload, data);
+
     drawPredSummary(payload, data);
     drawVerdict(payload, data);
     document.getElementById('chart-title').textContent = `${payload.test_name} trajectory`;
@@ -1107,101 +1102,94 @@ async function runPredict() {
   }
 }
 
-// ── Prediction summary (demo-style model key pills) ──
+// ── Classification card + prediction detail pills ──
 function drawPredSummary(payload, data) {
   const { test_name } = payload;
-  const { predictions: preds, gmm_prediction: gmm, ref_low, ref_high, unit, pred_date } = data;
+  const { predictions: preds, gmm_prediction: gmm, ref_low, ref_high, unit } = data;
   const norm = preds['Normal'];
   if (!norm || norm.error) return;
 
   const mu = norm.mu, ciLo = norm.ci_lower, ciHi = norm.ci_upper;
   const gmmOk = gmm && !gmm.error;
   const actualVal = data.actual_value;
-
-  // Classification badge helper
   const clf = data.classifications || {};
-  const clfColor = v => v === 'Low' ? 'var(--low)' : v === 'High' ? 'var(--high)' : 'var(--normal)';
-  const clfBadge = v => v ? `<span style="display:inline-block;font-size:0.6rem;font-weight:700;color:${clfColor(v)};border:1px solid ${clfColor(v)};border-radius:4px;padding:0 0.3rem;margin-left:0.3rem">${v}</span>` : '';
 
-  const predDateBadge = document.getElementById('pred-date-badge');
-  predDateBadge.textContent = `Pred: ${pred_date}`;
-  predDateBadge.style.display = '';
+  const clfColorVar = v => v === 'Low' ? 'var(--low)' : v === 'High' ? 'var(--high)' : 'var(--normal)';
+  const clfBg = v => v === 'Low' ? 'rgba(255,59,48,0.06)' : v === 'High' ? 'rgba(255,159,10,0.06)' : 'rgba(48,209,88,0.06)';
+
+  // ── Classification card (above chart) ──
+  document.getElementById('clf-card').style.display = 'block';
+  if (actualVal != null) {
+    document.getElementById('clf-actual-badge').textContent = `Value: ${actualVal.toFixed(1)} ${unit}`;
+    document.getElementById('clf-actual-badge').style.display = '';
+  }
+
+  let panelsHtml = '';
+
+  // NORMA panel
+  panelsHtml += `
+    <div class="clf-panel" style="background:${clfBg(clf.norma)}">
+      <div class="clf-approach" style="color:#0071e3"><i class="bi bi-activity"></i> NORMA</div>
+      <div class="clf-value" style="color:${clfColorVar(clf.norma)}">${clf.norma || '—'}</div>
+      <div class="clf-range">95% CI: <strong>${ciLo.toFixed(1)} – ${ciHi.toFixed(1)}</strong> ${unit}</div>
+    </div>`;
+
+  // Personalized panel
+  if (gmmOk) {
+    panelsHtml += `
+    <div class="clf-panel" style="background:${clfBg(clf.personalized)}">
+      <div class="clf-approach" style="color:#bf5af2"><i class="bi bi-person-fill"></i> Personalized</div>
+      <div class="clf-value" style="color:${clfColorVar(clf.personalized)}">${clf.personalized || '—'}</div>
+      <div class="clf-range">95% CI: <strong>${gmm.ci_lower.toFixed(1)} – ${gmm.ci_upper.toFixed(1)}</strong> ${unit}</div>
+    </div>`;
+  }
+
+  // Population panel
+  panelsHtml += `
+    <div class="clf-panel" style="background:${clfBg(clf.population)}">
+      <div class="clf-approach" style="color:#aeaeb2"><i class="bi bi-people-fill"></i> Population</div>
+      <div class="clf-value" style="color:${clfColorVar(clf.population)}">${clf.population || '—'}</div>
+      <div class="clf-range">Ref: <strong>${ref_low} – ${ref_high}</strong> ${unit}</div>
+    </div>`;
+
+  document.getElementById('clf-panels').innerHTML = panelsHtml;
+
+  // ── Prediction detail pills (below chart) ──
   document.getElementById('pred-summary').style.display = 'flex';
-
-  const actualLabel = actualVal != null ? `<div style="font-size:0.67rem;color:var(--text-3);margin-top:0.15rem">Actual: <strong style="color:var(--text-1)">${actualVal.toFixed(1)}</strong> ${unit}</div>` : '';
-
   document.getElementById('pred-summary').innerHTML = `
     <div class="mk-pill">
       <span class="mk-swatch" style="background:#0071e3"></span>
       <div>
-        <div class="mk-label">NORMA ${clfBadge(clf.norma)}</div>
+        <div class="mk-label">NORMA predicted</div>
         <div class="mk-val" style="color:#0071e3">${mu.toFixed(1)} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
-        <div class="mk-ci">95% CI: ${ciLo.toFixed(1)} – ${ciHi.toFixed(1)}</div>
-        ${actualLabel}
+        <div class="mk-ci">σ = ${norm.sigma.toFixed(2)}</div>
       </div>
     </div>
     ${gmmOk ? `<div class="mk-pill">
       <span class="mk-swatch" style="background:#bf5af2"></span>
       <div>
-        <div class="mk-label">Personalized (GMM) ${clfBadge(clf.personalized)}</div>
+        <div class="mk-label">Personalized (GMM)</div>
         <div class="mk-val" style="color:#bf5af2">${gmm.mu.toFixed(1)} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
-        <div class="mk-ci">95% CI: ${gmm.ci_lower.toFixed(1)} – ${gmm.ci_upper.toFixed(1)}</div>
+        <div class="mk-ci">σ = ${gmm.sigma.toFixed(2)}</div>
       </div>
     </div>` : ''}
     <div class="mk-pill">
       <span class="mk-swatch" style="background:#aeaeb2"></span>
       <div>
-        <div class="mk-label">Population ref range ${clfBadge(clf.population)}</div>
+        <div class="mk-label">Population ref</div>
         <div class="mk-val">${ref_low} – ${ref_high} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
-        <div class="mk-ci">Standard reference interval</div>
       </div>
     </div>`;
 }
 
-// ── Classification Verdict ──
+// ── Hide purpose banner after first result ──
 function drawVerdict(payload, data) {
-  const { predictions: preds, gmm_prediction: gmm, ref_low, ref_high, unit } = data;
-  const norm = preds['Normal'];
-  if (!norm || norm.error) return;
-
-  const clf = data.classifications || {};
-  const gmmOk = gmm && !gmm.error;
-  const lastVal = payload.history.length ? payload.history[payload.history.length - 1].value : null;
-  if (!lastVal && !clf.population) return;
-
-  const clfClass = v => v === 'Low' ? 'vl-low' : v === 'High' ? 'vl-high' : 'vl-normal';
-
-  const valueBadge = document.getElementById('verdict-value-badge');
-  if (lastVal != null) valueBadge.textContent = `Last value: ${lastVal} ${unit}`;
-
-  document.getElementById('verdict-card').style.display = '';
   document.getElementById('purpose-banner').style.display = 'none';
-
-  document.getElementById('verdict-grid').innerHTML = `
-    <div class="verdict-cell v-pop">
-      <div class="verdict-approach a-pop"><i class="bi bi-people-fill"></i> Population</div>
-      <div class="verdict-label ${clfClass(clf.population)}">${clf.population || '—'}</div>
-      <div class="verdict-range">Range: <strong>${ref_low} – ${ref_high}</strong> ${unit}</div>
-      <div class="verdict-explain">Fixed thresholds from a reference population. Same range for everyone regardless of individual history.</div>
-    </div>
-    ${gmmOk ? `
-    <div class="verdict-cell v-gmm">
-      <div class="verdict-approach a-gmm"><i class="bi bi-person-fill"></i> Personalized</div>
-      <div class="verdict-label ${clfClass(clf.personalized)}">${clf.personalized || '—'}</div>
-      <div class="verdict-range">Range: <strong>${gmm.ci_lower.toFixed(1)} – ${gmm.ci_upper.toFixed(1)}</strong> ${unit}</div>
-      <div class="verdict-explain">Gaussian mixture model fitted to this patient's own history. No population anchor.</div>
-    </div>` : ''}
-    <div class="verdict-cell v-norma">
-      <div class="verdict-approach a-norma"><i class="bi bi-stars"></i> NORMA</div>
-      <div class="verdict-label ${clfClass(clf.norma)}">${clf.norma || '—'}</div>
-      <div class="verdict-range">Range: <strong>${norm.ci_lower.toFixed(1)} – ${norm.ci_upper.toFixed(1)}</strong> ${unit}</div>
-      <div class="verdict-explain">Contextual prediction anchored in population biology and personalized to individual trajectory.</div>
-    </div>`;
 }
 
 // ── Timeline chart with separate bell curve panel ──
 function drawChart(payload, data) {
-  const { history, test_name, pred_date } = payload;
+  const { history, test_name } = payload;
   const { predictions: preds, gmm_prediction: gmm, ref_low, ref_high, unit } = data;
   const norm = preds['Normal'];
   if (!norm || norm.error) return;
@@ -1216,7 +1204,7 @@ function drawChart(payload, data) {
   const refSig = (ref_high - ref_low) / 3.92;
 
   const actualVal = data.actual_value;
-  const actualDate = data.actual_date || pred_date;
+  const actualDate = data.actual_date;
 
   const allMu  = [norm.mu, refMu, ...(gmmOk ? [gmmMu] : [])];
   const allSig = [norm.sigma, refSig, ...(gmmOk ? [gmmSig] : [])];
@@ -1226,40 +1214,41 @@ function drawChart(payload, data) {
   const yMax = Math.max(...allVals, ...allMu.map((m,i) => m + 3.5*allSig[i])) + pad;
 
   const traces = [];
+  const lastV = actualVal;
+  const lastD = actualDate;
 
   // ── Left subplot (xaxis): trajectory ──
 
   // 1. Ref range shaded band
   traces.push({
-    x:[histX[0], pred_date, pred_date, histX[0]],
+    x:[histX[0], lastD, lastD, histX[0]],
     y:[ref_high, ref_high, ref_low, ref_low],
     fill:'toself', fillcolor:'rgba(174,174,178,0.07)',
     line:{width:0}, showlegend:false, hoverinfo:'skip', mode:'lines',
     xaxis:'x', yaxis:'y',
   });
 
-  // 2. History line (all but last point)
-  const lastD = histX[histX.length - 1], lastV = histY[histY.length - 1];
+  // 2. History line (prior points, excluding the classified value)
   traces.push({
-    x:histX.slice(0, -1), y:histY.slice(0, -1), mode:'lines+markers', name:'History',
+    x:histX, y:histY, mode:'lines+markers', name:'History',
     line:{color:'#6e6e73', width:1.5}, marker:{color:'#6e6e73', size:5},
     hovertemplate:'%{x}<br>%{y:.2f} '+unit+'<extra>History</extra>',
     xaxis:'x', yaxis:'y',
   });
 
-  // 3. Last observed value — highlighted with classification color
+  // 3. Latest value being classified — highlighted with classification color
   const clf = data.classifications || {};
   const lastClfColor = clf.norma === 'Low' ? '#ff3b30' : clf.norma === 'High' ? '#ff9f0a' : '#30d158';
   traces.push({
     x:[lastD], y:[lastV], mode:'markers', name:'Latest',
     marker:{color:lastClfColor, size:10, line:{width:2, color:'#fff'}},
-    hovertemplate:lastD+'<br>%{y:.2f} '+unit+'<extra>Latest value</extra>',
+    hovertemplate:lastD+'<br>%{y:.2f} '+unit+'<extra>Latest value (classified)</extra>',
     xaxis:'x', yaxis:'y',
   });
-  // Connecting line from second-to-last to last
-  if (histX.length > 1) {
+  // Connecting line from last history point to classified value
+  if (histX.length >= 1) {
     traces.push({
-      x:[histX[histX.length - 2], lastD], y:[histY[histY.length - 2], lastV],
+      x:[histX[histX.length - 1], lastD], y:[histY[histY.length - 1], lastV],
       mode:'lines', showlegend:false,
       line:{color:'#6e6e73', width:1.5}, hoverinfo:'skip',
       xaxis:'x', yaxis:'y',
@@ -1290,11 +1279,9 @@ function drawChart(payload, data) {
 
   // ── Shapes & annotations ──
   const shapes = [
-    {type:'line', x0:pred_date, x1:pred_date, y0:yMin, y1:yMax,
-     line:{color:'rgba(0,0,0,0.12)', width:1, dash:'dot'}, xref:'x', yref:'y'},
-    {type:'line', x0:histX[0], x1:pred_date, y0:ref_high, y1:ref_high,
+    {type:'line', x0:histX[0], x1:lastD, y0:ref_high, y1:ref_high,
      line:{color:'rgba(255,159,10,0.45)', width:1, dash:'dot'}, xref:'x', yref:'y'},
-    {type:'line', x0:histX[0], x1:pred_date, y0:ref_low, y1:ref_low,
+    {type:'line', x0:histX[0], x1:lastD, y0:ref_low, y1:ref_low,
      line:{color:'rgba(255,59,48,0.45)', width:1, dash:'dot'}, xref:'x', yref:'y'},
     // Ref lines on bell panel
     {type:'line', x0:0,x1:1, y0:ref_high,y1:ref_high,
@@ -1307,8 +1294,6 @@ function drawChart(payload, data) {
      showarrow:false, text:' High ('+ref_high+')', font:{size:9, color:'#ff9f0a'}, xref:'x', yref:'y'},
     {x:histX[0], y:ref_low,  xanchor:'left', yanchor:'top',
      showarrow:false, text:' Low ('+ref_low+')',  font:{size:9, color:'#ff3b30'}, xref:'x', yref:'y'},
-    {x:pred_date, y:yMax, xanchor:'left', yanchor:'top',
-     showarrow:false, text:' forecast', font:{size:9, color:'#aeaeb2'}, xref:'x', yref:'y'},
   ];
 
   // Classification label at last observed value
@@ -1350,112 +1335,6 @@ function drawChart(payload, data) {
   el.innerHTML = '';
   _baseTraceCount = traces.length;
   Plotly.newPlot(el, traces, layout, {responsive:true, displayModeBar:false});
-}
-
-// ── Distribution comparison chart — superseded by inline bell curves in drawChart ──
-function drawDistChart(payload, data) {
-  return; // distributions now rendered as vertical KDEs in the main trajectory chart
-  const { test_name } = payload;
-  const { predictions: preds, gmm_prediction: gmm, ref_low, ref_high, unit, pred_date } = data;
-  const norm = preds['Normal'];
-  if (!norm || norm.error) return;
-
-  const gmmMu  = gmm && !gmm.error ? gmm.mu    : null;
-  const gmmSig = gmm && !gmm.error ? gmm.sigma  : null;
-  const refMu  = (ref_low + ref_high) / 2;
-  const refSig = (ref_high - ref_low) / 3.92;
-
-  // Compute x range across all three distributions
-  const allMu  = [norm.mu, refMu, ...(gmmMu != null ? [gmmMu] : [])];
-  const allSig = [norm.sigma, refSig, ...(gmmSig != null ? [gmmSig] : [])];
-  const xLo = Math.min(...allMu.map((m,i) => m - 4*allSig[i]));
-  const xHi = Math.max(...allMu.map((m,i) => m + 4*allSig[i]));
-  const xs  = linspace(xLo, xHi, 500);
-
-  const traces = [];
-
-  // Population reference distribution
-  traces.push({
-    x: xs, y: gaussianPdf(xs, refMu, refSig),
-    mode: 'lines', name: 'Population',
-    line: {color: '#aeaeb2', width: 2, dash: 'dot'},
-    fill: 'tozeroy', fillcolor: 'rgba(174,174,178,0.08)',
-    hovertemplate: '<b>Population</b><br>value = %{x:.1f}<br>density = %{y:.4f}<extra></extra>',
-  });
-
-  // Personalized (GMM) distribution
-  if (gmmMu != null) {
-    traces.push({
-      x: xs, y: gaussianPdf(xs, gmmMu, gmmSig),
-      mode: 'lines', name: 'Personalized',
-      line: {color: '#bf5af2', width: 2},
-      fill: 'tozeroy', fillcolor: 'rgba(191,90,242,0.1)',
-      hovertemplate: '<b>Personalized</b><br>value = %{x:.1f}<br>density = %{y:.4f}<extra></extra>',
-    });
-  }
-
-  // NORMA distribution
-  traces.push({
-    x: xs, y: gaussianPdf(xs, norm.mu, norm.sigma),
-    mode: 'lines', name: 'NORMA',
-    line: {color: '#30d158', width: 2.5},
-    fill: 'tozeroy', fillcolor: 'rgba(48,209,88,0.12)',
-    hovertemplate: '<b>NORMA</b><br>value = %{x:.1f}<br>density = %{y:.4f}<extra></extra>',
-  });
-
-  // Mean markers at the top of each curve
-  traces.push({
-    x: [refMu], y: [Math.max(...gaussianPdf([refMu], refMu, refSig))],
-    mode: 'markers', marker: {color: '#aeaeb2', size: 7, symbol: 'circle'},
-    showlegend: false, hoverinfo: 'none',
-  });
-  if (gmmMu != null) {
-    traces.push({
-      x: [gmmMu], y: [Math.max(...gaussianPdf([gmmMu], gmmMu, gmmSig))],
-      mode: 'markers', marker: {color: '#bf5af2', size: 8, symbol: 'circle', line:{color:'#fff',width:1.5}},
-      showlegend: false, hoverinfo: 'none',
-    });
-  }
-  traces.push({
-    x: [norm.mu], y: [Math.max(...gaussianPdf([norm.mu], norm.mu, norm.sigma))],
-    mode: 'markers', marker: {color: '#30d158', size: 10, symbol: 'diamond', line:{color:'#fff',width:1.5}},
-    showlegend: false, hoverinfo: 'none',
-  });
-
-  const allPdfs = [
-    gaussianPdf(xs, norm.mu, norm.sigma),
-    gaussianPdf(xs, refMu, refSig),
-    ...(gmmMu != null ? [gaussianPdf(xs, gmmMu, gmmSig)] : []),
-  ];
-  const yMax = Math.max(...allPdfs.flat()) * 1.22;
-
-  const layout = {
-    margin: {l:40, r:20, t:10, b:60},
-    font: {family:'DM Sans,sans-serif', size:11, color:'#6e6e73'},
-    xaxis: {title:`${test_name} (${unit})`, showgrid:true, gridcolor:'#f5f5f7', zeroline:false},
-    yaxis: {title:'Density', range:[0, yMax], showgrid:false, zeroline:false, showticklabels:false},
-    legend: {orientation:'h', y:-0.3, font:{size:11}},
-    hovermode: 'x unified',
-    plot_bgcolor: '#fff', paper_bgcolor: '#fff',
-    shapes: [
-      // Population ref bounds
-      {type:'line', x0:ref_low,  x1:ref_low,  y0:0, y1:yMax, line:{color:'rgba(174,174,178,0.5)', width:1, dash:'dot'}},
-      {type:'line', x0:ref_high, x1:ref_high, y0:0, y1:yMax, line:{color:'rgba(174,174,178,0.5)', width:1, dash:'dot'}},
-      // NORMA 95% CI bounds
-      {type:'line', x0:norm.ci_lower, x1:norm.ci_lower, y0:0, y1:yMax, line:{color:'rgba(48,209,88,0.45)', width:1, dash:'dash'}},
-      {type:'line', x0:norm.ci_upper, x1:norm.ci_upper, y0:0, y1:yMax, line:{color:'rgba(48,209,88,0.45)', width:1, dash:'dash'}},
-      {type:'rect', x0:norm.ci_lower, x1:norm.ci_upper, y0:0, y1:yMax, fillcolor:'rgba(48,209,88,0.04)', line:{width:0}},
-    ],
-    annotations: [
-      {x:ref_low,  y:yMax*0.96, xanchor:'right', yanchor:'top', showarrow:false, text:'ref low',  font:{size:9, color:'#aeaeb2'}},
-      {x:ref_high, y:yMax*0.96, xanchor:'left',  yanchor:'top', showarrow:false, text:'ref high', font:{size:9, color:'#aeaeb2'}},
-      {x:norm.ci_lower, y:yMax*0.5, xanchor:'right', yanchor:'middle', showarrow:false, text:'95% CI', font:{size:8, color:'#30d158'}},
-    ],
-  };
-
-  document.getElementById('dist-card').style.display = 'block';
-  document.getElementById('dist-date-badge').textContent = `Pred: ${pred_date}`;
-  Plotly.newPlot(document.getElementById('dist-chart'), traces, layout, {responsive:true, displayModeBar:false});
 }
 
 // ── LLM Interpretation ──
@@ -1571,7 +1450,6 @@ function restoreRun(id) {
   document.getElementById('sel-test').value = run.test_name;
   document.querySelector(`input[name="sex"][value="${run.sex}"]`).checked = true;
   document.getElementById('inp-age').value   = run.age;
-  document.getElementById('inp-tnext').value = run.pred_date;
   clearHistory();
   run.history.forEach(h => addRow(h.date, h.value));
   updateRefPill();
@@ -1579,7 +1457,7 @@ function restoreRun(id) {
   currentPayload = {test_name:run.test_name, sex:run.sex, age:run.age, history:run.history, pred_date:run.pred_date};
   currentResult  = {predictions:run.predictions, gmm_prediction:run.gmm_prediction, ref_prediction:run.ref_prediction, ref_low:run.ref_low, ref_high:run.ref_high, unit:run.unit, pred_date:run.pred_date};
   drawChart(currentPayload, currentResult);
-  drawDistChart(currentPayload, currentResult);
+
   drawPredSummary(currentPayload, currentResult);
   drawVerdict(currentPayload, currentResult);
   document.getElementById('chart-title').textContent = `${run.test_name} trajectory`;
@@ -1679,24 +1557,26 @@ function scheduleWiUpdate() {
 async function applyWhatIfAndRedraw() {
   if (!_originalPayload) return;
 
-  const history = addNoiseToHistory(_originalPayload.history, _wiNoise);
-  const sorted  = [...history].sort((a,b) => a.date.localeCompare(b.date));
-  const lastMs  = new Date(sorted[sorted.length - 1].date).getTime();
-  const pred_date = new Date(lastMs + _wiHorizon * 86400000).toISOString().slice(0,10);
+  const priorHistory = addNoiseToHistory(_originalPayload.history, _wiNoise);
+  // Append the actual value so the backend can hold it out and classify it
+  const actualEntry = _originalResult && _originalResult.actual_date && _originalResult.actual_value != null
+    ? { date: _originalResult.actual_date, value: _originalResult.actual_value }
+    : null;
+  const history = actualEntry ? [...priorHistory, actualEntry] : priorHistory;
 
   try {
     const pdR = await fetch('/api/predict', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ test_name: _originalPayload.test_name, sex: _wiSex, age: _wiAge, history, pred_date }),
+      body: JSON.stringify({ test_name: _originalPayload.test_name, sex: _wiSex, age: _wiAge, history }),
     });
     const data = await pdR.json();
     if (data.error) return;
 
-    const payload = { ..._originalPayload, sex: _wiSex, age: _wiAge, history, pred_date };
+    const payload = { ..._originalPayload, sex: _wiSex, age: _wiAge, history: priorHistory };
     currentPayload = payload;
     currentResult  = data;
     drawChart(payload, data);
-    drawDistChart(payload, data);
+
     drawPredSummary(payload, data);
     drawVerdict(payload, data);
     document.getElementById('wi-reset-btn').style.display = '';
@@ -1708,7 +1588,7 @@ function resetWhatIf() {
   currentPayload = JSON.parse(JSON.stringify(_originalPayload));
   currentResult  = JSON.parse(JSON.stringify(_originalResult));
   drawChart(currentPayload, currentResult);
-  drawDistChart(currentPayload, currentResult);
+
   drawPredSummary(currentPayload, currentResult);
   drawVerdict(currentPayload, currentResult);
   initWhatIfControls();
@@ -1743,7 +1623,6 @@ function showToast(msg, isError=false) {
 
   // Map card id → readable section name
   const SECTION_NAMES = {
-    'verdict-card':       'Classification',
     'chart-card':         'Trajectory',
     'sens-card':          'What If',
     'interpret-card':     'AI Interpretation',
@@ -1808,26 +1687,21 @@ function resetAll() {
   currentResult  = null;
   document.getElementById('inp-age').value = 45;
   document.querySelector('input[name="sex"][value="0"]').checked = true;
-  document.getElementById('inp-tnext').value = todayStr();
   document.getElementById('pred-summary').style.display = 'none';
-  document.getElementById('pred-date-badge').style.display = 'none';
+  document.getElementById('clf-card').style.display = 'none';
   document.getElementById('main-chart').innerHTML =
-    '<div class="empty-chart"><div class="empty-chart-icon"><i class="bi bi-activity"></i></div><p>Add history points and click <strong>Predict</strong><br>to visualise the trajectory</p></div>';
+    '<div class="empty-chart"><div class="empty-chart-icon"><i class="bi bi-activity"></i></div><p>Add history points and click <strong>Classify</strong><br>to visualise the trajectory</p></div>';
   document.getElementById('sens-card').style.display = 'none';
   document.getElementById('interpret-card').style.display = 'none';
-  document.getElementById('verdict-card').style.display = 'none';
   document.getElementById('purpose-banner').style.display = '';
   document.getElementById('btn-save').disabled = true;
   document.getElementById('pid-chip-wrap').style.display = 'none';
   document.getElementById('chart-title').textContent = 'Lab Value Trajectory';
-  const distChart = document.getElementById('dist-chart');
-  if (distChart) distChart.innerHTML = '';
   seedDefaults();
   updateRefPill();
 }
 
 // ── Init ──
-document.getElementById('inp-tnext').value = todayStr();
 seedDefaults();
 updateRefPill();
 renderSavedRuns();
