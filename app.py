@@ -579,6 +579,8 @@ def interpret():
         text = result['candidates'][0]['content']['parts'][0]['text']
         return jsonify({'interpretation': text})
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
