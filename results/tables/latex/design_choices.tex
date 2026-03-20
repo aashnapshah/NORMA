@@ -1,0 +1,30 @@
+\begin{table}[ht]
+\centering
+\small
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{p{2.5cm}p{3cm}p{8.5cm}}
+\toprule
+Component & Design Choice & Description \\
+\midrule
+Time embedding
+  & Time2Vec & Encodes days since first measurement using learned linear and sinusoidal functions. Captures long-term temporal trends and periodic patterns. \\
+  & Delta-t & Encodes log-compressed time difference between consecutive measurements. Represents irregular sampling. \\
+\midrule
+Health state encoding
+  & Binary & Encodes each value as within or outside the population reference range. Does not distinguish high vs.\ low. \\
+  & Ternary & Encodes whether the value is low, normal, or high relative to the reference range. Handles asymmetric risk patterns. \\
+\midrule
+Age encoding
+  & Raw values & Uses age directly as numeric input. Assumes linear effects. \\
+  & Binned & Discretizes age into groups (e.g., decades) and maps each bin to a learned embedding. Captures nonlinear and threshold effects. \\
+\midrule
+Lab sequence encoding
+  & Raw values & Uses observed biomarker values directly. Preserves absolute clinical scale and keeps preprocessing minimal. \\
+  & Within-sequence normalization & Per-sequence z-scoring with learnable scale and shift, then denormalized at output. Stabilizes optimization and improves cross-analyte sharing. \\
+\midrule
+Training objective
+  & Gaussian NLL & Predicts mean and log-variance under a normal distribution. Aligns with conventional RI assumptions. May underperform for skewed or heavy-tailed labs. \\
+  & Quantile (pinball) loss & Predicts fixed quantiles (2.5, 25, 50, 75, 97.5\%). Distribution-free, robust to skewness and heteroscedasticity. \\
+\bottomrule
+\end{tabular}
+\end{table}

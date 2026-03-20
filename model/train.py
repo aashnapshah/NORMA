@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import uuid
 import argparse
@@ -50,6 +51,7 @@ class NORMATrainer:
     def _run_epoch(self, loader, is_training=True):
         self.model.train() if is_training else self.model.eval()
         desc = 'Training' if is_training else 'Validation'
+        is_quantile = getattr(self.args, 'output_mode', 'gaussian') == 'quantile' and self.args.model == 'NORMA2'
 
         total_loss = n_batches = 0
         y_list, mu_list = [], []
@@ -61,20 +63,29 @@ class NORMATrainer:
                 self.optimizer.zero_grad()
 
             with torch.set_grad_enabled(is_training):
-                mu, log_var = self.model(
+                output = self.model(
                     batch['x_h'], batch['s_h'], batch['t_h'], batch['sex'],
                     batch['age'], batch['cid'], batch['s_next'], batch['t_next'], batch['pad_mask']
                 )
-                loss = compute_loss(mu, log_var, batch['x_next'], self.criterion)
+
+                if is_quantile:
+                    q_pred = output  # (B, n_quantiles)
+                    loss = compute_loss(q_pred, None, batch['x_next'], self.criterion)
+                    # Use median (index 2) for R2
+                    mu_for_r2 = q_pred[:, 2:3]
+                else:
+                    mu, log_var = output
+                    loss = compute_loss(mu, log_var, batch['x_next'], self.criterion)
+                    mu_for_r2 = mu
 
                 if is_training:
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                     self.optimizer.step()
-            
+
             total_loss += loss.item()
             y_list.append(batch['x_next'].detach().cpu())
-            mu_list.append(mu.detach().cpu())
+            mu_list.append(mu_for_r2.detach().cpu())
             n_batches += 1
 
         y_all = torch.cat(y_list, dim=0).view(-1).numpy()
@@ -97,11 +108,11 @@ class NORMATrainer:
         print(f"Predictions saved to {os.path.join(self.args.log_dir, self.run_id, f'predictions_{self.args.test.lower()}.csv')}")
         print('=' * 90)
         
-        print(f'Performing Counterfactual Prediction on {self.args.test.title()}...')
-        counterfactual_predictions_df = predict_cf(self.model, self.device, train_loader, val_loader, test_loader, normalize=self.args.normalize)
-        counterfactual_predictions_df.to_csv(os.path.join(self.args.log_dir, self.run_id, f"counterfactual_predictions_{self.args.test.lower()}.csv"), index=False)
-        print(f"Counterfactual predictions saved to {os.path.join(self.args.log_dir, self.run_id, f'counterfactual_predictions_{self.args.test.lower()}.csv')}")
-        print('=' * 90)
+        # print(f'Performing Counterfactual Prediction on {self.args.test.title()}...')
+        # counterfactual_predictions_df = predict_cf(self.model, self.device, train_loader, val_loader, test_loader, normalize=self.args.normalize)
+        # counterfactual_predictions_df.to_csv(os.path.join(self.args.log_dir, self.run_id, f"counterfactual_predictions_{self.args.test.lower()}.csv"), index=False)
+        # print(f"Counterfactual predictions saved to {os.path.join(self.args.log_dir, self.run_id, f'counterfactual_predictions_{self.args.test.lower()}.csv')}")
+        # print('=' * 90)
   
     # def _edit(self):
     #     train_seq, val_seq, test_seq = load_and_split_data(self.args.data_dir, self.args.test, self.args.sample, print_info=False, nstates=getattr(self.args, 'nstates', 2))
@@ -114,9 +125,28 @@ class NORMATrainer:
     #     print('=' * 90)
         
     def _evaluate(self):
-        print(f'Performing Evaluation on {self.args.test.title()}...')
-        evaluate_and_save_metrics(self.predictions_df, self.run_id, self.args.log_dir)
-        print(f"Evaluation saved to {os.path.join(self.args.log_dir, self.run_id, f'evaluation_{self.args.test.lower()}.csv')}")
+        print(f'Performing Evaluation...')
+        save_dir = os.path.join(self.args.log_dir, self.run_id)
+        metrics_df = evaluate_and_save_metrics(
+            self.predictions_df, self.run_id,
+            exclude={'CRP', 'GGT', 'LDH', 'PT'},
+            metrics_to_agg=['MAE', 'MAPE', 'R2', 'MSE'],
+            save_dir=save_dir
+        )
+        print('=' * 90)
+
+    def _sensitivity(self):
+        print(f'Running Sensitivity Analysis...')
+        from sensitivity_analysis import init_model, run_sweeps
+
+        init_model(model=self.model, device=self.device, hparams=self.args)
+        results_df = run_sweeps()
+
+        save_dir = os.path.join(self.args.log_dir, self.run_id)
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_dir, 'sensitivity_results.csv')
+        results_df.to_csv(save_path, index=False)
+        print(f'  Sensitivity results ({len(results_df)} rows) saved to {save_path}')
         print('=' * 90)
         
     def _load_model(self, best=False):
@@ -222,9 +252,9 @@ class NORMATrainer:
             
         self._save_model()
         self._predict()
-        # self._edit()
         self._evaluate()
-            
+        self._sensitivity()
+
         wandb.finish()
 
 def parse_args():
@@ -235,8 +265,10 @@ def parse_args():
     parser.add_argument('--log_dir', type=str, default='./logs')
     parser.add_argument('--train', type=str, default='combined', choices=['EHRSHOT', 'MIMIC-IV', 'combined'])
     parser.add_argument('--test', type=str, default='combined', choices=['EHRSHOT', 'MIMIC-IV', 'combined'])
-    parser.add_argument('--model', type=str, default='NormaLight', choices=['NormaLight', 'NORMA'])
-    parser.add_argument('--loss', type=str, default='GaussianNLLLoss', choices=['NORMALoss', 'GaussianNLLLoss', 'MSELoss'])
+    parser.add_argument('--model', type=str, default='NormaLight', choices=['NormaLight', 'NORMA', 'NORMA2'])
+    parser.add_argument('--loss', type=str, default='GaussianNLLLoss', choices=['NORMALoss', 'GaussianNLLLoss', 'MSELoss', 'QuantileLoss'])
+    parser.add_argument('--output_mode', type=str, default='quantile', choices=['quantile', 'gaussian'],
+                        help='Output mode for NORMA2: quantile (pinball loss) or gaussian (NLL loss)')
     parser.add_argument('--d_model', type=int, default=64)
     parser.add_argument('--nhead', type=int, default=4) # 4 for original, 2 for smaller model
     parser.add_argument('--nlayers', type=int, default=8) # 8 for original, 2 for smaller model
@@ -263,7 +295,23 @@ def main():
     trainer = NORMATrainer(args)
     trainer.train()
 
+def sweep_main():
+    """Entry point for wandb sweep agent. Reads hyperparams from wandb.config."""
+    wandb.init()
+    args = parse_args()
+    # Override args with sweep config values
+    for key, val in wandb.config.items():
+        if hasattr(args, key):
+            setattr(args, key, val)
+    set_seed(args.seed)
+    trainer = NORMATrainer(args)
+    trainer.train()
 
 if __name__ == '__main__':
-    main()
+    import sys
+    if '--sweep' in sys.argv:
+        sys.argv.remove('--sweep')
+        sweep_main()
+    else:
+        main()
 

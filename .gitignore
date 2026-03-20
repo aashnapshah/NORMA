@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+._*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Data
+data/
+*.csv
+*.pkl
+
+# ML artifacts
+wandb/
+*.log
+model/logs/
+model/predictions/
+model/wandb/
+baselines/predictions/
+baselines/__pycache__/
+notebooks/predictions/
+
+# Intermediate outputs
+*.png
+results/all_outputs.pdf
+
+# IDE / tools
+.vscode/
+.idea/

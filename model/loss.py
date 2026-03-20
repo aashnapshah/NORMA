@@ -51,6 +51,28 @@ class studentNLLLoss(nn.Module):
         loss = nll.mean()
         return loss
     
+class QuantileLoss(nn.Module):
+    """Pinball (quantile) loss for multiple quantile levels."""
+
+    def __init__(self, quantiles=(0.025, 0.25, 0.50, 0.75, 0.975)):
+        super().__init__()
+        self.register_buffer('quantiles', torch.tensor(quantiles, dtype=torch.float32))
+
+    def forward(self, q_pred, y_true):
+        """
+        Args:
+            q_pred: (B, n_quantiles) predicted quantile values
+            y_true: (B, 1) ground-truth values
+        Returns:
+            scalar loss (mean pinball loss across quantiles and batch)
+        """
+        tau = self.quantiles.to(q_pred.device)
+        y = y_true.expand_as(q_pred)  # (B, n_quantiles)
+        errors = y - q_pred            # (B, n_quantiles)
+        loss = torch.max(tau * errors, (tau - 1) * errors)
+        return loss.mean()
+
+
 class NORMALoss(nn.Module):
     """Loss function for NORMA conditional transformer."""
     

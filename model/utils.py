@@ -1,5 +1,4 @@
 import torch
-import wandb
 import numpy as np
 import os
 from pathlib import Path
@@ -8,8 +7,8 @@ import time
 import uuid
 import argparse
 
-from model import NORMA, NormaLight #NORMADecoder, NormaLight, NormaLightDecoder
-from loss import NORMALoss, GaussianNLLLoss, MSELoss
+from model import NORMA, NormaLight, NormaLightV1, NORMA2
+from loss import NORMALoss, GaussianNLLLoss, MSELoss, QuantileLoss
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -20,13 +19,18 @@ def set_seed(seed: int = 42):
         torch.cuda.manual_seed(seed)
         
 def setup_logging(args, run_id):
-    wandb.init(
-        project='NORMA',
-        name=run_id, 
-        config=vars(args), 
-        id = run_id,
-        resume = 'allow',
-    )
+    import wandb
+    if wandb.run is None:
+        wandb.init(
+            project='NORMA',
+            name=run_id,
+            config=vars(args),
+            id = run_id,
+            resume = 'allow',
+        )
+    else:
+        # Already initialized (e.g. by sweep agent) — just update config
+        wandb.config.update(vars(args), allow_val_change=True)
     log_dir = Path(args.log_dir) / run_id
     log_dir.mkdir(parents=True, exist_ok=True)
     hyperparams = {
@@ -37,7 +41,6 @@ def setup_logging(args, run_id):
     hyperparams_path = Path(args.log_dir) / 'hyperparameters.json'
     with open(hyperparams_path, 'w') as f:
         json.dump(hyperparams, f, indent=2)
-    pass 
 
 def save_checkpoint(model, optimizer, scheduler, args, run_id, epoch, metrics, is_best=False):
     checkpoint = {
@@ -137,11 +140,17 @@ def create_model(args, ncodes, checkpoint=None):
     if args.model == 'NORMA':
         model = NORMA(d_model=args.d_model, nhead=args.nhead, nlayers=args.nlayers, nstates=nstates, ncodes=ncodes)
     elif args.model == 'NormaLight':
-        model = NormaLight(d_model=args.d_model, nhead=args.nhead, nlayers=args.nlayers, nstates=nstates, ncodes=ncodes)
-    # elif args.model == 'NORMADecoder':
-    #     model = NORMADecoder(d_model=args.d_model, nhead=args.nhead, nlayers=args.nlayers, num_lab_codes=num_lab_codes)
-    # elif args.model == 'NormaLightDecoder':
-    #     model = NormaLightDecoder(d_model=args.d_model, nhead=args.nhead, nlayers=args.nlayers, num_lab_codes=num_lab_codes)
+        # Detect legacy checkpoint (decoder-named layers, no age_emb)
+        is_legacy = (checkpoint is not None
+                     and any(k.startswith('decoder.') for k in checkpoint['model_state_dict']))
+        if is_legacy:
+            model = NormaLightV1(d_model=args.d_model, nhead=args.nhead, nlayers=args.nlayers, nstates=nstates, ncodes=ncodes)
+        else:
+            model = NormaLight(d_model=args.d_model, nhead=args.nhead, nlayers=args.nlayers, nstates=nstates, ncodes=ncodes)
+    elif args.model == 'NORMA2':
+        output_mode = getattr(args, 'output_mode', 'quantile')
+        model = NORMA2(d_model=args.d_model, nhead=args.nhead, nlayers=args.nlayers,
+                       nstates=nstates, ncodes=ncodes, output_mode=output_mode)
     else:
         raise ValueError(f"Unknown model type: {args.model}")
     if checkpoint is not None:
@@ -169,9 +178,14 @@ def create_loss(loss, lambda_align=None):
         return GaussianNLLLoss()
     if loss == 'MSELoss':
         return MSELoss()
+    if loss == 'QuantileLoss':
+        return QuantileLoss()
     raise ValueError(f"Unknown loss type: {loss}")
 
 def compute_loss(mu, log_var, y_true, criterion, extra: dict = None):
+    if isinstance(criterion, QuantileLoss):
+        # mu is actually q_pred (B, n_quantiles) for quantile models
+        return criterion(mu, y_true)
     if isinstance(criterion, NORMALoss):
         if extra is None or not all(k in extra for k in ('s_next', 'ref_mu', 'ref_var')):
             raise ValueError('NORMALoss requires extra keys: s_next, ref_mu, ref_var')
@@ -184,6 +198,7 @@ def compute_loss(mu, log_var, y_true, criterion, extra: dict = None):
 
 def log_epoch(metrics, epoch_index: int, total_epochs: int, lr: float, epoch_time: float, is_best: bool):
     """Log metrics to wandb and print a concise console summary."""
+    import wandb
     metrics['epoch'] = epoch_index + 1
     metrics['lr'] = lr
     wandb.log(metrics)

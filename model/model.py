@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 class Time2Vec(nn.Module):
     """Time2Vec embedding module combining linear and periodic components."""
-    
+
     def __init__(self, d_model):
         super().__init__()
         self.linear = nn.Linear(1, 1)
@@ -15,6 +15,124 @@ class Time2Vec(nn.Module):
         v_linear = self.linear(t)
         v_periodic = torch.sin(self.periodic(t))
         return torch.cat([v_linear, v_periodic], dim=-1)
+
+
+class TimeEmbedding(nn.Module):
+    """Improved time embedding: log-delta-t + Time2Vec on deltas.
+
+    Uses inter-measurement gaps (delta_t) instead of absolute time,
+    plus log(delta_t + 1) for a monotonic signal that encodes "how far apart."
+    """
+
+    def __init__(self, d_model):
+        super().__init__()
+        self.log_proj = nn.Linear(1, d_model // 4)
+        self.periodic = nn.Linear(1, d_model // 2)
+        self.linear = nn.Linear(1, d_model - d_model // 4 - d_model // 2)
+
+    def forward(self, t):
+        """Args: t (B, T, 1) absolute times. Returns: (B, T, D)"""
+        # Compute inter-measurement deltas (first delta is 0)
+        delta = torch.zeros_like(t)
+        delta[:, 1:, :] = t[:, 1:, :] - t[:, :-1, :]
+        delta = delta.clamp(min=0)
+
+        log_dt = torch.log1p(delta)           # monotonic, compresses large gaps
+        v_log = self.log_proj(log_dt)          # (B, T, d_model//4)
+        v_periodic = torch.sin(self.periodic(delta))  # (B, T, d_model//2)
+        v_linear = self.linear(delta)          # (B, T, remainder)
+        return torch.cat([v_log, v_periodic, v_linear], dim=-1)
+
+
+class TimeEmbeddingQuery(nn.Module):
+    """Time embedding for the query token: encodes the horizon (gap from last obs).
+
+    Uses log(horizon + 1) + periodic + linear on the raw horizon value.
+    """
+
+    def __init__(self, d_model):
+        super().__init__()
+        self.log_proj = nn.Linear(1, d_model // 4)
+        self.periodic = nn.Linear(1, d_model // 2)
+        self.linear = nn.Linear(1, d_model - d_model // 4 - d_model // 2)
+
+    def forward(self, horizon):
+        """Args: horizon (B, 1, 1) time gap from last observation. Returns: (B, 1, D)"""
+        horizon = horizon.clamp(min=0)
+        log_h = torch.log1p(horizon)
+        v_log = self.log_proj(log_h)
+        v_periodic = torch.sin(self.periodic(horizon))
+        v_linear = self.linear(horizon)
+        return torch.cat([v_log, v_periodic, v_linear], dim=-1)
+
+class NormaLightV1(nn.Module):
+    """Legacy NormaLight (pre-age-embedding, decoder-named encoder layers).
+
+    Compatible with older checkpoints (e.g. 87345aff) whose state_dict has
+    'decoder.layers.*' keys and no 'age_emb'.
+    """
+
+    def __init__(self, d_model, nhead, nlayers, ncodes, nstates=2):
+        super().__init__()
+        self.value_emb = nn.Linear(1, d_model)
+        self.state_emb = nn.Embedding(nstates, d_model)
+        self.sex_emb = nn.Embedding(2, d_model)
+        self.lab_emb = nn.Embedding(ncodes, d_model)
+        self.time_emb = Time2Vec(d_model)
+
+        layer = nn.TransformerEncoderLayer(d_model, nhead, batch_first=True)
+        self.decoder = nn.TransformerEncoder(layer, nlayers)
+
+        self.mean_head = nn.Linear(d_model, 1)
+        self.logvar_head = nn.Linear(d_model, 1)
+
+    def _causal_mask(self, L, device):
+        return torch.triu(torch.ones(L, L, device=device), 1).bool()
+
+    def forward(self, x_h, s_h, t_h, sex, age, lab, s_next, t_next, pad_mask=None):
+        B, T = x_h.shape[:2]
+        sex = sex.view(-1).long()
+        lab = lab.view(-1).long()
+        s_h = s_h.long()
+        s_next = s_next.view(-1).long()
+
+        sex_e = self.sex_emb(sex)
+        lab_e = self.lab_emb(lab)
+
+        hist = (
+            self.value_emb(x_h)
+            + self.state_emb(s_h)
+            + self.time_emb(t_h)
+            + sex_e.unsqueeze(1).expand(B, T, -1)
+            + lab_e.unsqueeze(1).expand(B, T, -1)
+        )
+
+        t_next_reshaped = t_next.view(B, 1, 1)
+        q = (
+            self.state_emb(s_next)
+            + self.time_emb(t_next_reshaped).squeeze(1)
+            + sex_e
+            + lab_e
+        ).unsqueeze(1)
+
+        tokens = torch.cat([hist, q], dim=1)
+        attn_mask = self._causal_mask(T + 1, tokens.device)
+
+        pad_mask_ext = None
+        if pad_mask is not None:
+            pad_mask_ext = torch.cat(
+                [pad_mask, torch.zeros(B, 1, dtype=torch.bool, device=pad_mask.device)],
+                dim=1,
+            )
+
+        H = self.decoder(tokens, mask=attn_mask, src_key_padding_mask=pad_mask_ext)
+
+        query_features = H[:, -1]
+        mu = self.mean_head(query_features)
+        raw_log_var = self.logvar_head(query_features)
+        log_var = torch.clamp(raw_log_var, min=-10.0)
+        return mu, log_var
+
 
 class NormaLight(nn.Module):
     def __init__(self, d_model, nhead, nlayers, ncodes, nstates=2, shared_mlp=False, mlp_dropout=0.1):
@@ -176,6 +294,151 @@ class NORMA(nn.Module):
         raw_log_var = self.logvar_head(query_features)
         log_var = torch.clamp(raw_log_var, min=-10.0)
         return mu, log_var
+
+
+class NORMA2(nn.Module):
+    """NORMA v2: decoder-only transformer with improved time encoding,
+    within-sequence normalization, and quantile output heads.
+
+    Sequence layout: [context] [hist_1 ... hist_T] [query]
+    - context: single token encoding patient demographics (sex, age, lab code)
+    - hist: value + state + time per measurement
+    - query: target state + prediction horizon
+
+    Key changes from NormaLight:
+    1. Context token for demographics (no repeated sex/age/lab on every token)
+    2. Log-delta-t time encoding (monotonic) instead of Time2Vec
+    3. Within-sequence normalization (subtract mean, divide by std)
+    4. Quantile output heads (or Gaussian via output_mode='gaussian')
+    5. Binned age embedding
+    """
+
+    QUANTILES = [0.025, 0.25, 0.50, 0.75, 0.975]
+
+    def __init__(self, d_model, nhead, nlayers, nstates, ncodes,
+                 output_mode='quantile', mlp_dropout=0.1, age_bins=7):
+        super().__init__()
+        self.output_mode = output_mode
+        self.d_model = d_model
+
+        # History token embeddings
+        self.value_emb = nn.Linear(1, d_model)
+        self.state_emb = nn.Embedding(nstates, d_model)
+
+        # Context token embeddings (sex, age, lab)
+        self.sex_emb = nn.Embedding(2, d_model)
+        self.lab_emb = nn.Embedding(ncodes, d_model)
+        self.age_bins = age_bins
+        self.age_emb = nn.Embedding(age_bins, d_model)
+
+        # Time embeddings
+        self.time_emb = TimeEmbedding(d_model)
+        self.time_emb_query = TimeEmbeddingQuery(d_model)
+
+        # Within-sequence normalization (learnable scale/shift)
+        self.seq_norm_scale = nn.Parameter(torch.ones(1))
+        self.seq_norm_bias = nn.Parameter(torch.zeros(1))
+
+        # Decoder-only transformer (causal self-attention)
+        layer = nn.TransformerDecoderLayer(d_model, nhead, dim_feedforward=d_model * 4,
+                                           dropout=mlp_dropout, batch_first=True)
+        self.transformer = nn.TransformerDecoder(layer, nlayers)
+
+        # Output heads
+        if output_mode == 'quantile':
+            self.quantile_head = nn.Linear(d_model, len(self.QUANTILES))
+        else:
+            self.mean_head = nn.Linear(d_model, 1)
+            self.logvar_head = nn.Linear(d_model, 1)
+
+    def _causal_mask(self, L, device):
+        return torch.triu(torch.ones(L, L, device=device), 1).bool()
+
+    def _bin_age(self, age):
+        age = age.view(-1).float()
+        return torch.clamp((age - 20) / 10, min=0, max=self.age_bins - 1).long()
+
+    def _seq_normalize(self, x_h, pad_mask):
+        """(x - mean) / std over valid positions. Returns normalized x, mean, std."""
+        if pad_mask is not None:
+            valid = (~pad_mask).unsqueeze(-1).float()
+        else:
+            valid = torch.ones_like(x_h)
+
+        n_valid = valid.sum(dim=1, keepdim=True).clamp(min=1)
+        mean = (x_h * valid).sum(dim=1, keepdim=True) / n_valid
+        var = ((x_h - mean) ** 2 * valid).sum(dim=1, keepdim=True) / n_valid
+        std = (var + 1e-6).sqrt()
+
+        x_norm = (x_h - mean) / std
+        x_norm = x_norm * self.seq_norm_scale + self.seq_norm_bias
+        return x_norm, mean, std
+
+    def forward(self, x_h, s_h, t_h, sex, age, lab, s_next, t_next, pad_mask=None):
+        B, T = x_h.shape[:2]
+        sex = sex.view(-1).long()
+        lab = lab.view(-1).long()
+        s_h = s_h.long()
+        s_next = s_next.view(-1).long()
+
+        # Within-sequence normalize values
+        x_norm, seq_mean, seq_std = self._seq_normalize(x_h, pad_mask)
+
+        # Context token: sex + age + lab (single token, position 0)
+        ctx = (self.sex_emb(sex) + self.age_emb(self._bin_age(age)) + self.lab_emb(lab)).unsqueeze(1)  # (B, 1, D)
+
+        # History tokens: value + state + time only
+        hist = (
+            self.value_emb(x_norm)
+            + self.state_emb(s_h)
+            + self.time_emb(t_h)
+        )  # (B, T, D)
+
+        # Query token: state + horizon only
+        if pad_mask is not None:
+            lengths = (~pad_mask).sum(dim=1)
+            t_last = t_h[torch.arange(B, device=t_h.device), lengths - 1, 0]
+        else:
+            t_last = t_h[:, -1, 0]
+
+        horizon = (t_next.view(B) - t_last).clamp(min=0).view(B, 1, 1)
+        query = (
+            self.state_emb(s_next)
+            + self.time_emb_query(horizon).squeeze(1)
+        ).unsqueeze(1)  # (B, 1, D)
+
+        # Sequence: [ctx, hist_1, ..., hist_T, query]
+        tokens = torch.cat([ctx, hist, query], dim=1)  # (B, 1+T+1, D)
+        L = T + 2
+        attn_mask = self._causal_mask(L, tokens.device)
+
+        # Padding mask: context and query are never padded
+        if pad_mask is not None:
+            pad_mask_ext = torch.cat([
+                torch.zeros(B, 1, dtype=torch.bool, device=pad_mask.device),  # ctx
+                pad_mask,                                                       # hist
+                torch.zeros(B, 1, dtype=torch.bool, device=pad_mask.device),  # query
+            ], dim=1)
+        else:
+            pad_mask_ext = None
+
+        H = self.transformer(tokens, tokens, tgt_mask=attn_mask,
+                             tgt_key_padding_mask=pad_mask_ext,
+                             memory_key_padding_mask=pad_mask_ext)
+        query_features = H[:, -1]  # (B, D)
+
+        if self.output_mode == 'quantile':
+            q_norm = self.quantile_head(query_features)
+            q_denorm = q_norm * seq_std.squeeze(-1) + seq_mean.squeeze(-1)
+            return q_denorm
+        else:
+            mu_norm = self.mean_head(query_features)
+            raw_log_var = self.logvar_head(query_features)
+            log_var = torch.clamp(raw_log_var, min=-10.0)
+            mu = mu_norm * seq_std.squeeze(-1) + seq_mean.squeeze(-1)
+            log_var = log_var + 2.0 * torch.log(seq_std.squeeze(-1) + 1e-8)
+            return mu, log_var
+
 
 # class NormaLightDecoder(nn.Module):
 #     """NORMA light model with decoder-only architecture for conditional prediction."""

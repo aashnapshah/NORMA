@@ -21,7 +21,8 @@ from utils import *
 from predict import *
 from edit import *
 from model import *
-from helpers.plots import *
+sys.path.insert(0, os.path.join(ROOTDIR, 'scripts'))
+from plots import *
 
 MODEL = '167f05e8'
 RUN_IDS = ['ARIMA', 'Mean', 'last', MODEL]

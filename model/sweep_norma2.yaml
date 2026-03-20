@@ -1,0 +1,40 @@
+program: train.py
+method: bayes
+project: NORMA
+metric:
+  name: val/loss
+  goal: minimize
+
+parameters:
+  model:
+    value: NORMA2
+  loss:
+    value: QuantileLoss
+  output_mode:
+    value: quantile
+  train:
+    value: combined
+  test:
+    value: combined
+  nstates:
+    value: 3
+  epochs:
+    value: 50
+  patience:
+    value: 10
+
+  # --- Sweep these ---
+  seed:
+    values: [42, 123, 456, 789, 1024]
+  d_model:
+    values: [32, 64, 128]
+  nhead:
+    values: [2, 4, 8]
+  nlayers:
+    values: [4, 6, 8]
+  lr:
+    values: [5e-5, 1e-4, 3e-4, 5e-4]
+  batch_size:
+    values: [16, 32, 64]
+  weight_decay:
+    values: [1e-4, 1e-3, 1e-2]

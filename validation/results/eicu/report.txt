@@ -1,0 +1,73 @@
+Dataset: eicu
+NORMA run: 334f7e21
+Output: /n/data1/hms/dbmi/manrai/aashna/NORMA/validation/results/eicu
+Steps: [1, 2, 3, 4, 5, 6, 7]
+
+============================================================
+STEP 1: Load & split
+============================================================
+  Found split_df.pkl in /n/data1/hms/dbmi/manrai/aashna/NORMA/validation/data
+
+============================================================
+STEP 2: Compute refs
+============================================================
+  Found ref_intervals.csv in /n/data1/hms/dbmi/manrai/aashna/NORMA/validation/data
+
+============================================================
+STEP 3: Classify
+============================================================
+  Found classification_detail.pkl in /n/data1/hms/dbmi/manrai/aashna/NORMA/validation/results
+
+============================================================
+STEP 4: Variability
+============================================================
+  Saved variability.csv (28 labs)
+
+============================================================
+STEP 5: Cox models
+============================================================
+Attaching disease diagnoses...
+Loading diagnosis data from /n/data1/hms/dbmi/manrai/aashna/NORMA/validation/data/eicu_diagnosis.pkl
+  diabetes            :  23515 stays
+  ckd                 :  15228 stays
+  aki                 :  19615 stays
+  resp_failure        :  37009 stays
+  sepsis              :  24033 stays
+  chf                 :  18207 stays
+  afib                :  16249 stays
+  hypertension        :  25921 stays
+  copd                :  13858 stays
+  pneumonia           :  20677 stays
+  liver_disease       :   3496 stays
+  stroke              :  12360 stays
+Attaching mortality...
+Loading cached patient data from /n/data1/hms/dbmi/manrai/aashna/NORMA/validation/cache/patient.pkl
+Computing prolonged LOS...
+  7876 stays with LOS > 7 days
+Computing pop-abnormal outcome...
+  383348 / 583805 patient-lab pairs with pop-abnormal index values
+  Saved cox_results.csv (0 models)
+
+============================================================
+STEP 6: Eval metrics
+============================================================
+Attaching disease diagnoses...
+Loading diagnosis data from /n/data1/hms/dbmi/manrai/aashna/NORMA/validation/data/eicu_diagnosis.pkl
+  diabetes            :  23515 stays
+  ckd                 :  15228 stays
+  aki                 :  19615 stays
+  resp_failure        :  37009 stays
+  sepsis              :  24033 stays
+  chf                 :  18207 stays
+  afib                :  16249 stays
+  hypertension        :  25921 stays
+  copd                :  13858 stays
+  pneumonia           :  20677 stays
+  liver_disease       :   3496 stays
+  stroke              :  12360 stays
+Attaching mortality...
+Loading cached patient data from /n/data1/hms/dbmi/manrai/aashna/NORMA/validation/cache/patient.pkl
+Computing prolonged LOS...
+  7876 stays with LOS > 7 days
+Computing pop-abnormal outcome...
+  383348 / 583805 patient-lab pairs with pop-abnormal index values

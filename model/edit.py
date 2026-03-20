@@ -11,8 +11,9 @@ mpl.rcParams['animation.ffmpeg_path'] = '/home/aas926/miniconda3/envs/normal/bin
 
 sys.path.append('../../NORMA/')
 from process.config import REFERENCE_INTERVALS 
-from ARIMA.setpoints import *
-from helpers.plots import *
+from baselines.setpoints import *
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
+from plots import *
 from data import *
 from utils import *
 from model import *
