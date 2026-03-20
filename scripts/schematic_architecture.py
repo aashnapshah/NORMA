@@ -41,9 +41,9 @@ C_TEAL_L  = lighten(C_TEAL, 0.45)
 C_QUERY_LL = lighten(C_QUERY, 0.55)
 
 # ---------------------------------------------------------------------------
-# Layout constants (all in data coords, figure is ~3.5 x 8 inches)
+# Layout constants (all in data coords, figure is ~3.5 x 6 inches)
 # ---------------------------------------------------------------------------
-FIG_W, FIG_H = 3.5, 9.0
+FIG_W, FIG_H = 3.5, 6.0
 X_CENTER = FIG_W / 2
 
 BOX_W  = 0.7   # width of a single input/embedding box
@@ -52,13 +52,13 @@ GAP_X  = 0.12  # horizontal gap between the three boxes
 TRIO_W = 3 * BOX_W + 2 * GAP_X  # total width of a trio
 
 # Vertical positions (top of each row, measured from bottom)
-Y_QUANTILES   = 0.45
-Y_QHEAD       = 1.40
-Y_OUTPUT      = 2.40
-Y_DECODER_TOP = 4.05  # top of decoder dashed box
-Y_TOKEN       = 5.50
-Y_EMBED       = 6.50
-Y_INPUT       = 7.50
+Y_QUANTILES   = 0.30
+Y_QHEAD       = 0.95
+Y_OUTPUT      = 1.60
+Y_DECODER_TOP = 2.85  # top of decoder dashed box
+Y_TOKEN       = 3.70
+Y_EMBED       = 4.45
+Y_INPUT       = 5.20
 
 ARROW_STYLE = dict(arrowstyle='->', color='#455A64', lw=1.0,
                     mutation_scale=10, shrinkA=2, shrinkB=2)

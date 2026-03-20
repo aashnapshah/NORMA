@@ -90,6 +90,7 @@ def compile_figure(name, tex_content):
 # ═══════════════════════════════════════════════════════════════════════
 
 def figure2():
+    cohort_path = _path('results/manuscript_figures/figure2a_cohort.pdf')
     var_path = _path('results/validation/figures/variability.pdf')
     mort_path = _path('results/validation/figures/mortality_by_quintile.pdf')
 
@@ -101,7 +102,7 @@ def figure2():
 \begin{minipage}[t]{0.48\textwidth}
   % A — Cohort Selection (top left)
   \raggedright\textbf{\textsf{A}} \textsf{Cohort Selection}\\[4pt]
-  \fbox{\parbox{0.95\textwidth}{\vspace{6cm}\centering\textsf{\small Insert cohort selection schematic}\vspace{0.3cm}}}
+  \includegraphics[width=\textwidth]{""" + cohort_path + r"""}
 
   \vspace{0.4cm}
 
@@ -126,6 +127,7 @@ def figure2():
 # ═══════════════════════════════════════════════════════════════════════
 
 def figure3():
+    arch_path = _path('results/manuscript_figures/figure3a_architecture.pdf')
     perf_path = _path('results/prediction/figures/norma_quantile_forecasting_accuracy.pdf')
     r2_path = _path('results/prediction/figures/norma_quantile_analyte_r2.pdf')
     sens_path = _path('results/prediction/figures/norma_quantile_sensitivity.pdf')
@@ -133,20 +135,19 @@ def figure3():
     tex = r"""
 \begin{figure}[p]
 
-% Row 1: A — Architecture (left) | B — Forecasting (right)
+% Row 1: A (left, height-matched) | B + C stacked (right)
 \noindent
-\begin{minipage}[t]{0.28\textwidth}
+\begin{minipage}[t]{0.25\textwidth}
   \raggedright\textbf{\textsf{A}} \textsf{NORMA Architecture}\\[4pt]
-  \fbox{\parbox{0.95\textwidth}{\vspace{7cm}\centering\textsf{\small Insert architecture}\vspace{0.3cm}}}
+  \includegraphics[width=\textwidth,height=0.55\textheight,keepaspectratio]{""" + arch_path + r"""}
 \end{minipage}
 \hfill
-\begin{minipage}[t]{0.68\textwidth}
+\begin{minipage}[t]{0.72\textwidth}
   \raggedright\textbf{\textsf{B}} \textsf{NORMA Forecasting Performance}\\[4pt]
   \includegraphics[width=\textwidth]{""" + perf_path + r"""}
 
   \vspace{0.2cm}
 
-  % C — Per-analyte R² (right of architecture, below B)
   \raggedright\textbf{\textsf{C}} \textsf{Analyte-Specific Performance}\\[4pt]
   \includegraphics[width=\textwidth]{""" + r2_path + r"""}
 \end{minipage}

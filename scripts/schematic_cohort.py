@@ -89,10 +89,10 @@ def draw_phase_bracket(ax, x0, x1, y, label, color=TIMELINE_COLOR, fontsize=6.5)
 # ── main figure ──────────────────────────────────────────────────────────
 
 def make_figure():
-    fig, ax = plt.subplots(figsize=(6, 3))
+    fig, ax = plt.subplots(figsize=(5, 4))
     ax.axis('off')
     ax.set_xlim(-1.5, 27)
-    ax.set_ylim(-3.5, 5.5)
+    ax.set_ylim(-4.0, 6.0)
 
     # ── timeline axis ────────────────────────────────────────────────────
     tl_y = -1.8

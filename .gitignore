@@ -27,6 +27,9 @@ notebooks/predictions/
 *.png
 results/all_outputs.pdf
 
+# Manuscript (separate repo for Overleaf)
+manuscript/
+
 # Claude
 .claude/
 CLAUDE.md
