@@ -27,6 +27,14 @@ notebooks/predictions/
 *.png
 results/all_outputs.pdf
 
+# Claude
+.claude/
+CLAUDE.md
+
+# Scripts / configs
+*.sh
+*.yaml
+
 # IDE / tools
 .vscode/
 .idea/
