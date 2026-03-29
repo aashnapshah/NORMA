@@ -20,17 +20,21 @@ if os.path.exists(_env_path):
                 os.environ.setdefault(_k.strip(), _v.strip())
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(ROOT, 'model'))
-sys.path.insert(0, os.path.join(ROOT, 'process'))
+PROJECT_ROOT = os.path.dirname(ROOT)
+sys.path.insert(0, os.path.join(PROJECT_ROOT, 'model'))
+sys.path.insert(0, os.path.join(PROJECT_ROOT, 'process'))
 
 from config import REFERENCE_INTERVALS
-from data import TEST_VOCAB, CODE_TO_TEST_NAME
+
+# Build vocab dicts directly to avoid importing data.py (which pulls in torch/sklearn at import time)
+TEST_VOCAB = {test_name: i for i, test_name in enumerate(REFERENCE_INTERVALS.keys())}
+CODE_TO_TEST_NAME = {i: test_name for test_name, i in TEST_VOCAB.items()}
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 DEFAULT_RUN_ID = '167f05e8'
-LOG_DIR  = os.path.join(ROOT, 'model', 'logs')
+LOG_DIR  = os.path.join(PROJECT_ROOT, 'model', 'logs')
 
 # Excluded from "covered tests" UI (dropdown, methods page); model still has 34 tests for checkpoint compatibility
 COVERED_TESTS_EXCLUDE = {'CRP', 'LDH', 'GGT'}
@@ -114,12 +118,12 @@ def _ensure_model(run_id=None):
     return model, hparams, is_quantile
 
 # Pre-load sequences and pre-compute example cache (6 per test) for instant example loading
-_SEQS_PATH = os.path.join(ROOT, 'data', 'processed', 'combined_sequences_v2.pkl')
+_SEQS_PATH = os.path.join(PROJECT_ROOT, 'data', 'processed', 'combined_sequences_v2.pkl')
 _SEQS_BY_TEST = {}
 _EXAMPLE_CACHE = {}   # test_name -> list of precomputed dicts
 N_CACHED_EXAMPLES = 6
 
-_CACHE_JSON_PATH = os.path.join(ROOT, 'data', 'example_cache.json')
+_CACHE_JSON_PATH = os.path.join(PROJECT_ROOT, 'data', 'example_cache.json')
 
 if os.path.exists(_CACHE_JSON_PATH):
     # Production mode: load pre-computed example cache directly (no sequences file needed)
@@ -555,6 +559,46 @@ def training():
 @app.route('/validation')
 def validation():
     return redirect('/#architecture')
+
+
+VALIDATION_DIR = os.path.join(PROJECT_ROOT, 'validation', 'results')
+
+@app.route('/api/validation_circos')
+def validation_circos():
+    """Return real NORMA-vs-PerRI deltas for the circos charts."""
+    dataset = request.args.get('dataset', 'chs')
+    eval_path = os.path.join(VALIDATION_DIR, dataset, 'eval_per_normal_pop_normal.csv')
+    if not os.path.exists(eval_path):
+        return jsonify({'error': f'No eval data for dataset: {dataset}'}), 404
+
+    df = pd.read_csv(eval_path, keep_default_na=False)
+
+    # Identify NORMA method (starts with "NORMA_")
+    norma_methods = [m for m in df['method'].unique() if m.startswith('NORMA_')]
+    if not norma_methods:
+        return jsonify({'error': 'No NORMA method found in eval data'}), 500
+    norma_method = norma_methods[0]
+
+    outcomes = sorted(df['outcome'].unique())
+    analytes = sorted(df['analyte'].unique())
+
+    result = {'analytes': analytes, 'outcomes': outcomes, 'dataset': dataset}
+    for metric in ['sensitivity', 'specificity', 'ppv']:
+        result[metric] = {}
+        for outcome in outcomes:
+            deltas = []
+            for analyte in analytes:
+                norma_row = df[(df['analyte'] == analyte) & (df['method'] == norma_method) & (df['outcome'] == outcome)]
+                perri_row = df[(df['analyte'] == analyte) & (df['method'] == 'PerRI') & (df['outcome'] == outcome)]
+                if len(norma_row) == 1 and len(perri_row) == 1:
+                    n_val = float(norma_row[metric].iloc[0])
+                    p_val = float(perri_row[metric].iloc[0])
+                    deltas.append(round(n_val - p_val, 4))
+                else:
+                    deltas.append(None)
+            result[metric][outcome] = deltas
+
+    return jsonify(result)
 
 
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')

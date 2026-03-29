@@ -1036,13 +1036,14 @@
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#cbc9c2;vertical-align:middle;margin-right:4px"></span>Personalized was better</span>
     </div>
 
-    <!-- Column headers -->
-    <div style="display:grid;grid-template-columns:130px repeat(3,1fr);margin:0 auto 0.5rem">
-      <div></div>
-      <div style="text-align:center;font-weight:600;font-size:0.88rem">Mortality</div>
-      <div style="text-align:center;font-weight:600;font-size:0.88rem">Chronic Kidney Disease</div>
-      <div style="text-align:center;font-weight:600;font-size:0.88rem">Type 2 Diabetes</div>
+    <!-- Dataset selector -->
+    <div style="display:flex;justify-content:center;gap:0.5rem;margin-bottom:1rem">
+      <button class="ds-btn" data-ds="chs" style="background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:var(--r-sm);padding:0.3rem 0.8rem;font-size:0.76rem;font-weight:600;cursor:pointer;font-family:inherit">CHS</button>
+      <button class="ds-btn" data-ds="eicu" style="background:none;color:var(--text-3);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.3rem 0.8rem;font-size:0.76rem;font-weight:600;cursor:pointer;font-family:inherit">eICU</button>
     </div>
+
+    <!-- Column headers (dynamic) -->
+    <div id="validation-col-headers" style="display:grid;grid-template-columns:130px repeat(3,1fr);margin:0 auto 0.5rem"></div>
 
     <!-- Radial chart grid -->
     <div id="validation-grid" style="margin:0 auto"></div>
@@ -1489,59 +1490,33 @@ loadMetrics();
   }, {responsive:true, displayModeBar:false});
 })();
 
-/* ── Clinical Validation — Radial Trade-Off Charts ──────────── */
-(function buildValidationCharts() {
+/* ── Clinical Validation — Radial Trade-Off Charts (real data) ── */
+(function initValidationCharts() {
   const grid = document.getElementById('validation-grid');
+  const colHeaders = document.getElementById('validation-col-headers');
   if (!grid) return;
 
-  const analytes = ['CL','AST','TP','ALT','LDL','TC','WBC','ALB','MCV','CA',
-                    'RBC','HGB','BUN','K','NA','CO2','A1C','CRE','GGT','RDW',
-                    'HDL','MCH','HCT','GLU','TBIL','MCHC','MPV','ALP','PLT'];
-  const N = analytes.length;
-
-  const rawData = {
-    recall: {
-      mort: [-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08, 0.45, 0.70, 1.00,-0.08,-0.08],
-      ckd:  [-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08, 0.40, 0.65, 1.00,-0.08,-0.08],
-      t2d:  [-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08, 0.42, 0.68, 1.00,-0.08,-0.08],
-    },
-    spec: {
-      mort: [0.12,0.10,0.11,0.10,0.11,0.10,0.11,0.10,0.22,0.10,0.10,0.12,0.10,0.11,0.12,0.10,0.10,0.11,0.20,0.12,0.20,0.18,0.11,0.20,-0.08,-0.08,-0.08,0.18,0.13],
-      ckd:  [0.12,0.10,0.11,0.10,0.11,0.10,0.11,0.10,0.11,0.10,0.14,0.10,0.10,0.10,0.12,0.11,0.11,0.10,0.11,0.10,0.10,0.10,0.10,0.10,-0.08,-0.08,-0.08,0.14,0.10],
-      t2d:  [0.14,0.12,0.10,0.10,0.10,0.10,0.11,0.10,0.10,0.10,0.10,0.12,0.12,0.10,0.12,0.20,0.22,0.10,0.10,0.10,0.10,0.10,0.10,0.10,-0.08,-0.08,-0.08,0.14,0.14],
-    },
-    prec: {
-      mort: [-0.08,-0.08,-0.08,-0.08,-0.08,0.40,0.75,1.00,0.90,0.82,0.78,0.72,0.65,0.60,0.55,0.50,0.45,0.40,0.38,0.35,0.32,0.30,0.28,0.26,0.24,0.22,0.20,0.18,0.16],
-      ckd:  [-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,0.15,0.28,0.45,0.72,1.00,0.88,0.78,0.65,0.55,0.45,0.38,0.30,0.24,0.20,-0.08,-0.08],
-      t2d:  [-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,-0.08,0.25,0.45,0.62,0.78,0.88,0.94,0.98,1.00,0.85,0.70,0.55,-0.08,-0.08],
-    }
-  };
-
-  const centerLabels = {
-    recall: ['+47.7%','+48.9%','+47.7%'],
-    spec:   ['+27.4%','+27.7%','+30.5%'],
-    prec:   ['+12.6%','+6.5%', '+10.8%'],
-  };
-
-  // Audience-friendly row labels + site-consistent colors
+  const metricMap = { sensitivity:'recall', specificity:'spec', ppv:'prec' };
   const metricInfo = {
-    recall: { title:'Cases caught',         color:'#ff3b30' },  // --low
-    spec:   { title:'Correct reassurance',  color:'#0071e3' },  // --accent
-    prec:   { title:'Signal quality',       color:'#30d158' },  // --normal
+    recall: { title:'Cases caught',         color:'#ff3b30' },
+    spec:   { title:'Correct reassurance',  color:'#0071e3' },
+    prec:   { title:'Signal quality',       color:'#30d158' },
   };
   const posColors = { recall:'#ff3b30', spec:'#0071e3', prec:'#30d158' };
   const negCol    = '#cbc9c2';
-  const diseases  = ['mort','ckd','t2d'];
-  const metrics   = ['recall','spec','prec'];
+  const metricKeys = ['recall','spec','prec'];
 
-  // SVG geometry — sized to fill full panel width
-  const SZ=260, CX=130, CY=130, INNER=48, OUTER=104, GAP=4;
-  const PAD=0.022, arcStep=2*Math.PI/N;
+  const outcomeLabels = {
+    mortality:'Mortality', ckd:'Chronic Kidney Disease', t2d:'Type 2 Diabetes',
+    aki:'Acute Kidney Injury', sepsis:'Sepsis', prolonged_los:'Prolonged LOS',
+    anemia_unspecified:'Anemia',
+  };
 
+  // SVG geometry
+  const SZ=260, CX=130, CY=130, INNER=48, OUTER=104, GAP=4, PAD=0.022;
   function pxy(r,t){ return [CX+r*Math.cos(t-Math.PI/2), CY+r*Math.sin(t-Math.PI/2)]; }
-
-  function barPath(i,frac){
-    var maxL=OUTER-INNER-GAP, bL=Math.abs(frac)*maxL;
+  function barPath(i,frac,N){
+    var arcStep=2*Math.PI/N, maxL=OUTER-INNER-GAP, bL=Math.abs(frac)*maxL;
     var r0=INNER+GAP, r1=r0+bL;
     var a0=i*arcStep+PAD, a1=(i+1)*arcStep-PAD;
     var p0=pxy(r0,a0),p1=pxy(r1,a0),p2=pxy(r1,a1),p3=pxy(r0,a1);
@@ -1551,24 +1526,17 @@ loadMetrics();
            'L'+p3[0]+','+p3[1]+
            'A'+r0+','+r0+' 0 '+la+' 0 '+p0[0]+','+p0[1]+'Z';
   }
-
-  function tickPath(i){
-    var t=i*arcStep;
+  function tickPath(i,N){
+    var arcStep=2*Math.PI/N, t=i*arcStep;
     var p0=pxy(INNER+GAP-2,t), p1=pxy(OUTER+3,t);
     return 'M'+p0[0]+','+p0[1]+'L'+p1[0]+','+p1[1];
   }
-
-  function lblXY(i){ return pxy(OUTER+14,(i+0.5)*arcStep); }
+  function lblXY(i,N){ return pxy(OUTER+14,(i+0.5)*2*Math.PI/N); }
 
   // Tooltip
   var tip = document.createElement('div');
   tip.style.cssText = 'position:fixed;background:#1d1d1f;color:#fff;padding:8px 12px;border-radius:var(--r-sm);font-size:0.78rem;font-family:"DM Sans",sans-serif;pointer-events:none;opacity:0;transition:opacity 0.12s;z-index:1000;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,0.22)';
   document.body.appendChild(tip);
-
-  // Friendly metric labels for tooltip
-  var tipLabels = { recall:'cases caught', spec:'correct reassurance', prec:'signal quality' };
-
-  var _tipMetric = 'recall';
   function showTip(e,a,v){
     var desc = v >= 0 ? 'NORMA better' : 'Personalized better';
     tip.innerHTML='<div style="font-weight:600;font-size:0.82rem;margin-bottom:2px">'+a+'</div>'
@@ -1578,101 +1546,147 @@ loadMetrics();
   function moveTip(e){ tip.style.left=(e.clientX+14)+'px'; tip.style.top=(e.clientY-30)+'px'; }
   function hideTip(){ tip.style.opacity='0'; }
 
-  metrics.forEach(function(metric) {
-    var row = document.createElement('div');
-    row.style.cssText = 'display:grid;grid-template-columns:130px repeat(3,1fr);align-items:center;margin-bottom:1.5rem';
+  function renderCharts(data) {
+    var analytes = data.analytes;
+    var outcomes = data.outcomes;
+    var N = analytes.length;
 
-    // Row label
-    var lbl = document.createElement('div');
-    lbl.style.cssText = 'text-align:right;padding-right:18px';
-    lbl.innerHTML = '<div style="font-weight:600;font-size:0.85rem;color:'+metricInfo[metric].color+'">'+metricInfo[metric].title+'</div>'
-      +'<div style="font-size:0.68rem;color:var(--text-3);margin-top:2px">NORMA vs personalized</div>';
-    row.appendChild(lbl);
-
-    diseases.forEach(function(disease, di) {
-      var vals  = rawData[metric][disease];
-      var posC  = posColors[metric];
-
-      var cell = document.createElement('div');
-      cell.style.cssText = 'display:flex;justify-content:center;align-items:center;padding:6px';
-      var wrap = document.createElement('div');
-      wrap.style.cssText = 'position:relative;width:'+SZ+'px;height:'+SZ+'px';
-
-      var svg = d3.create('svg').attr('width',SZ).attr('height',SZ).attr('viewBox','0 0 '+SZ+' '+SZ);
-
-      // Background
-      svg.append('circle').attr('cx',CX).attr('cy',CY).attr('r',OUTER+18)
-         .attr('fill','var(--surface)').attr('stroke','var(--border)').attr('stroke-width',1);
-      svg.append('circle').attr('cx',CX).attr('cy',CY).attr('r',INNER+GAP)
-         .attr('fill','var(--bg)');
-
-      // Ticks
-      for(var i=0;i<N;i++){
-        svg.append('path').attr('d',tickPath(i)).attr('stroke','var(--border)')
-           .attr('stroke-width',0.5).attr('fill','none');
-      }
-
-      // Sort by value descending
-      var sorted = analytes.map(function(a,i){return{a:a,val:vals[i]};})
-                           .sort(function(x,y){return y.val-x.val;});
-
-      var maxPos = Math.max.apply(null, sorted.map(function(d){return d.val;}).filter(function(v){return v>0;})) || 1e-9;
-
-      // Bars
-      sorted.forEach(function(d,i){
-        var isPos = d.val >= 0;
-        var col   = isPos ? posC : negCol;
-        var normV = isPos ? d.val/maxPos : d.val;
-        var draw  = Math.sign(normV===0?1:normV) * Math.max(Math.abs(normV), isPos?0.05:0.07);
-        var baseOp= isPos ? (d.val>0.08?0.87:0.30) : 0.50;
-
-        svg.append('path').attr('d',barPath(i,draw)).attr('fill',col).attr('opacity',baseOp)
-           .style('cursor','pointer')
-           .on('mouseenter',function(e){
-             d3.select(this).attr('opacity',1).attr('stroke','#1d1d1f').attr('stroke-width',0.7);
-             showTip(e, d.a, d.val);
-           })
-           .on('mousemove',moveTip)
-           .on('mouseleave',function(){
-             d3.select(this).attr('opacity',baseOp).attr('stroke','none');
-             hideTip();
-           });
+    // Build rawData keyed by our metric short names and outcomes
+    var rawData = {};
+    Object.keys(metricMap).forEach(function(apiKey) {
+      var mk = metricMap[apiKey];
+      rawData[mk] = {};
+      outcomes.forEach(function(oc) {
+        rawData[mk][oc] = (data[apiKey] || {})[oc] || analytes.map(function(){return 0;});
       });
-
-      // Outer ring
-      svg.append('circle').attr('cx',CX).attr('cy',CY).attr('r',OUTER)
-         .attr('fill','none').attr('stroke','#d0cdc6').attr('stroke-width',0.6);
-
-      // Labels
-      sorted.forEach(function(d,i){
-        var p = lblXY(i);
-        var anchor = 'middle';
-        if(p[0]>CX+8) anchor='start';
-        if(p[0]<CX-8) anchor='end';
-        svg.append('text').attr('x',p[0]).attr('y',p[1])
-           .attr('text-anchor',anchor).attr('dominant-baseline','middle')
-           .attr('font-size','6px').attr('font-family',"'DM Sans',sans-serif")
-           .attr('fill','var(--text-3)').text(d.a);
-      });
-
-      // Inner circle
-      svg.append('circle').attr('cx',CX).attr('cy',CY).attr('r',INNER)
-         .attr('fill','var(--surface)').attr('stroke','var(--border)').attr('stroke-width',0.8);
-
-      wrap.appendChild(svg.node());
-
-      // Center label
-      var cLabel = document.createElement('div');
-      cLabel.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none';
-      cLabel.innerHTML = '<div style="font-weight:700;font-size:16px;line-height:1;color:'+metricInfo[metric].color+'">'+centerLabels[metric][di]+'</div>'
-        +'<div style="font-size:7.5px;color:var(--text-3);margin-top:3px">best lab \u0394</div>';
-      wrap.appendChild(cLabel);
-      cell.appendChild(wrap);
-      row.appendChild(cell);
     });
 
-    grid.appendChild(row);
+    // Update column headers
+    var nCols = outcomes.length;
+    colHeaders.style.gridTemplateColumns = '130px repeat('+nCols+',1fr)';
+    colHeaders.innerHTML = '<div></div>' + outcomes.map(function(oc){
+      return '<div style="text-align:center;font-weight:600;font-size:0.88rem">'+(outcomeLabels[oc]||oc)+'</div>';
+    }).join('');
+
+    // Clear grid
+    grid.innerHTML = '';
+
+    metricKeys.forEach(function(metric) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:grid;grid-template-columns:130px repeat('+nCols+',1fr);align-items:center;margin-bottom:1.5rem';
+
+      var lbl = document.createElement('div');
+      lbl.style.cssText = 'text-align:right;padding-right:18px';
+      lbl.innerHTML = '<div style="font-weight:600;font-size:0.85rem;color:'+metricInfo[metric].color+'">'+metricInfo[metric].title+'</div>'
+        +'<div style="font-size:0.68rem;color:var(--text-3);margin-top:2px">NORMA vs personalized</div>';
+      row.appendChild(lbl);
+
+      outcomes.forEach(function(outcome) {
+        var vals = rawData[metric][outcome];
+        var posC = posColors[metric];
+
+        var cell = document.createElement('div');
+        cell.style.cssText = 'display:flex;justify-content:center;align-items:center;padding:6px';
+        var wrap = document.createElement('div');
+        wrap.style.cssText = 'position:relative;width:'+SZ+'px;height:'+SZ+'px';
+
+        var svg = d3.create('svg').attr('width',SZ).attr('height',SZ).attr('viewBox','0 0 '+SZ+' '+SZ);
+
+        svg.append('circle').attr('cx',CX).attr('cy',CY).attr('r',OUTER+18)
+           .attr('fill','var(--surface)').attr('stroke','var(--border)').attr('stroke-width',1);
+        svg.append('circle').attr('cx',CX).attr('cy',CY).attr('r',INNER+GAP)
+           .attr('fill','var(--bg)');
+
+        for(var i=0;i<N;i++){
+          svg.append('path').attr('d',tickPath(i,N)).attr('stroke','var(--border)')
+             .attr('stroke-width',0.5).attr('fill','none');
+        }
+
+        // Filter out null values, sort by delta descending
+        var items = analytes.map(function(a,i){return{a:a,val:vals[i]!=null?vals[i]:0};});
+        var sorted = items.sort(function(x,y){return y.val-x.val;});
+
+        var maxPos = Math.max.apply(null, sorted.map(function(d){return d.val;}).filter(function(v){return v>0;})) || 1e-9;
+
+        sorted.forEach(function(d,i){
+          var isPos = d.val >= 0;
+          var col   = isPos ? posC : negCol;
+          var normV = isPos ? d.val/maxPos : d.val;
+          var draw  = Math.sign(normV===0?1:normV) * Math.max(Math.abs(normV), isPos?0.05:0.07);
+          var baseOp= isPos ? (d.val>0.08?0.87:0.30) : 0.50;
+
+          svg.append('path').attr('d',barPath(i,draw,N)).attr('fill',col).attr('opacity',baseOp)
+             .style('cursor','pointer')
+             .on('mouseenter',function(e){
+               d3.select(this).attr('opacity',1).attr('stroke','#1d1d1f').attr('stroke-width',0.7);
+               showTip(e, d.a, d.val);
+             })
+             .on('mousemove',moveTip)
+             .on('mouseleave',function(){
+               d3.select(this).attr('opacity',baseOp).attr('stroke','none');
+               hideTip();
+             });
+        });
+
+        svg.append('circle').attr('cx',CX).attr('cy',CY).attr('r',OUTER)
+           .attr('fill','none').attr('stroke','#d0cdc6').attr('stroke-width',0.6);
+
+        sorted.forEach(function(d,i){
+          var p = lblXY(i,N);
+          var anchor = 'middle';
+          if(p[0]>CX+8) anchor='start';
+          if(p[0]<CX-8) anchor='end';
+          svg.append('text').attr('x',p[0]).attr('y',p[1])
+             .attr('text-anchor',anchor).attr('dominant-baseline','middle')
+             .attr('font-size','6px').attr('font-family',"'DM Sans',sans-serif")
+             .attr('fill','var(--text-3)').text(d.a);
+        });
+
+        svg.append('circle').attr('cx',CX).attr('cy',CY).attr('r',INNER)
+           .attr('fill','var(--surface)').attr('stroke','var(--border)').attr('stroke-width',0.8);
+
+        wrap.appendChild(svg.node());
+
+        // Center label: best per-analyte delta
+        var bestDelta = Math.max.apply(null, vals.filter(function(v){return v!=null;}).map(Math.abs));
+        var bestSign = vals.filter(function(v){return v!=null;}).reduce(function(a,b){return Math.abs(b)>Math.abs(a)?b:a;},0) >= 0 ? '+' : '';
+        var cLabel = document.createElement('div');
+        cLabel.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none';
+        cLabel.innerHTML = '<div style="font-weight:700;font-size:16px;line-height:1;color:'+metricInfo[metric].color+'">'+bestSign+(bestDelta*100).toFixed(1)+'%</div>'
+          +'<div style="font-size:7.5px;color:var(--text-3);margin-top:3px">best lab \u0394</div>';
+        wrap.appendChild(cLabel);
+        cell.appendChild(wrap);
+        row.appendChild(cell);
+      });
+
+      grid.appendChild(row);
+    });
+  }
+
+  function loadDataset(ds) {
+    grid.innerHTML = '<p style="color:var(--text-3);font-size:0.85rem;padding:2rem 0;text-align:center">Loading validation data\u2026</p>';
+    fetch('/api/validation_circos?dataset='+ds)
+      .then(function(r){return r.json();})
+      .then(function(data){
+        if (data.error) { grid.innerHTML='<p style="color:#ff3b30;padding:1rem">'+data.error+'</p>'; return; }
+        renderCharts(data);
+      })
+      .catch(function(err){ grid.innerHTML='<p style="color:#ff3b30;padding:1rem">Failed to load: '+err+'</p>'; });
+  }
+
+  // Dataset toggle buttons
+  document.querySelectorAll('.ds-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('.ds-btn').forEach(function(b){
+        b.style.background='none'; b.style.color='var(--text-3)'; b.style.borderColor='var(--border)';
+      });
+      this.style.background='var(--accent)'; this.style.color='#fff'; this.style.borderColor='var(--accent)';
+      loadDataset(this.dataset.ds);
+    });
   });
+
+  // Load default
+  loadDataset('chs');
 })();
 </script>
 </body>
