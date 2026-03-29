@@ -944,6 +944,13 @@
             <td><div class="split-bar"><div class="sb-train" style="flex:70"></div><div class="sb-val" style="flex:10"></div><div class="sb-test" style="flex:20"></div></div></td>
           </tr>
           <tr class="ext-row">
+            <td><strong>eICU</strong></td>
+            <td>Philips eICU Collaborative Research Database</td>
+            <td><span class="badge-ext"><i class="bi bi-shield-check"></i> External validation</span></td>
+            <td><span class="badge-num">1,122,388</span></td>
+            <td style="font-size:0.78rem; color:var(--text-3)">Held-out — no retraining</td>
+          </tr>
+          <tr class="ext-row">
             <td><strong>Clalit</strong></td>
             <td>Clalit Health Services, Israel</td>
             <td><span class="badge-ext"><i class="bi bi-shield-check"></i> External validation</span></td>
@@ -1354,6 +1361,10 @@ loadMetrics();
       lat: 37.442, lon: -122.143, role: 'Training',
       sequences: 96042, patients: '~7K adults',
       color: '#0071e3', size: 16 },
+    { name: 'eICU', inst: 'Philips eICU Collaborative Research Database', city: 'Multi-center, US',
+      lat: 38.5, lon: -98.0, role: 'External Validation',
+      sequences: 1122388, patients: '~91K adults',
+      color: '#30d158', size: 22 },
     { name: 'Clalit', inst: 'Clalit Health Services', city: 'Israel',
       lat: 31.77, lon: 35.22, role: 'External Validation',
       sequences: null, patients: '4.5M adults',
@@ -1367,7 +1378,7 @@ loadMetrics();
     type: 'scattergeo', mode: 'markers+text',
     lat: sites.map(s => s.lat), lon: sites.map(s => s.lon),
     text: sites.map(s => s.name),
-    textposition: ['top center', 'top center', 'top right'],
+    textposition: ['top center', 'top center', 'bottom center', 'top right'],
     textfont: { family: 'DM Sans,sans-serif', size: 12, color: sites.map(s => s.color), weight: 600 },
     hoverinfo: 'none',
     marker: {
