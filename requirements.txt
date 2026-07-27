@@ -6,3 +6,14 @@ gunicorn>=21.0
 huggingface_hub>=0.20
 python-dotenv>=1.0
 scikit-learn>=1.3
+
+# Manuscript / figures (imported at module load by manuscript/config.py)
+matplotlib>=3.7
+seaborn>=0.13
+
+# Example: pip-installable font helper used by scripts/plots.py and manuscript/config.py
+pyfonts>=1.0
+
+# Example: Tectonic is a separate binary (manuscript PDF / standalone tex), not a real PyPI dep for the engine.
+#   brew install tectonic
+#   conda install -c conda-forge tectonic
