@@ -1,16 +1,5 @@
 # NORMA: Normal Outcome Range Modeling with Attention
 
-Individualized laboratory reference intervals from a conditional transformer.
-
-NORMA reinterprets a blood test result against a reference interval built for *that patient*, rather than a single fixed population range.
-It conditions on the patient's own measurement history, demographics, and population-level data about "normal" variation, and outputs a 95% prediction interval for the next value.
-This sits between two extremes: fixed population intervals (`Pop_RI`) that ignore the individual, and purely personalized intervals (`Per_RI`) that overfit sparse histories and over-call abnormalities.
-
-- Interactive web app: [norma-tpy0.onrender.com](https://norma-tpy0.onrender.com/)
-- Model weights: [huggingface.co/aashnaps/NORMA](https://huggingface.co/aashnaps/NORMA)
-
-## Abstract
-
 Blood-based biomarkers underpin clinical diagnosis and management, yet their interpretation relies largely on fixed population reference intervals that ignore stable, intra-patient variability.
 As such, population-based interpretation can mask meaningful deviation from an individual's baseline, risking delayed disease detection.
 To remedy this, there have been increasing efforts to personalize blood biomarker interpretation using individual testing histories.
@@ -21,7 +10,9 @@ NORMA-derived intervals achieve higher precision for predicting outcomes, includ
 These findings caution against over-personalization in laboratory medicine and demonstrate that anchoring individual trajectories to population-level priors outperforms either approach alone.
 To promote transparency, we publicly release the model, code, and an interactive user interface for accessible, individualized laboratory interpretation.
 
-The full paper is available at [arXiv:2605.18701](https://arxiv.org/abs/2605.18701).
+- Interactive web app: [norma-tpy0.onrender.com](https://norma-tpy0.onrender.com/)
+- Model weights: [huggingface.co/aashnaps/NORMA](https://huggingface.co/aashnaps/NORMA)
+- The full paper is available at [arXiv:2605.18701](https://arxiv.org/abs/2605.18701).
 
 ## 1. System requirements
 
