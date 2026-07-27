@@ -6,7 +6,6 @@ NORMA reinterprets a blood test result against a reference interval built for *t
 It conditions on the patient's own measurement history, demographics, and population-level data about "normal" variation, and outputs a 95% prediction interval for the next value.
 This sits between two extremes: fixed population intervals (`Pop_RI`) that ignore the individual, and purely personalized intervals (`Per_RI`) that overfit sparse histories and over-call abnormalities.
 
-- Paper: *Learning Normal Representations for Blood Biomarkers* — [arXiv:2605.18701](https://arxiv.org/abs/2605.18701)
 - Interactive web app: [norma-tpy0.onrender.com](https://norma-tpy0.onrender.com/)
 - Model weights: [huggingface.co/aashnaps/NORMA](https://huggingface.co/aashnaps/NORMA)
 
@@ -54,12 +53,9 @@ Hardware:
 ```bash
 git clone https://github.com/aashnapshah/NORMA.git
 cd NORMA
-python -m venv .venv && source .venv/bin/activate    # optional but recommended
+python -m venv .venv && source .venv/bin/activate  
 pip install -r requirements.txt
 ```
-
-Typical install time on a normal desktop: about 3-5 minutes, dominated by the PyTorch download.
-No compilation step; model weights are fetched on first use from HuggingFace (a few MB).
 
 ## 3. Demo
 
@@ -146,8 +142,6 @@ manuscript/    figure and table generation for the paper
 demo/          small synthetic dataset + terminal demo script
 requirements.txt
 ```
-
-Pseudocode and a full description of the model are in the Methods section of the paper.
 
 ## Citation
 
