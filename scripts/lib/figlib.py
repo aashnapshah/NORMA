@@ -965,17 +965,24 @@ def arm_trained():
             if _os.path.exists(_os.path.join(MODEL_LOG_DIR, r, "predictions_combined.csv"))}
 
 
-def arm_notes(present, methods=None, split_text="separate figure"):
+def arm_notes(present, methods=None, split_text=None):
     """{method: why it is blank} for arms with nothing to plot.
 
-    Three different statements, which one blank row cannot distinguish:
+    Two statements a blank row cannot distinguish on its own:
 
-      "not trained"    the run never produced predictions
-      "not run here"   the arm exists but this analysis was not run over it,
-                       usually because NORMA_ABLATION_RUN_IDS was narrower when
-                       the stage last ran
-      split_text       trained under --split_by patient, so it shares no test
-                       row with the rest and belongs on its own figure
+      "not trained"   the run never produced predictions
+      "not run here"  the arm exists but this analysis was not run over it,
+                      usually because NORMA_ABLATION_RUN_IDS was narrower when
+                      the stage last ran
+
+    split_text adds a third, and only a *paired* figure may pass it. A
+    comparison that pairs arms on identical target rows cannot include an arm
+    trained with --split_by patient, because it shares no test row with the
+    rest. Per-arm figures -- coverage, width, conformal widening -- have no such
+    constraint: the patient-split arms are missing from the cohort-level ones
+    simply because 04_refs and 06_calibration were never run over them, which is
+    "not run here". Saying "separate figure" there would claim a methodological
+    barrier that does not exist.
 
     Read from disk rather than from a constant, so an arm that finishes training
     stops being described as untrained without anyone editing this.
@@ -987,7 +994,7 @@ def arm_notes(present, methods=None, split_text="separate figure"):
         if m in present:
             continue
         run = m.replace("NORMA_", "")
-        if ARM_GROUP.get(run) == "patient split":
+        if split_text and ARM_GROUP.get(run) == "patient split":
             out[m] = split_text
         elif run not in trained:
             out[m] = "not trained"

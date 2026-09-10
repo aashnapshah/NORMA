@@ -874,6 +874,7 @@ def fig_summary_norma():
     #     baseline exists at all (the patient-split group has its own figure);
     #   - never produced predictions, which for the prior-anchored group means
     #     the run has not finished.
+    trained = {r.replace("NORMA_", "") for r in arm_trained()} | set(arm_trained())
     arms, notes = [], {}
     for run_id, (group, _) in ARM_GROUPS.items():
         if run_id == NORMA_RUN_ID:
@@ -882,7 +883,7 @@ def fig_summary_norma():
         if run_id in scored:
             continue
         notes[run_id] = ("separate figure" if group == "patient split"
-                         else "not trained")
+                         else "not trained" if run_id not in trained else "not run here")
 
     rows = []
     for s in DEV_COHORTS:
