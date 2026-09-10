@@ -928,6 +928,67 @@ def fig_summary_norma_patient():
                              zero_line=True)}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# norma_all: every arm that has been scored, on one axis.
+# summary_norma and summary_norma_patient are paired -- each arm's per-analyte
+# change from a baseline on identical target rows -- which is the sharpest way to
+# read a difference of a few tenths of a percent, and also why an arm can only
+# appear beside arms it shares a test split with. This figure gives up the
+# pairing to show everything at once: the n-weighted mean across analytes, in
+# absolute units, with the split groups marked. Arms in different groups are
+# scored on different test rows, so read within a group and treat across-group
+# gaps as indicative only.
+NORMA_ALL_SOURCES = [("norma_versions.csv", VERSIONS, "sequence split"),
+                     ("norma_versions_patient.csv", PATIENT_VERSIONS, "patient split")]
+NA_METRICS = [("mae", "Test MAE"), ("mape", "Test MAPE (%)"), ("r2", r"Test $R^2$")]
+
+
+def _na_weighted(sub, metric):
+    """n-weighted mean across analytes, skipping the ones _metrics could not score."""
+    ok = np.isfinite(sub[metric]) & np.isfinite(sub["n"]) & (sub["n"] > 0)
+    if not ok.any():
+        return np.nan
+    return float(np.average(sub.loc[ok, metric], weights=sub.loc[ok, "n"]))
+
+
+def fig_norma_all():
+    """Every scored arm's absolute test metrics, grouped by train/test split."""
+    frames = []
+    for name, versions, group in NORMA_ALL_SOURCES:
+        d = load_norma_versions(name, versions=versions)
+        if d is None:
+            continue
+        d = d.copy()
+        d["group"] = group
+        frames.append(d)
+    if not frames:
+        return None
+    d = pd.concat(frames, ignore_index=True)
+
+    rows = []
+    for s in DEV_COHORTS:
+        sub = d[d.source == s]
+        if not len(sub):
+            rows.append((s, None)); continue
+        vals = {}
+        for v, g in sub.groupby("version"):
+            vals[v] = {m: (_na_weighted(g, m), np.nan, np.nan) for m, _ in NA_METRICS}
+        rows.append((s, vals))
+
+    order = [v for _, versions, _ in NORMA_ALL_SOURCES for v in versions
+             if (d.version == v).any()]
+    style = {}
+    for v in order:
+        key = "NORMA" if v == NORMA_RUN_ID else f"NORMA_{v}"
+        style[v] = (models.label(key, short=True), models.color(key))
+    metrics = [(k, lab, None) for k, lab in NA_METRICS]
+    return {None: dot_blocks(rows, metrics, order,
+                             {v: style[v][1] for v in order},
+                             {v: style[v][0] for v in order},
+                             label_rotation=270, row_labels=True, share_x=False,
+                             zero_line=False)}
+
+
 # The arms differ by a fraction of a percent, so an analyte needs a lot of targets
 # before its cells mean anything: EHRSHOT has 74 MPV targets and 1 TGL target, and MPV
 # is where the arms look most different (a 29% spread) purely because of that. Cells
@@ -992,6 +1053,7 @@ FIGURES = [
     FigSpec("05_forecasting", "summary_norma", fig_summary_norma, False, (), None),
     FigSpec("05_forecasting", "by_analyte_norma", fig_by_analyte_norma, False, (), None),
     FigSpec("05_forecasting", "summary_norma_patient", fig_summary_norma_patient, False, (), None),
+    FigSpec("05_forecasting", "norma_all", fig_norma_all, False, (), None),
 ]
 
 
