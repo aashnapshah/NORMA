@@ -401,9 +401,13 @@ def fig_sensitivity_norma():
     df, _ = _load_sensitivity()
     if df is None:
         return {}
-    arms = [m for m in ABLATION_LABELS if m in set(df["model"])]
+    present = set(df["model"])
+    arms = [m for m in ALL_ARM_METHODS if m in present]
     if len(arms) < 2:          # nothing to compare until the arms have been swept
         return {}
+    # A curve cannot be drawn for an arm with no sweep, so the arms that are
+    # absent are named underneath instead of being left unmentioned.
+    notes = arm_notes(present)
     fig, axes = plt.subplots(1, len(_SENS_PANELS), figsize=(7.2, 2.3), squeeze=False)
     for c, (feat, xlabel, ycol, use_log) in enumerate(_SENS_PANELS):
         ax = axes[0, c]
@@ -412,8 +416,9 @@ def fig_sensitivity_norma():
             fsub = df[(df["model"] == m) & (df["feature"] == feat)]
             if fsub.empty:
                 continue
-            curves.append(_sens_panel(ax, fsub, ycol, use_log, ABLATION_COLORS[m],
-                                      label=ABLATION_LABELS[m], lw=1.9 if m == "NORMA" else 1.3))
+            curves.append(_sens_panel(ax, fsub, ycol, use_log, ALL_ARM_COLORS.get(m, "#999999"),
+                                      label=ALL_ARM_LABELS.get(m, m),
+                                      lw=1.9 if m.endswith(NORMA_RUN_ID) else 1.3))
         if curves:
             _sens_ylim(ax, curves)
         style_axes(ax, xlabel, None)
@@ -423,6 +428,14 @@ def fig_sensitivity_norma():
                loc="upper center", bbox_to_anchor=(0.5, 1.0), handlelength=1.8,
                handletextpad=0.4, columnspacing=1.0)
     fig.tight_layout(w_pad=0.8, rect=(0, 0, 1, 1 - 0.26 / fig.get_figheight()))
+    if notes:
+        by_reason = {}
+        for m, why in notes.items():
+            by_reason.setdefault(why, []).append(m.replace("NORMA_", ""))
+        line = "   ".join(f"{why}: {', '.join(sorted(v))}"
+                          for why, v in sorted(by_reason.items()))
+        fig.text(0.5, 0.005, line, ha="center", va="bottom",
+                 fontsize=FONT_TICK - 0.5, color="#AAAAAA")
     return {None: fig}
 
 

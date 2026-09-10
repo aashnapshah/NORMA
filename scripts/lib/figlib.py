@@ -943,6 +943,57 @@ ABLATION_COLORS = models.colors(ABLATION_METHODS)
 # in 07_classify and "+ age at draw" in #C2185B in 06_calibration. Both names now
 # point at the one registry; keep them until the 06_calibration call sites move.
 NORMA_ARM_LABELS = ABLATION_LABELS
+
+# ── Every arm, not only the ones carried through the pipeline ────────────────
+# ABLATION_METHODS above is what NORMA_ABLATION_RUN_IDS forwards, i.e. what a
+# figure can actually plot. These are all twenty arms trained since the
+# covariate ablation began, so a figure can show what was tried and mark the
+# rest, rather than silently omitting it. Order and grouping come from
+# run_names, the one registry of run identities.
+from run_names import ALL_ARMS, ARM_GROUP, arm_short   # noqa: E402
+
+ALL_ARM_METHODS = [f"NORMA_{r}" for r in ALL_ARMS]
+ALL_ARM_LABELS = {f"NORMA_{r}": arm_short(r) for r in ALL_ARMS}
+ALL_ARM_COLORS = {m: models.color(m) for m in ALL_ARM_METHODS}
+
+
+def arm_trained():
+    """Arms that finished and produced predictions, read from model/logs/."""
+    import os as _os
+    from datasets import MODEL_LOG_DIR
+    return {r for r in ALL_ARMS
+            if _os.path.exists(_os.path.join(MODEL_LOG_DIR, r, "predictions_combined.csv"))}
+
+
+def arm_notes(present, methods=None, split_text="separate figure"):
+    """{method: why it is blank} for arms with nothing to plot.
+
+    Three different statements, which one blank row cannot distinguish:
+
+      "not trained"    the run never produced predictions
+      "not run here"   the arm exists but this analysis was not run over it,
+                       usually because NORMA_ABLATION_RUN_IDS was narrower when
+                       the stage last ran
+      split_text       trained under --split_by patient, so it shares no test
+                       row with the rest and belongs on its own figure
+
+    Read from disk rather than from a constant, so an arm that finishes training
+    stops being described as untrained without anyone editing this.
+    """
+    methods = methods or ALL_ARM_METHODS
+    trained = arm_trained()
+    out = {}
+    for m in methods:
+        if m in present:
+            continue
+        run = m.replace("NORMA_", "")
+        if ARM_GROUP.get(run) == "patient split":
+            out[m] = split_text
+        elif run not in trained:
+            out[m] = "not trained"
+        else:
+            out[m] = "not run here"
+    return out
 NORMA_ARM_COLORS = ABLATION_COLORS
 
 _METHOD_SET = None      # None = normal figures; a list = ablation mode

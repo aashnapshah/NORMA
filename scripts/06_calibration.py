@@ -408,7 +408,10 @@ def _prop_ylim(ax, extents, ref):
 
 def _method_axis(ax, methods, labels, show_labels):
     ax.set_xticks(range(len(methods)))
-    ax.set_xticklabels([labels[m] for m in methods] if show_labels else [], rotation=45, ha="right", fontsize=5.5)
+    long = max((len(str(labels[m])) for m in methods), default=0) > 14
+    ax.set_xticklabels([labels[m] for m in methods] if show_labels else [],
+                       rotation=45 if long else 90, ha="right" if long else "center",
+                       fontsize=5.5)
     ax.set_xlim(-0.6, len(methods) - 0.4)
 
 
@@ -473,9 +476,12 @@ def _load_calibration_per_analyte(ds):
 _CAL_COLS = ["Coverage of realised-normal values", "Interval width", "Agreement with Pop$_{RI}$"]
 
 
-def _calibration_fig(methods_for, labels, colors):
+def _calibration_fig(methods_for, labels, colors, all_arms=False):
     """One row, columns = a/b/c, colour = method, marker = cohort; marker = median across
-    analytes, whisker = IQR. `methods_for(frames)` picks and orders the methods to show."""
+    analytes, whisker = IQR. `methods_for(frames)` picks and orders the methods to show.
+
+    all_arms=True keeps a slot for every NORMA arm even when it has nothing to
+    plot, and labels the empty ones with why (figlib.arm_notes)."""
     frames = {ds: _load_calibration_per_analyte(ds) for ds in DATASETS}
     frames = {ds: d for ds, d in frames.items() if d is not None}
     if not frames:
@@ -487,15 +493,24 @@ def _calibration_fig(methods_for, labels, colors):
     log_width = bool(len(wide.dropna()) and wide.quantile(0.95) > 4)
     offsets = _cohort_offsets(list(frames))
 
-    fig, axes = plt.subplots(1, 3, figsize=(7.2, 3.0))
+    present = set().union(*(set(d.method) for d in frames.values()))
+    notes = arm_notes(present, [m for m in methods if m.startswith("NORMA_")]) if all_arms else {}
+    width = 7.2 + (0.30 * max(0, len(methods) - 8) if all_arms else 0)
+    fig, axes = plt.subplots(1, 3, figsize=(width, 3.0))
     _panel_coverage(axes[0], frames, methods, offsets, colors)
     _panel_method_metric(axes[1], frames, methods, offsets, colors, "width_rel",
                          "Width / Pop$_{RI}$ width", ref=1.0, log=log_width)
     # no reference line here: 1.0 is Pop_RI's own value, kept in range but not drawn
     _panel_method_metric(axes[2], frames, methods, offsets, colors, "inside_pop",
                          "Fraction inside Pop$_{RI}$", proportion=True)
-    for ax, title in zip(axes, _CAL_COLS):
+    for k, (ax, title) in enumerate(zip(axes, _CAL_COLS)):
         _method_axis(ax, methods, labels, show_labels=True)
+        if notes and k == 0:
+            lo, hi = ax.get_ylim()
+            for i, m in enumerate(methods):
+                if m in notes:
+                    ax.text(i, lo + 0.5 * (hi - lo), notes[m], rotation=90, ha="center",
+                            va="center", fontsize=5.0, color="#AAAAAA")
         ax.set_title(title, fontsize=FONT_TITLE, loc="left")
     # shape = cohort, in neutral ink: colour is already spent on the method
     handles = [Line2D([], [], ls="none", marker=DATASET_MARKERS.get(ds, "o"), color=DARK,
@@ -530,9 +545,17 @@ def fig_calibration_norma():
     """
     def arms(frames):
         present = set().union(*(set(d.method) for d in frames.values()))
-        found = [m for m in ABLATION_LABELS if m in present]
-        return found if len(found) > 1 else []   # the baseline on its own is not a comparison
-    return _calibration_fig(arms, ABLATION_LABELS, ABLATION_COLORS)
+        # Every arm gets a slot, plotted or not, so the figure shows what was
+        # tried; arm_notes() says why each empty slot is empty.
+        found = [m for m in ALL_ARM_METHODS if m in present]
+        if len(found) < 2:                       # the baseline alone is not a comparison
+            return []
+        return ALL_ARM_METHODS
+    # Twenty arms will not fit with the covariate labels the other figures use
+    # ("NORMA | sex, age, setting" x 20 collides into an unreadable band), so the
+    # axis carries the run id and 05_norma_arms carries what each one is.
+    labels = {m: m.replace("NORMA_", "") for m in ALL_ARM_METHODS}
+    return _calibration_fig(arms, labels, ALL_ARM_COLORS, all_arms=True)
 
 
 
@@ -583,8 +606,53 @@ def fig_conformal():
              ha="center", va="top", fontsize=FONT_TICK, color=DARK)
     return {"": fig}
 
+def _arm_key(method):
+    """Method label -> the ALL_ARM_METHODS key, resolving the bare "NORMA" alias
+    the result files use for whichever run is the main model."""
+    return f"NORMA_{NORMA_RUN_ID}" if str(method) == "NORMA" else str(method)
+
+
+def fig_conformal_norma():
+    """The same conformal recalibration, for the NORMA arms rather than the
+    benchmark methods: how much each arm has to be widened to truly cover 95%,
+    and what its width is worth once it does.
+
+    Every arm keeps a row whether or not it can be plotted, with the reason on
+    the blank ones, so the figure shows what was tried (figlib.arm_notes).
+    """
+    frames = []
+    for ds in VAL_COHORTS:
+        d = load_result(ds, "conformal.csv")
+        if d is not None and "analyte" in d.columns:
+            d = d[d["analyte"] == MEDIAN_ROW]
+        if d is None or not len(d):
+            frames.append((ds, None)); continue
+        d = to_numeric(d)
+        # conformal.csv calls the main model "NORMA" where calibration.csv calls
+        # it "NORMA_<run>"; without this the main arm reads as never run.
+        frames.append((ds, {_arm_key(r["method"]): {"gamma": (float(r["gamma"]), np.nan, np.nan),
+                                                    "width": (float(r["width_rel_cal"]), np.nan, np.nan)}
+                            for _, r in d.iterrows()}))
+    have = set()
+    for _, d in frames:
+        if d:
+            have |= set(d)
+    if len(have & set(ALL_ARM_METHODS)) < 2:
+        return {}
+    methods = list(ALL_ARM_METHODS)
+    labels = {m: m.replace("NORMA_", "") for m in methods}
+    metrics = [("gamma", "Widening needed to cover 95%", None),
+               ("width", r"Width at true 95% coverage (vs Pop$_{RI}$)", None)]
+    fig = dot_blocks(frames, metrics, methods, ALL_ARM_COLORS, labels, W=7.0, row_h=0.16,
+                     label_rotation=90, row_labels=True, notes=arm_notes(have, methods))
+    for ax in fig.axes:
+        ax.axvline(1.0, color=DARK, lw=0.6, ls=(0, (3, 2)), zorder=1)
+    return {"": fig}
+
+
 FIGURES = [
     FigSpec("06_calibration", "calibration", fig_calibration, False, (), None),
+    FigSpec("06_calibration", "conformal_norma", fig_conformal_norma, False, (), None),
     FigSpec("06_calibration", "calibration_norma", fig_calibration_norma, False, (), None),
     FigSpec("06_calibration", "calibration_dev", fig_calibration_dev, False, (), None),
     FigSpec("06_calibration", "conformal", fig_conformal, False, (), None),
