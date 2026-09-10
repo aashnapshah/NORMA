@@ -29,10 +29,6 @@ from model import is_quantile_mode
 from data import *
 from predict import *
 from evaluate import *
-try:
-    from edit import *  # legacy counterfactual helpers; needs scripts/plots.py which is not always present
-except ImportError:
-    pass
 from utils import *
 
 class EarlyStopping:

@@ -7,7 +7,8 @@ import time
 import uuid
 import argparse
 
-from model import NORMA, NormaLight, NormaLightV1, NORMA2, is_quantile_mode, QUANTILE_OUTPUT_MODES
+from model import NORMA2, is_quantile_mode, QUANTILE_OUTPUT_MODES
+from legacy import NORMA, NormaLight, NormaLightV1   # old checkpoints only
 from loss import NORMALoss, GaussianNLLLoss, MSELoss, QuantileLoss, QuantilePriorLoss, StudentTNLLLoss
 import warnings
 warnings.filterwarnings('ignore')
