@@ -1154,7 +1154,7 @@ def heatmap_blocks(blocks, columns, cmap, vmin, vmax, fmt, cbar_label, extend="n
 
 def dot_blocks(frames, metrics, methods, colors, labels, open_marker=(), block_key="cohort",
                W=6.4, row_h=0.135, label_rotation=0, row_labels=False, share_x=True,
-               zero_line=False):
+               zero_line=False, notes=None):
     """One axis per metric; cohorts stacked down the y axis, methods as colours.
     frames: list of (cohort, {method: {metric: (centre, lo, hi)}} or None).
     label_rotation=90 writes the cohort names vertically (narrower left margin).
@@ -1167,7 +1167,11 @@ def dot_blocks(frames, metrics, methods, colors, labels, open_marker=(), block_k
     within ~0.3% of one another inside a cohort but ~20% apart across cohorts, so one
     shared axis stacks every method of a row on a single point.
     zero_line=True marks x=0 on every axis and keeps it inside the autoscaled
-    limits, for the figures whose x is a change from a reference method."""
+    limits, for the figures whose x is a change from a reference method.
+    notes={method: text} annotates a method that has no value with why, in grey,
+    on the first metric axis. A method with nothing to plot keeps its row either
+    way; the note is what distinguishes "we have not run this" from "this
+    happened to be missing", which an empty row alone cannot say."""
     import matplotlib.colors as _mc
     n_m = len(methods); blocks = []; y0 = 0.0
     for c, d in frames:
@@ -1182,14 +1186,16 @@ def dot_blocks(frames, metrics, methods, colors, labels, open_marker=(), block_k
         top = 0.16    # no legend strip to reserve
     col_w = (W - left - right - gap_c * (len(metrics) - 1)) / len(metrics)
 
-    def draw(ax, d, metric, yb=0.0):
+    def draw(ax, d, metric, yb=0.0, annotate=False):
         """The dots and SD bars of one block on one metric axis."""
         for i, m in enumerate(methods):
-            if m not in d or metric not in d[m]:
+            have = m in d and metric in d[m] and np.isfinite(d[m][metric][0])
+            if not have:
+                if annotate and notes and m in notes:
+                    ax.text(0.5, yb + i, notes[m], transform=ax.get_yaxis_transform(),
+                            ha="center", va="center", fontsize=FONT_TICK, color="#AAAAAA")
                 continue
             v, lo, hi = d[m][metric]
-            if not np.isfinite(v):
-                continue
             yy = yb + i; col = colors[m]
             if np.isfinite(lo) and np.isfinite(hi):
                 ax.plot([lo, hi], [yy, yy], color=col, lw=1.3, solid_capstyle="round", zorder=2)
@@ -1243,7 +1249,7 @@ def dot_blocks(frames, metrics, methods, colors, labels, open_marker=(), block_k
                     pending(ax, 0.5, ax.transAxes)
                     ax.set_xticks([])
                 else:
-                    draw(ax, d, metric)
+                    draw(ax, d, metric, annotate=(c == 0))
                     span = block_span(d, metric)
                     if span is not None:
                         lo, hi = span
@@ -1270,7 +1276,7 @@ def dot_blocks(frames, metrics, methods, colors, labels, open_marker=(), block_k
                 if d is None:
                     pending(ax, yb + (n_m - 1) / 2, ax.get_yaxis_transform())
                     continue
-                draw(ax, d, metric, yb)
+                draw(ax, d, metric, yb, annotate=(c == 0))
             for k, (_, _, yb) in enumerate(blocks):
                 if k:
                     ax.axhline(yb - 1, color="#DDDDDD", lw=0.5, zorder=0)

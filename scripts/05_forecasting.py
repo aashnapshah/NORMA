@@ -866,23 +866,53 @@ def fig_summary_norma():
     d = load_norma_versions()
     if d is None or NORMA_RUN_ID not in set(d.version):
         return None
-    arms = [v for v in _nv_shown(d) if v != NORMA_RUN_ID]
-    if not arms:
-        return None
+    scored = [v for v in _nv_shown(d) if v != NORMA_RUN_ID]
+
+    # Every arm gets a row, whether or not it can be plotted, so the figure shows
+    # what was tried rather than only what finished. Two kinds of blank:
+    #   - trained on a different split, so no paired comparison against this
+    #     baseline exists at all (the patient-split group has its own figure);
+    #   - never produced predictions, which for the prior-anchored group means
+    #     the run has not finished.
+    arms, notes = [], {}
+    for run_id, (group, _) in ARM_GROUPS.items():
+        if run_id == NORMA_RUN_ID:
+            continue
+        arms.append(run_id)
+        if run_id in scored:
+            continue
+        notes[run_id] = ("separate figure" if group == "patient split"
+                         else "not trained")
+
     rows = []
     for s in DEV_COHORTS:
         sub = d[d.source == s]
         if not len(sub):
             rows.append((s, None)); continue
-        stats = {metric: _nv_paired(sub, metric, arms) for metric, _ in NV_METRICS}
+        stats = {metric: _nv_paired(sub, metric, scored) for metric, _ in NV_METRICS}
         rows.append((s, {v: {metric: stats[metric].get(v, (np.nan,) * 3)
-                             for metric, _ in NV_METRICS}
-                         for v in arms if any(v in stats[m] for m, _ in NV_METRICS)}))
+                             for metric, _ in NV_METRICS} for v in arms}))
+
+    def style(v):
+        """Label and colour, falling back to the run's covariates for arms that
+        lib/models does not register. The prior-anchored arms all share the main
+        model's covariates and differ only after the semicolon, so the shared
+        prefix is dropped: "NORMA | prior anchor k=5" rather than repeating
+        "sex, age, setting" on seven rows."""
+        from run_names import RUN_COVARIATES
+        key = f"NORMA_{v}"
+        label = models.label(key, short=True)
+        if label == key:                       # unregistered: derive from the covariates
+            cov = RUN_COVARIATES.get(v, v)
+            label = f"NORMA | {cov.split(';')[-1].strip() if ';' in cov else cov}"
+        return label, models.color(key)
+
+    labels = {v: style(v)[0] for v in arms}
+    colours = {v: style(v)[1] for v in arms}
     metrics = [(k, lab, None) for k, lab in NV_METRICS]
-    return {None: dot_blocks(rows, metrics, arms, {v: NORMA_VERSIONS[v][1] for v in arms},
-                             {v: NORMA_VERSIONS[v][0] for v in arms},
+    return {None: dot_blocks(rows, metrics, arms, colours, labels,
                              label_rotation=270, row_labels=True, share_x=False,
-                             zero_line=True)}
+                             zero_line=True, notes=notes)}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
