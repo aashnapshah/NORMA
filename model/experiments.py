@@ -111,10 +111,22 @@ def from_wandb(wandb_dir=WANDB_DIR):
     """One row per local W&B trace: config plus the last epoch's losses."""
     import yaml
     rows = []
-    for d in sorted(glob.glob(os.path.join(wandb_dir, 'run-*'))):
+    # offline-run-* too: a run started with WANDB_MODE=offline never synced,
+    # and globbing 'run-*' alone silently drops it. The 2026-09-08
+    # prior-anchored smoke tests are all offline, and they are the only
+    # runs that exercise NORMALoss and StudentTNLLLoss.
+    traces = (glob.glob(os.path.join(wandb_dir, 'run-*'))
+              + glob.glob(os.path.join(wandb_dir, 'offline-run-*')))
+    skipped = []
+    for d in sorted(traces):
         files = os.path.join(d, 'files')
         cp, sp = os.path.join(files, 'config.yaml'), os.path.join(files, 'wandb-summary.json')
         if not os.path.exists(cp):
+            # A run started with WANDB_MODE=offline keeps everything in its
+            # binary .wandb file and only writes config.yaml on sync, so it
+            # cannot be read here. Reported rather than dropped in silence:
+            #   wandb sync model/wandb/offline-run-*
+            skipped.append(os.path.basename(d))
             continue
         try:
             cfg = _norm_config(yaml.safe_load(open(cp)))
@@ -130,6 +142,7 @@ def from_wandb(wandb_dir=WANDB_DIR):
         rows.append({
             'run': cfg.get('run_id') or cfg.get('wandb_name') or trace.rsplit('-', 1)[-1],
             'wandb_trace': trace,
+            'wandb_synced': not trace.startswith('offline-run-'),
             'started': trace.split('-')[1] if '-' in trace else None,
             'epochs_ran': summary.get('epoch'),
             'val_loss_last': summary.get('val/loss', summary.get('val_loss')),
@@ -143,6 +156,11 @@ def from_wandb(wandb_dir=WANDB_DIR):
         return df
     # A resumed run logs a fresh trace each time, so one run_id can have several.
     # Keep the trace that got furthest, and record how many there were.
+    if skipped:
+        print(f'  {len(skipped)} traces unreadable offline (no config.yaml, never synced):')
+        for s in skipped:
+            print(f'      {s}')
+        print('      sync them with: wandb sync model/wandb/offline-run-*')
     df['n_traces'] = df.groupby('run')['run'].transform('size')
     df = (df.sort_values(['run', 'epochs_ran', 'started'], na_position='first')
             .groupby('run', as_index=False).last())
