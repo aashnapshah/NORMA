@@ -12,7 +12,7 @@ find this module again).
 Nine copies of that path arithmetic used to live in model/, and eight of them
 still pointed at the top-level process/ that moved under scripts/ on
 2026-09-08 -- which is why model/data.py, priors.py, shrinkage.py,
-state_prior.py, sensitivity_analysis.py and predict_states.py could only be
+states.py, sensitivity_analysis.py and inference.py could only be
 imported by a caller that had already fixed sys.path for them.
 """
 import importlib.util

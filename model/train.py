@@ -26,7 +26,7 @@ import wandb
 from model import is_quantile_mode
 from data import (TEST_VOCAB, create_dataloaders, load_and_split_data,
                   load_drawmeta, load_panel)
-from predict import predict
+from inference import predict
 from evaluate import calibration_by_analyte, evaluate_and_save_metrics
 from utils import (compute_loss, create_loss, create_model, initialize_weights_small,
                    load_checkpoint, log_epoch, loss_extras, run_model,

@@ -42,7 +42,7 @@ Carry in first, on the cluster side:
 The bundle mirrors repo-relative paths (model/logs/<run_id>/, model/logs/baselines/,
 model/predictions/), so inside Clalit you copy its contents over the repo root and
 every reader -- datasets.MODEL_LOG_DIR, datasets.artifact(), model/baselines/
-{cohen,gaussian}.py, model/state_prior.py -- finds its file where it already looks.
+{cohen,gaussian}.py, model/states.py -- finds its file where it already looks.
 
 Bring results back out by copying ONE folder:
     results/processed/chs/     the figure data, a few hundred KB (export.py writes it

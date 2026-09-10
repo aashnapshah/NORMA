@@ -231,9 +231,8 @@ def norma_all_states(model, hp, is_quantile, recs, batch_size=1024, device="cpu"
 
 def norma_variants(states, nstates, is_quantile, recs):
     """oracle / normal / marginal / marginal_freq point predictions (+ normal interval)."""
-    sp = _model_module("state_prior")
-    sm = _model_module("state_mixture")
-    priors = sp.load_state_priors()
+    st = _model_module("states")   # state_prior + state_mixture merged
+    priors = st.load_state_priors()
     cid = np.array([r["cid"] for r in recs])
     s_last = np.array([r["s_last"] for r in recs])
     s_next = np.array([r["s_next"] for r in recs])
@@ -258,11 +257,11 @@ def norma_variants(states, nstates, is_quantile, recs):
         qarr = np.stack([np.stack([states[f"{c}_{q}"] for c in QUANTILE_COLS], 1)
                          for q in range(nstates)], 1)
     for name, kind in [("marginal", "transition"), ("marginal_freq", "marginal")]:
-        w = sp.prior_weights(priors, cid, s_last, kind=kind)
+        w = st.prior_weights(priors, cid, s_last, kind=kind)
         if is_quantile:
-            mix = sm.mix_quantiles_batched(qarr, w)
+            mix = st.mix_quantiles_batched(qarr, w)
         else:
-            mix = sm.mix_gaussian_batched(mu, lv, w)
+            mix = st.mix_gaussian_batched(mu, lv, w)
         out[name] = mix[centre]
     return out
 
@@ -307,13 +306,13 @@ def write_norma_ref_rows(ds, out, recs, runs, analytes=None):
 
 def _load_models(runs, args):
     """{run_id: (model, hp, is_quantile)} and the union of covariates they need."""
-    sp = _model_module("state_prior")
+    st = _model_module("states")
     models = {}
     covariates = set()
     for run_id in runs:
         checkpoint = args.checkpoint
         if checkpoint == "auto":
-            checkpoint = sp.PUBLISHED_CHECKPOINT.get(run_id, "latest")
+            checkpoint = st.PUBLISHED_CHECKPOINT.get(run_id, "latest")
         models[run_id] = load_norma(run_id, checkpoint=checkpoint, device=args.device)
         covariates |= model_covariates(models[run_id][0])
     if covariates:
