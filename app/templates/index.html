@@ -214,8 +214,6 @@
       border-radius: var(--r-md);
       border: 1.5px solid var(--border);
       background: var(--bg);
-      cursor: pointer;
-      transition: all 0.18s;
       position: relative;
     }
     .model-card:hover {
@@ -619,8 +617,10 @@
 
     /* ── Classification grid ── */
     .clf-grid {
-      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0;
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0;
     }
+    .clf-note { font-size: 0.6rem; color: var(--text-3); margin-top: 0.3rem; line-height: 1.4; }
+    .clf-footnote { font-size: 0.66rem; color: var(--text-3); padding: 0.55rem 1.25rem 0.7rem; border-top: 1px solid var(--border); line-height: 1.5; }
     @media (max-width: 640px) { .clf-grid { grid-template-columns: 1fr; } }
     .clf-panel {
       padding: 1rem 1.15rem; text-align: center; position: relative;
@@ -715,16 +715,17 @@
       <!-- Model selector -->
       <div>
         <div class="section-label">Model</div>
-        <div id="model-cards" class="model-cards">
-          <div class="model-card-placeholder" style="font-size:0.75rem;color:var(--text-3);padding:0.5rem">Loading models…</div>
+        <div class="model-cards">
+          <div class="model-card active">
+            <div class="model-card-name">NORMA</div>
+            <span class="model-card-tag quantile">quantile head</span>
+            <div class="model-card-desc">{{ model_meta.model }} transformer, {{ model_meta.nlayers }} layers, d = {{ model_meta.d_model }}. Predicts the 2.5, 25, 50, 75 and 97.5th percentiles of the next value in the queried state.</div>
+            <div class="model-card-features">
+              <div class="model-card-feat"><i class="bi bi-check-circle-fill"></i> run {{ model_meta.run_id }}</div>
+              <div class="model-card-feat"><i class="bi bi-check-circle-fill"></i> compared with Pop<sub>RI</sub>, Per<sub>RI</sub>, Empirical Bayes, Cohen m2</div>
+            </div>
+          </div>
         </div>
-        <div style="margin-top:0.4rem">
-          <label class="form-label" style="margin-bottom:0.2rem">Checkpoint</label>
-          <select id="sel-model" class="form-select form-select-sm">
-            <option value="">Loading…</option>
-          </select>
-        </div>
-        <div id="model-detail" style="margin-top:0.3rem;font-size:0.68rem;color:var(--text-3);line-height:1.5"></div>
       </div>
 
       <hr style="border:none;border-top:1px solid var(--border);margin:0.25rem 0 0.15rem">
@@ -819,7 +820,7 @@
       <div class="purpose-icon"><i class="bi bi-activity"></i></div>
       <div>
         <div class="purpose-title">How is the latest value classified?</div>
-        <div class="purpose-desc">Enter a patient's lab history. The <strong>last entry</strong> is the value to classify — click <strong>Classify</strong> to see how population ranges, a personalized model, and NORMA each interpret it.</div>
+        <div class="purpose-desc">Enter a patient's lab history. The <strong>last entry</strong> is the value to classify — click <strong>Classify</strong> to see how the population interval, three personalised benchmarks from the paper, and NORMA each interpret it.</div>
       </div>
     </div>
 
@@ -849,6 +850,7 @@
         <span id="clf-actual-badge" class="ref-pill" style="font-size:0.66rem"></span>
       </div>
       <div id="clf-panels" class="clf-grid"></div>
+      <div class="clf-footnote">A value outside the population interval is abnormal under every method; the personalised intervals decide the values inside it. Per<sub>RI</sub> fits the patient's own history, Empirical Bayes shrinks the history inside the population interval towards a development-cohort prior, Cohen m2 is the single-lab model of Cohen et al. (2021), and NORMA is queried in the normal state.</div>
     </div>
 
     <!-- Chart -->
@@ -968,8 +970,10 @@
 <div id="toast-container"></div>
 
 <script>
-const REF   = {{ ref_json | safe }};
-const MINFO = {{ model_info | safe }};
+const REF     = {{ ref_json | safe }};
+const MINFO   = {{ model_info | safe }};
+const METHODS = {{ methods_json | safe }};   // [{key, label, html, color, note}] from validation/lib/models.py
+const METHOD  = Object.fromEntries(METHODS.map(m => [m.key, m]));
 
 // ── Lab coverage panel ──
 const LAB_INFO = {
@@ -1023,74 +1027,14 @@ function updateSidebarTestInfo() {
 
 updateSidebarTestInfo();
 
-// ── Navbar ──
-document.getElementById('model-badge').textContent = MINFO.run_id;
-
-// ── Model selector ──
-let _availableModels = [];
-let _selectedModelId = MINFO.run_id;
-
-function getSelectedModelId() {
-  const sel = document.getElementById('sel-model');
-  return sel ? sel.value : _selectedModelId;
-}
-
-function updateModelDetail() {
-  const el = document.getElementById('model-detail');
-  const m = _availableModels.find(m => m.run_id === getSelectedModelId());
-  if (!m || !el) return;
-  const parts = [];
-  if (m.model_type && m.model_type !== '?') parts.push(m.model_type);
-  if (m.loss && m.loss !== '?') parts.push(m.loss.replace('Loss',''));
-  if (m.train_data && m.train_data !== '?') parts.push('train: ' + m.train_data);
-  if (m.nstates && m.nstates !== '?') parts.push(m.nstates + ' states');
-  if (m.val_r2 && m.val_r2 !== '?') parts.push('R²=' + parseFloat(m.val_r2).toFixed(3));
-  if (m.epoch && m.epoch !== '?') parts.push('ep ' + m.epoch);
-  el.textContent = parts.join(' · ');
-}
-
-(async function loadModels() {
-  try {
-    const resp = await fetch('/api/models');
-    const data = await resp.json();
-    _availableModels = data.models || [];
-    const sel = document.getElementById('sel-model');
-    sel.innerHTML = '';
-    // Sort: active first, then by val_r2 descending
-    _availableModels.sort((a, b) => {
-      if (a.active && !b.active) return -1;
-      if (!a.active && b.active) return 1;
-      const r2a = typeof a.val_r2 === 'number' ? a.val_r2 : -Infinity;
-      const r2b = typeof b.val_r2 === 'number' ? b.val_r2 : -Infinity;
-      return r2b - r2a;
-    });
-    for (const m of _availableModels) {
-      const opt = document.createElement('option');
-      opt.value = m.run_id;
-      const r2 = typeof m.val_r2 === 'number' ? ' R²=' + m.val_r2.toFixed(3) : '';
-      const typ = m.model_type !== '?' ? m.model_type : '';
-      opt.textContent = m.run_id + (typ ? ' (' + typ + ')' : '') + r2 + (m.active ? ' ★' : '');
-      if (m.run_id === data.active) opt.selected = true;
-      sel.appendChild(opt);
-    }
-    _selectedModelId = data.active;
-    updateModelDetail();
-    sel.addEventListener('change', () => {
-      _selectedModelId = sel.value;
-      document.getElementById('model-badge').textContent = _selectedModelId;
-      updateModelDetail();
-    });
-  } catch(e) {
-    console.error('Failed to load models:', e);
-    const sel = document.getElementById('sel-model');
-    sel.innerHTML = '<option value="' + MINFO.run_id + '">' + MINFO.run_id + ' (default)</option>';
-  }
-})();
+// ── Model ──
+function isQuantileModel() { return MINFO.output_mode === 'quantile'; }
+document.getElementById('model-badge').textContent = `NORMA · ${MINFO.run_id}`;
 
 // ── State ──
 let currentPayload = null;
 let currentResult  = null;
-let savedRuns      = JSON.parse(localStorage.getItem('norma_runs') || '[]');
+let savedRuns      = JSON.parse(localStorage.getItem('norma_runs_v2') || '[]');
 
 // ── Ref range pill ──
 function updateRefPill() {
@@ -1188,7 +1132,7 @@ async function loadExample(idx) {
     }
     if (data.age !== undefined) document.getElementById('inp-age').value = data.age;
     document.getElementById('pid-chip-wrap').style.display = 'block';
-    document.getElementById('pid-text').textContent = `Patient ${data.pid}`;
+    document.getElementById('pid-text').textContent = `Example ${data.example_id} of ${data.n_examples}`;
 
     // If predictions bundled, render immediately — no second /api/predict call needed
     if (data.predictions) {
@@ -1231,7 +1175,6 @@ async function runPredict() {
     sex:       parseInt(document.querySelector('input[name="sex"]:checked').value),
     age:       parseFloat(document.getElementById('inp-age').value),
     history,
-    model_id:  getSelectedModelId(),
   };
   setLoading(true);
   try {
@@ -1265,83 +1208,55 @@ async function runPredict() {
 }
 
 // ── Classification card + prediction detail pills ──
-function drawPredSummary(payload, data) {
-  const { test_name } = payload;
-  const { predictions: preds, gmm_prediction: gmm, ref_low, ref_high, unit } = data;
-  const norm = preds['Normal'];
-  if (!norm || norm.error) return;
+function methodInterval(data, key) {
+  const iv = key === 'NORMA' ? data.norma : (data.benchmarks || {})[key];
+  return iv && !iv.error && iv.mu != null ? iv : null;
+}
+function fmt(v) { return Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2); }
 
-  const mu = norm.mu, ciLo = norm.ci_lower, ciHi = norm.ci_upper;
-  const gmmOk = gmm && !gmm.error;
-  const actualVal = data.actual_value;
+function drawPredSummary(payload, data) {
+  const { unit } = data;
   const clf = data.classifications || {};
+  const actualVal = data.actual_value;
 
   const clfColorVar = v => v === 'Low' ? 'var(--low)' : v === 'High' ? 'var(--high)' : 'var(--normal)';
   const clfBg = v => v === 'Low' ? 'rgba(255,59,48,0.06)' : v === 'High' ? 'rgba(255,159,10,0.06)' : 'rgba(48,209,88,0.06)';
 
-  // ── Classification card (above chart) ──
   document.getElementById('clf-card').style.display = 'block';
   if (actualVal != null) {
-    document.getElementById('clf-actual-badge').textContent = `Value: ${actualVal.toFixed(1)} ${unit}`;
+    document.getElementById('clf-actual-badge').textContent = `Value: ${fmt(actualVal)} ${unit}`;
     document.getElementById('clf-actual-badge').style.display = '';
   }
 
-  let panelsHtml = '';
-
-  // NORMA panel
-  panelsHtml += `
-    <div class="clf-panel" style="background:${clfBg(clf.norma)}">
-      <div class="clf-approach" style="color:#0071e3"><i class="bi bi-activity"></i> NORMA</div>
-      <div class="clf-value" style="color:${clfColorVar(clf.norma)}">${clf.norma || '—'}</div>
-      <div class="clf-range">95% CI: <strong>${ciLo.toFixed(1)} – ${ciHi.toFixed(1)}</strong> ${unit}</div>
-    </div>`;
-
-  // Personalized panel
-  if (gmmOk) {
+  let panelsHtml = '', pillsHtml = '';
+  METHODS.forEach(m => {
+    const iv = methodInterval(data, m.key);
+    if (!iv) return;
+    const c = clf[m.key];
+    const range = m.key === 'PopRI'
+      ? `Ref: <strong>${iv.ci_lower} – ${iv.ci_upper}</strong>`
+      : `95% interval: <strong>${fmt(iv.ci_lower)} – ${fmt(iv.ci_upper)}</strong>`;
+    const note = iv.fallback ? '<div class="clf-note">no history inside the population interval, so Pop<sub>RI</sub> is used</div>' : '';
     panelsHtml += `
-    <div class="clf-panel" style="background:${clfBg(clf.personalized)}">
-      <div class="clf-approach" style="color:#bf5af2"><i class="bi bi-person-fill"></i> Personalized</div>
-      <div class="clf-value" style="color:${clfColorVar(clf.personalized)}">${clf.personalized || '—'}</div>
-      <div class="clf-range">95% CI: <strong>${gmm.ci_lower.toFixed(1)} – ${gmm.ci_upper.toFixed(1)}</strong> ${unit}</div>
+    <div class="clf-panel" style="background:${clfBg(c)}">
+      <div class="clf-approach" style="color:${m.color}">${m.html}</div>
+      <div class="clf-value" style="color:${clfColorVar(c)}">${c || '—'}</div>
+      <div class="clf-range">${range} ${unit}</div>${note}
     </div>`;
-  }
-
-  // Population panel
-  panelsHtml += `
-    <div class="clf-panel" style="background:${clfBg(clf.population)}">
-      <div class="clf-approach" style="color:#aeaeb2"><i class="bi bi-people-fill"></i> Population</div>
-      <div class="clf-value" style="color:${clfColorVar(clf.population)}">${clf.population || '—'}</div>
-      <div class="clf-range">Ref: <strong>${ref_low} – ${ref_high}</strong> ${unit}</div>
+    if (m.key === 'PopRI') return;
+    pillsHtml += `
+    <div class="mk-pill">
+      <span class="mk-swatch" style="background:${m.color}"></span>
+      <div>
+        <div class="mk-label">${m.html}${m.key === 'NORMA' ? ' median' : ' centre'}</div>
+        <div class="mk-val" style="color:${m.color}">${fmt(iv.mu)} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
+        <div class="mk-ci">σ = ${fmt(iv.sigma)}${iv.n != null ? ` · n = ${iv.n}` : ''}</div>
+      </div>
     </div>`;
-
+  });
   document.getElementById('clf-panels').innerHTML = panelsHtml;
-
-  // ── Prediction detail pills (below chart) ──
   document.getElementById('pred-summary').style.display = 'flex';
-  document.getElementById('pred-summary').innerHTML = `
-    <div class="mk-pill">
-      <span class="mk-swatch" style="background:#0071e3"></span>
-      <div>
-        <div class="mk-label">NORMA predicted</div>
-        <div class="mk-val" style="color:#0071e3">${mu.toFixed(1)} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
-        <div class="mk-ci">σ = ${norm.sigma.toFixed(2)}</div>
-      </div>
-    </div>
-    ${gmmOk ? `<div class="mk-pill">
-      <span class="mk-swatch" style="background:#bf5af2"></span>
-      <div>
-        <div class="mk-label">Personalized (GMM)</div>
-        <div class="mk-val" style="color:#bf5af2">${gmm.mu.toFixed(1)} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
-        <div class="mk-ci">σ = ${gmm.sigma.toFixed(2)}</div>
-      </div>
-    </div>` : ''}
-    <div class="mk-pill">
-      <span class="mk-swatch" style="background:#aeaeb2"></span>
-      <div>
-        <div class="mk-label">Population ref</div>
-        <div class="mk-val">${ref_low} – ${ref_high} <span style="font-size:0.67rem;font-weight:400;color:var(--text-3)">${unit}</span></div>
-      </div>
-    </div>`;
+  document.getElementById('pred-summary').innerHTML = pillsHtml;
 }
 
 // ── Hide purpose banner after first result ──
@@ -1351,29 +1266,25 @@ function drawVerdict(payload, data) {
 
 // ── Timeline chart with separate bell curve panel ──
 function drawChart(payload, data) {
-  const { history, test_name } = payload;
-  const { predictions: preds, gmm_prediction: gmm, ref_low, ref_high, unit } = data;
-  const norm = preds['Normal'];
-  if (!norm || norm.error) return;
+  const { history } = payload;
+  const { ref_low, ref_high, unit } = data;
+  const norm = methodInterval(data, 'NORMA');
+  if (!norm) return;
 
   const { mu, ci_lower: ciLo, ci_upper: ciHi } = norm;
   const histX  = history.map(h => h.date);
   const histY  = history.map(h => h.value);
-  const gmmOk  = gmm && !gmm.error;
-  const gmmMu  = gmmOk ? gmm.mu    : null;
-  const gmmSig = gmmOk ? gmm.sigma : null;
-  const refMu  = (ref_low + ref_high) / 2;
-  const refSig = (ref_high - ref_low) / 3.92;
-
   const actualVal = data.actual_value;
   const actualDate = data.actual_date;
 
-  const allMu  = [norm.mu, refMu, ...(gmmOk ? [gmmMu] : [])];
-  const allSig = [norm.sigma, refSig, ...(gmmOk ? [gmmSig] : [])];
-  const allVals = [...histY, mu, ciLo, ciHi, ref_low, ref_high, ...(gmmOk ? [gmmMu] : []), ...(actualVal != null ? [actualVal] : [])];
+  // Every interval that is defined for this history, in display order
+  const shown = METHODS.map(m => ({ m, iv: methodInterval(data, m.key) })).filter(d => d.iv);
+
+  const allVals = [...histY, mu, ciLo, ciHi, ref_low, ref_high, ...(actualVal != null ? [actualVal] : [])];
+  shown.forEach(d => allVals.push(d.iv.ci_lower, d.iv.ci_upper));
   const pad  = (Math.max(...allVals) - Math.min(...allVals)) * 0.08 || 1;
-  const yMin = Math.min(...allVals, ...allMu.map((m,i) => m - 3.5*allSig[i])) - pad;
-  const yMax = Math.max(...allVals, ...allMu.map((m,i) => m + 3.5*allSig[i])) + pad;
+  const yMin = Math.min(...allVals) - pad;
+  const yMax = Math.max(...allVals) + pad;
 
   const traces = [];
   const lastV = actualVal;
@@ -1398,16 +1309,15 @@ function drawChart(payload, data) {
     xaxis:'x', yaxis:'y',
   });
 
-  // 3. Latest value being classified — highlighted with classification color
+  // 3. Latest value being classified — coloured by NORMA's call
   const clf = data.classifications || {};
-  const lastClfColor = clf.norma === 'Low' ? '#ff3b30' : clf.norma === 'High' ? '#ff9f0a' : '#30d158';
+  const lastClfColor = clf.NORMA === 'Low' ? '#ff3b30' : clf.NORMA === 'High' ? '#ff9f0a' : '#30d158';
   traces.push({
     x:[lastD], y:[lastV], mode:'markers', name:'Latest',
     marker:{color:lastClfColor, size:10, line:{width:2, color:'#fff'}},
     hovertemplate:lastD+'<br>%{y:.2f} '+unit+'<extra>Latest value (classified)</extra>',
     xaxis:'x', yaxis:'y',
   });
-  // Connecting line from last history point to classified value
   if (histX.length >= 1) {
     traces.push({
       x:[histX[histX.length - 1], lastD], y:[histY[histY.length - 1], lastV],
@@ -1417,27 +1327,36 @@ function drawChart(payload, data) {
     });
   }
 
-  // ── Right subplot (xaxis2): vertical bell curves ──
-  function bellTrace(bellMu, bellSig, color, fillcolor, name) {
-    const ys   = linspace(bellMu - 3.2 * bellSig, bellMu + 3.2 * bellSig, 120);
-    const pdfs = gaussianPdf(ys, bellMu, bellSig);
-    const peak = Math.max(...pdfs);
-    const xs   = pdfs.map(p => p / peak);  // normalize to 0–1
+  // ── Right subplot (xaxis2): vertical density of each interval ──
+  function densityTrace(ys, pdfVals, color, name) {
+    const peak = Math.max(...pdfVals);
+    const xs = pdfVals.map(p => p / peak);
     return {
       x: [0, ...xs, 0], y: [ys[0], ...ys, ys[ys.length - 1]],
-      fill: 'toself', fillcolor,
-      line: { color, width: 1.5 },
+      fill: 'toself', fillcolor: hexToRgba(color, 0.12),
+      line: { color: hexToRgba(color, 0.9), width: 1.5 },
       mode: 'lines', name,
       hovertemplate: '%{y:.2f} ' + unit + '<extra>' + name + '</extra>',
       xaxis:'x2', yaxis:'y',
     };
   }
-
-  traces.push(bellTrace(refMu, refSig, 'rgba(174,174,178,0.9)', 'rgba(174,174,178,0.13)', 'Population'));
-  if (gmmOk) {
-    traces.push(bellTrace(gmmMu, gmmSig, 'rgba(191,90,242,0.8)', 'rgba(191,90,242,0.10)', 'Personalized'));
+  function bellTrace(bellMu, bellSig, color, name) {
+    const ys = linspace(bellMu - 3.2 * bellSig, bellMu + 3.2 * bellSig, 120);
+    return densityTrace(ys, gaussianPdf(ys, bellMu, bellSig), color, name);
   }
-  traces.push(bellTrace(norm.mu, norm.sigma, 'rgba(0,113,227,0.9)', 'rgba(0,113,227,0.12)', 'NORMA'));
+  shown.forEach(({ m, iv }) => {
+    if (m.key === 'NORMA' && isQuantileModel()) {
+      // Split normal from q2.5, q50, q97.5 so the asymmetry of the quantile head shows
+      const med = iv.mu, sigLo = (med - iv.ci_lower) / 1.96, sigHi = (iv.ci_upper - med) / 1.96;
+      const ysLo = linspace(med - 3.2 * sigLo, med, 60);
+      const ysHi = linspace(med, med + 3.2 * sigHi, 60);
+      const ys = [...ysLo, ...ysHi.slice(1)];
+      const pdfVals = ys.map(y => Math.exp(-0.5 * ((y - med) / (y <= med ? sigLo : sigHi)) ** 2));
+      traces.push(densityTrace(ys, pdfVals, m.color, m.label));
+    } else {
+      traces.push(bellTrace(iv.mu, iv.sigma, m.color, m.label));
+    }
+  });
 
   // ── Shapes & annotations ──
   const shapes = [
@@ -1459,20 +1378,16 @@ function drawChart(payload, data) {
   ];
 
   // Classification label at last observed value
-  const clfItems = [
-    {label:'Population', value:clf.population, color:'#aeaeb2'},
-    ...(gmmOk ? [{label:'Personalized', value:clf.personalized, color:'#bf5af2'}] : []),
-    {label:'NORMA', value:clf.norma, color:'#0071e3'},
-  ].filter(c => c.value);
+  const clfItems = shown.map(({ m }) => ({label:m.label, value:clf[m.key], color:m.color})).filter(c => c.value);
   if (clfItems.length) {
     const clfColorFn = v => v === 'Low' ? '#ff3b30' : v === 'High' ? '#ff9f0a' : '#30d158';
     const clfText = clfItems.map(c =>
       `<span style="color:${c.color}">${c.label}:</span> <b style="color:${clfColorFn(c.value)}">${c.value}</b>`
-    ).join('  ·  ');
+    ).join('<br>');
     annotations.push({
       x:lastD, y:lastV, xanchor:'left', yanchor:'top',
       showarrow:true, arrowhead:0, arrowwidth:1, arrowcolor:'rgba(0,0,0,0.15)',
-      ax:20, ay:28,
+      ax:20, ay:40,
       text:clfText, font:{size:10}, bgcolor:'rgba(255,255,255,0.95)',
       bordercolor:'rgba(0,0,0,0.08)', borderwidth:1, borderpad:5,
       xref:'x', yref:'y',
@@ -1480,14 +1395,14 @@ function drawChart(payload, data) {
   }
 
   const layout = {
-    margin:{l:46, r:10, t:10, b:52},
+    margin:{l:46, r:10, t:34, b:40},
     font:{family:'DM Sans,sans-serif', size:11, color:'#6e6e73'},
     xaxis:{title:'Date', type:'date', domain:[0, 0.72],
            showgrid:true, gridcolor:'rgba(0,0,0,0.05)', zeroline:false},
     xaxis2:{domain:[0.76, 1], showticklabels:false, showgrid:false, zeroline:false,
             range:[0, 1.15]},
     yaxis:{title:unit, range:[yMin, yMax], showgrid:true, gridcolor:'rgba(0,0,0,0.05)', zeroline:false},
-    legend:{orientation:'h', y:-0.22, font:{size:11}},
+    legend:{orientation:'h', x:0.5, xanchor:'center', y:1.02, yanchor:'bottom', font:{size:11}},
     hovermode:'closest',
     plot_bgcolor:'#fff', paper_bgcolor:'#fff',
     shapes, annotations,
@@ -1517,7 +1432,7 @@ async function requestInterpretation() {
 // ── Saved runs ──
 function saveCurrentRun() {
   if (!currentResult || !currentPayload) return;
-  const norm = currentResult.predictions['Normal'];
+  const norm = currentResult.norma;
   savedRuns.unshift({
     id: Date.now().toString(36),
     ts: new Date().toLocaleString(),
@@ -1526,9 +1441,7 @@ function saveCurrentRun() {
     age:            currentPayload.age,
     history:        currentPayload.history,
     pred_date:      currentResult.pred_date,
-    predictions:    currentResult.predictions,
-    gmm_prediction: currentResult.gmm_prediction,
-    ref_prediction: currentResult.ref_prediction,
+    result:         currentResult,
     ref_low:        currentResult.ref_low,
     ref_high:       currentResult.ref_high,
     unit:           currentResult.unit,
@@ -1536,20 +1449,20 @@ function saveCurrentRun() {
     interpretation: currentResult._interpretation || null,
   });
   if (savedRuns.length > 15) savedRuns.pop();
-  localStorage.setItem('norma_runs', JSON.stringify(savedRuns));
+  localStorage.setItem('norma_runs_v2', JSON.stringify(savedRuns));
   renderSavedRuns();
   showToast('Run saved');
 }
 
 function deleteRun(id) {
   savedRuns = savedRuns.filter(r => r.id !== id);
-  localStorage.setItem('norma_runs', JSON.stringify(savedRuns));
+  localStorage.setItem('norma_runs_v2', JSON.stringify(savedRuns));
   renderSavedRuns();
 }
 
 function clearAllRuns() {
   savedRuns = [];
-  localStorage.setItem('norma_runs', JSON.stringify(savedRuns));
+  localStorage.setItem('norma_runs_v2', JSON.stringify(savedRuns));
   renderSavedRuns();
 }
 
@@ -1588,7 +1501,7 @@ function restoreRun(id) {
   updateRefPill();
   document.getElementById('pid-chip-wrap').style.display = 'none';
   currentPayload = {test_name:run.test_name, sex:run.sex, age:run.age, history:run.history, pred_date:run.pred_date};
-  currentResult  = {predictions:run.predictions, gmm_prediction:run.gmm_prediction, ref_prediction:run.ref_prediction, ref_low:run.ref_low, ref_high:run.ref_high, unit:run.unit, pred_date:run.pred_date};
+  currentResult  = run.result;
   drawChart(currentPayload, currentResult);
 
   drawPredSummary(currentPayload, currentResult);
@@ -1700,7 +1613,7 @@ async function applyWhatIfAndRedraw() {
   try {
     const pdR = await fetch('/api/predict', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ test_name: _originalPayload.test_name, sex: _wiSex, age: _wiAge, history, model_id: getSelectedModelId() }),
+      body: JSON.stringify({ test_name: _originalPayload.test_name, sex: _wiSex, age: _wiAge, history }),
     });
     const data = await pdR.json();
     if (data.error) { console.error('/api/predict error:', data.error); showToast('Predict failed: ' + data.error, true); return; }

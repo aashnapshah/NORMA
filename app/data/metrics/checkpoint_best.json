@@ -1,0 +1,60 @@
+{
+  "epoch": 49,
+  "run_id": "q_age_set",
+  "hyperparameters": {
+    "sample": null,
+    "num_patients": null,
+    "data_dir": "../../data/processed/",
+    "log_dir": "./logs",
+    "train": "combined",
+    "test": "combined",
+    "model": "NORMA2",
+    "loss": "QuantileLoss",
+    "output_mode": "quantile",
+    "d_model": 64,
+    "nhead": 4,
+    "nlayers": 8,
+    "epochs": 50,
+    "batch_size": 32,
+    "lr": 0.0001,
+    "weight_decay": 0.001,
+    "patience": 10,
+    "run_id": "q_age_set",
+    "nstates": 3,
+    "edit": false,
+    "predict": true,
+    "resume": true,
+    "normalize": false,
+    "description": "covariate ablation: q_age_set (--use_age_t --use_setting)",
+    "seed": 42,
+    "data_version": "v3",
+    "use_age_t": true,
+    "use_setting": true,
+    "use_coanalytes": false,
+    "run_name": "q_age_set",
+    "wandb_group": "covariate-ablation",
+    "wandb_tags": [
+      "ablation",
+      "q_age_set"
+    ]
+  },
+  "metrics": {
+    "train": {
+      "loss": 2.1478882518905724,
+      "r2": 0.9407133460044861,
+      "mae": 5.735324382781982,
+      "coverage95": 0.7894262227729995,
+      "width": 19.191354751586914
+    },
+    "val": {
+      "loss": 1.78689701734283,
+      "r2": 0.9511494040489197,
+      "mae": 4.946377277374268,
+      "coverage95": 0.8120289940133818,
+      "width": 18.154767990112305
+    },
+    "best_val_loss": 1.78689701734283,
+    "epoch": 50,
+    "lr": 5e-05
+  }
+}

@@ -13,6 +13,7 @@ from tqdm import tqdm
 
 from config import REFERENCE_INTERVALS
 from utils import load_checkpoint, create_model
+from model import is_quantile_mode
 from data import TEST_VOCAB
 
 # Module-level model state (set by init_model or __main__)
@@ -35,7 +36,7 @@ def init_model(model=None, device=None, hparams=None, run_id=None, log_dir=None)
         MODEL.eval()
         NSTATES = getattr(hparams, 'nstates', 3)
         NORMALIZE = getattr(hparams, 'normalize', False)
-        IS_QUANTILE = (getattr(hparams, 'output_mode', 'gaussian') == 'quantile'
+        IS_QUANTILE = (is_quantile_mode(getattr(hparams, 'output_mode', 'gaussian'))
                        and getattr(hparams, 'model', '') == 'NORMA2')
     elif run_id is not None:
         if log_dir is None:
@@ -46,7 +47,7 @@ def init_model(model=None, device=None, hparams=None, run_id=None, log_dir=None)
         MODEL.eval()
         NSTATES = getattr(hparams, 'nstates', 3)
         NORMALIZE = getattr(hparams, 'normalize', False)
-        IS_QUANTILE = (getattr(hparams, 'output_mode', 'gaussian') == 'quantile'
+        IS_QUANTILE = (is_quantile_mode(getattr(hparams, 'output_mode', 'gaussian'))
                        and getattr(hparams, 'model', '') == 'NORMA2')
     else:
         raise ValueError("Provide either (model, device, hparams) or (run_id, log_dir)")
@@ -62,8 +63,16 @@ def value_to_state3(value, low, high):
     return 1
 
 
-def predict(test_name, sex01, age, t_arr, x_arr, t_next, state=1):
-    """Run model. Returns (mu, sigma) for Gaussian or (median, ci_width) for quantile."""
+def predict(test_name, sex01, age, t_arr, x_arr, t_next, state=1, covariates=False):
+    """Run model. Returns (mu, sigma) for Gaussian or (median, ci_width) for quantile.
+
+    covariates=True supplies the per-measurement inputs the ablation arms were trained
+    with, for a history of this analyte alone: age at each draw (counted back from `age`
+    at the query, see below), setting "unknown" (0, the padding index) and an all-missing
+    co-analyte panel. That last one matters: passing no panel at all skips co_proj,
+    whereas an all-missing panel applies it and is what "no other analyte was drawn"
+    actually looks like to the model.
+    """
     cid     = TEST_VOCAB[test_name]
     sex_str = 'F' if sex01 == 1 else 'M'
     low, high, unit = REFERENCE_INTERVALS[test_name][sex_str]
@@ -87,8 +96,25 @@ def predict(test_name, sex01, age, t_arr, x_arr, t_next, state=1):
     s_next_t = torch.tensor([[state]]).long()
     t_next_t = torch.tensor([[t_next]]).float()
 
+    extras = {}
+    if covariates:
+        n = x_h.shape[1]
+        # Age is anchored at the QUERY, so `age` is the age the interval is being asked
+        # about and the history runs backwards from it. Anchoring at the first draw
+        # instead would confound history length with ageing -- 300 draws 90 days apart
+        # span 74 years, so the query would drift to age 124 -- and would no longer match
+        # the covariate-free model, which sees `age` as the age at the query.
+        age_hist = np.clip(age - (float(t_next) - t) / 365.25, 0.0, None)
+        extras["age_h"] = torch.tensor(age_hist).view(1, n).float()
+        extras["age_next"] = torch.tensor([float(age)]).float()
+        extras["setting_h"] = torch.zeros(1, n).long()
+        extras["setting_next"] = torch.zeros(1).long()
+        k = getattr(MODEL, "n_panel", len(TEST_VOCAB))
+        extras["co_h"] = torch.full((1, n, k), float("nan"))
+        extras["co_mask"] = torch.zeros(1, n, k).float()
+
     with torch.no_grad():
-        output = MODEL(x_h, s_h, t_h, sex_t, age_t, cid_t, s_next_t, t_next_t, pad_mask=None)
+        output = MODEL(x_h, s_h, t_h, sex_t, age_t, cid_t, s_next_t, t_next_t, pad_mask=None, **extras)
 
     if IS_QUANTILE:
         # output is (1, 5) — quantiles [q2.5, q25, q50, q75, q97.5]
@@ -354,7 +380,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--runs', nargs='+', default=list(NORMA_RUNS.keys()))
-    parser.add_argument('--output_dir', default=os.path.join(os.path.dirname(__file__), '..', 'results', 'prediction', 'raw'))
+    parser.add_argument('--output_dir', default=os.path.join(os.path.dirname(__file__), '..', 'results', 'raw', 'dev'))
     args = parser.parse_args()
 
     LOG_DIR = os.path.join(os.path.dirname(__file__), 'logs')

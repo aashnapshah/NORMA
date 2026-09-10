@@ -5,6 +5,7 @@ from tqdm import tqdm
 import os
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from data import TEST_VOCAB, INVERSE_TEST_VOCAB
+from model import is_quantile_mode
 from utils import *
 
 CODE_TO_TEST_NAME = {i: test_name for test_name, i in TEST_VOCAB.items()}
@@ -25,7 +26,7 @@ def get_predictions(model, device, loader, split_name, normalize=False):
     model.to(device)
 
     # Detect quantile mode
-    is_quantile = hasattr(model, 'output_mode') and model.output_mode == 'quantile'
+    is_quantile = hasattr(model, 'output_mode') and is_quantile_mode(model.output_mode)
 
     predictions = []
 
@@ -33,10 +34,7 @@ def get_predictions(model, device, loader, split_name, normalize=False):
         for batch in tqdm(loader, desc=f"{split_name} (predict)", leave=False):
             batch = to_device_batch(batch, device)
 
-            output = model(
-                batch['x_h'], batch['s_h'], batch['t_h'], batch['sex'],
-                batch['age'], batch['cid'], batch['s_next'], batch['t_next'], batch['pad_mask']
-            )
+            output = run_model(model, batch)
 
             if is_quantile:
                 # output: (B, 5) — [q2.5, q25, q50, q75, q97.5]
@@ -55,6 +53,10 @@ def get_predictions(model, device, loader, split_name, normalize=False):
             x_next = batch['x_next'].cpu().numpy()
             t_next = batch['t_next'].cpu().numpy()
             s_next = batch['s_next'].cpu().numpy()
+            n_hist = batch['n_hist'].cpu().numpy() if 'n_hist' in batch else None
+            lp = getattr(model, 'last_params', None) if is_quantile else None
+            gate_np = lp['gate'].detach().cpu().numpy() if lp and 'gate' in lp else None
+            neff_np = lp['n_eff'].detach().cpu().numpy() if lp and 'n_eff' in lp else None
 
             if normalize and not is_quantile:
                 ref_low = batch['ref_low'].cpu().numpy()
@@ -81,6 +83,12 @@ def get_predictions(model, device, loader, split_name, normalize=False):
                     'mu': mu_val,
                     'log_var': log_var_val,
                 }
+                if n_hist is not None:
+                    row['n_hist'] = int(n_hist[i].item() if hasattr(n_hist[i], 'item') else n_hist[i])
+                if gate_np is not None:
+                    row['gate'] = float(gate_np[i].item())
+                if neff_np is not None:
+                    row['n_eff'] = float(neff_np[i].item())
                 if is_quantile:
                     row['q025'] = float(q_np[i, 0])
                     row['q25']  = float(q_np[i, 1])
@@ -92,11 +100,16 @@ def get_predictions(model, device, loader, split_name, normalize=False):
     return pd.DataFrame(predictions)
 
 def load_predictions(run_ids, base, source):
+    """(path, target col, prediction col) per run_id, for interactive comparison.
+
+    `base` is a cohort key for the forecasting baselines: they live in
+    results/raw/<cohort>/05_forecast_baselines.parquet, one column per model
+    (model/baselines/forecast.py)."""
     outputs = {}
     for run_id in run_ids:
         if run_id in ['Mean', 'ARIMA', 'last']:
-            path = f'../baselines/predictions/{run_id.lower()}_baseline_{base}.csv'
-            outputs[run_id] = (path, 'x_next', 'x_pred')
+            path = f'../results/raw/{base}/05_forecast_baselines.parquet'
+            outputs[run_id] = (path, 'x_next', run_id.lower())
         elif run_id == '58ba1f1c':
             path = f'../model/logs/{run_id}/predictions_ehrshot.csv'
             outputs[run_id] = (path, 'x_next', 'q50')

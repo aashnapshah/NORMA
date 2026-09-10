@@ -11,7 +11,7 @@ mpl.rcParams['animation.ffmpeg_path'] = '/home/aas926/miniconda3/envs/normal/bin
 
 sys.path.append('../../NORMA/')
 from process.config import REFERENCE_INTERVALS 
-from baselines.setpoints import *
+from baselines.gaussian import gmm_setpoint
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 from plots import *
 from data import *
@@ -171,8 +171,8 @@ def predict_intervals(seqs, run_ids, LOG_DIR, device, add_baselines=True):
 
         if add_baselines:
             row = base_row.copy()
-            mu, var = calculate_guassians(seq)  
-            std = np.sqrt(var)*2
+            mu, sd = gmm_setpoint(seq['x'])
+            std = sd*2
             row.update({
                 'run_id': 'Personalized',
                 'mu': mu,

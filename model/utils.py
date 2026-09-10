@@ -7,8 +7,8 @@ import time
 import uuid
 import argparse
 
-from model import NORMA, NormaLight, NormaLightV1, NORMA2
-from loss import NORMALoss, GaussianNLLLoss, MSELoss, QuantileLoss
+from model import NORMA, NormaLight, NormaLightV1, NORMA2, is_quantile_mode, QUANTILE_OUTPUT_MODES
+from loss import NORMALoss, GaussianNLLLoss, MSELoss, QuantileLoss, QuantilePriorLoss, StudentTNLLLoss
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -27,6 +27,8 @@ def setup_logging(args, run_id):
             config=vars(args),
             id = run_id,
             resume = 'allow',
+            group=getattr(args, 'wandb_group', None),
+            tags=getattr(args, 'wandb_tags', None) or None,
         )
     else:
         # Already initialized (e.g. by sweep agent) — just update config
@@ -130,10 +132,33 @@ def load_checkpoint(log_dir, run_id, args=None, best=False, device='cpu', quiet=
 def to_device_batch(batch, device):
     """Move tensors to device and fix dtype for embedding indices if present."""
     batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
-    for key in ('sex', 'age', 'cid', 's_next', 's_h'):
+    for key in ('sex', 'age', 'cid', 's_next', 's_h', 'setting_h', 'setting_next'):
         if key in batch and isinstance(batch[key], torch.Tensor):
             batch[key] = batch[key].long()
     return batch
+
+
+# Number of care-setting levels (process/covariates.SETTING_VOCAB): unknown/pad, outpatient, ed, inpatient, icu
+N_SETTINGS = 5
+COVARIATE_KEYS = ('age_h', 'age_next', 'setting_h', 'setting_next', 'co_h', 'co_mask', 'obs_h')
+
+
+def uses_covariates(model):
+    return any(getattr(model, f, False) for f in ('use_age_t', 'use_setting', 'use_coanalytes', 'use_full_panel'))
+
+
+def model_extras(model, batch):
+    """Optional covariate kwargs for NORMA2.forward, only for models that use them."""
+    if not uses_covariates(model):
+        return {}
+    return {k: batch[k] for k in COVARIATE_KEYS if k in batch}
+
+
+def run_model(model, batch, s_next=None):
+    """Single entry point for the forward pass from a collated batch (optionally overriding s_next)."""
+    s = batch['s_next'] if s_next is None else s_next
+    return model(batch['x_h'], batch['s_h'], batch['t_h'], batch['sex'], batch['age'], batch['cid'],
+                 s, batch['t_next'], batch['pad_mask'], **model_extras(model, batch))
 
 def create_model(args, ncodes, checkpoint=None):
     nstates = getattr(args, 'nstates', getattr(args, 'num_states', 2))
@@ -150,7 +175,15 @@ def create_model(args, ncodes, checkpoint=None):
     elif args.model == 'NORMA2':
         output_mode = getattr(args, 'output_mode', 'quantile')
         model = NORMA2(d_model=args.d_model, nhead=args.nhead, nlayers=args.nlayers,
-                       nstates=nstates, ncodes=ncodes, output_mode=output_mode)
+                       nstates=nstates, ncodes=ncodes, output_mode=output_mode,
+                       # per-measurement covariates (revision ablation); absent in old checkpoints
+                       use_age_t=bool(getattr(args, 'use_age_t', False)),
+                       use_setting=bool(getattr(args, 'use_setting', False)),
+                       use_coanalytes=bool(getattr(args, 'use_coanalytes', False)),
+                       query_coanalytes=bool(getattr(args, 'query_coanalytes', False)),
+                       n_settings=N_SETTINGS, n_panel=ncodes,
+                       causal_memory=bool(getattr(args, 'causal_memory', False)),
+                       use_full_panel=bool(getattr(args, 'use_full_panel', False)))
     else:
         raise ValueError(f"Unknown model type: {args.model}")
     if checkpoint is not None:
@@ -171,9 +204,22 @@ def initialize_weights_small(module):
         if module.bias is not None:
             torch.nn.init.zeros_(module.bias)
             
-def create_loss(loss, lambda_align=None):
+def create_loss(loss, lambda_align=None, args=None):
     if loss == 'NORMALoss':
-        return NORMALoss(lambda_align=lambda_align)
+        la = getattr(args, 'lambda_align', None) if lambda_align is None else lambda_align
+        return NORMALoss(lambda_align=0.01 if la is None else la,
+                         k=getattr(args, 'prior_k', None) if getattr(args, 'align_by_n', False) else None)
+    if loss == 'QuantilePriorLoss':
+        if getattr(args, 'nstates', 3) != 3:
+            raise ValueError('QuantilePriorLoss assumes the 3-state coding (normal = 1)')
+        if getattr(args, 'normalize', False):
+            raise ValueError('QuantilePriorLoss expects raw units (no --normalize)')
+        return QuantilePriorLoss(lambda_prior=getattr(args, 'prior_lambda', 1.0),
+                                 k=getattr(args, 'prior_k', 5.0),
+                                 mode=getattr(args, 'prior_mode', 'anchor'),
+                                 normal_state=1, tau=getattr(args, 'prior_tau', None))
+    if loss == 'StudentTNLLLoss':
+        return StudentTNLLLoss()
     if loss == 'GaussianNLLLoss':
         return GaussianNLLLoss()
     if loss == 'MSELoss':
@@ -182,14 +228,47 @@ def create_loss(loss, lambda_align=None):
         return QuantileLoss()
     raise ValueError(f"Unknown loss type: {loss}")
 
+def loss_extras(batch, model=None):
+    """Side inputs for the prior-aware losses, from a collated batch (+ the model's
+    last_params / last_gate for the gate and NIG heads).
+
+    ref_mu / ref_var are the population interval read as a normal distribution
+    (midpoint, (width/3.92)^2), in the model's units."""
+    if 'pop_low' not in batch:
+        return None
+    lo, hi = batch['pop_low'], batch['pop_high']
+    out = {'s_next': batch['s_next'], 'n_hist': batch['n_hist'], 'pop_low': lo, 'pop_high': hi,
+           'ref_mu': 0.5 * (lo + hi), 'ref_var': ((hi - lo) / 3.92) ** 2,
+           't_h': batch['t_h'], 't_next': batch['t_next'], 'pad_mask': batch['pad_mask']}
+    if model is not None:
+        out['gate'] = getattr(model, 'last_gate', None)
+        out['params'] = getattr(model, 'last_params', None)
+    return out
+
+
 def compute_loss(mu, log_var, y_true, criterion, extra: dict = None):
     if isinstance(criterion, QuantileLoss):
         # mu is actually q_pred (B, n_quantiles) for quantile models
         return criterion(mu, y_true)
+    if isinstance(criterion, QuantilePriorLoss):
+        need = ('s_next', 'n_hist', 'pop_low', 'pop_high')
+        if extra is None or not all(k in extra for k in need):
+            raise ValueError(f'QuantilePriorLoss requires extra keys: {need}')
+        if criterion.mode == 'gate' and extra.get('gate') is None:
+            raise ValueError("QuantilePriorLoss mode 'gate' needs a NORMA2 --output_mode gate model")
+        return criterion(mu, y_true, extra['s_next'], extra['n_hist'], extra['pop_low'], extra['pop_high'],
+                         t_h=extra.get('t_h'), t_next=extra.get('t_next'), pad_mask=extra.get('pad_mask'),
+                         gate=extra.get('gate'))
+    if isinstance(criterion, StudentTNLLLoss):
+        params = extra.get('params') if extra else None
+        if params is None or 'df' not in params:
+            raise ValueError('StudentTNLLLoss needs a NORMA2 --output_mode nig model (model.last_params)')
+        return criterion(params['df'], params['loc'], params['scale'], y_true)
     if isinstance(criterion, NORMALoss):
         if extra is None or not all(k in extra for k in ('s_next', 'ref_mu', 'ref_var')):
             raise ValueError('NORMALoss requires extra keys: s_next, ref_mu, ref_var')
-        return criterion(mu, log_var, y_true, extra['s_next'], extra['ref_mu'], torch.sqrt(extra['ref_var']))
+        return criterion(mu, log_var, y_true, extra['s_next'], extra['ref_mu'], torch.sqrt(extra['ref_var']),
+                         n_hist=extra.get('n_hist'))
     if isinstance(criterion, GaussianNLLLoss):
         return criterion(mu, log_var, y_true)
     if isinstance(criterion, MSELoss):

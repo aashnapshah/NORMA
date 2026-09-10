@@ -951,6 +951,13 @@
             <td style="font-size:0.78rem; color:var(--text-3)">Held-out — no retraining</td>
           </tr>
           <tr class="ext-row">
+            <td><strong>INSPIRE</strong></td>
+            <td>Seoul National University Hospital, Korea (perioperative)</td>
+            <td><span class="badge-ext"><i class="bi bi-shield-check"></i> External validation</span></td>
+            <td><span class="badge-num">~26,000 patients</span></td>
+            <td style="font-size:0.78rem; color:var(--text-3)">Held-out — no retraining</td>
+          </tr>
+          <tr class="ext-row">
             <td><strong>Clalit</strong></td>
             <td>Clalit Health Services, Israel</td>
             <td><span class="badge-ext"><i class="bi bi-shield-check"></i> External validation</span></td>
@@ -973,7 +980,7 @@
       <div class="eyebrow">Forecasting Performance</div>
       <h2 class="stitle" style="font-size:clamp(1.4rem,2.8vw,1.9rem)">How well does NORMA predict?</h2>
       <p class="slead" style="margin:0.75rem auto 0;max-width:540px">
-        Forecasting accuracy — how closely NORMA's predicted distribution matches observed next values. High R² means the model captures individual trajectory dynamics well.
+        Forecasting accuracy of the median prediction on the development cohorts, bootstrapped over patients. NORMA is queried in the realised state here; the history-only baselines (last value, patient mean, ARIMA) see the same histories.
       </p>
     </div>
 
@@ -981,18 +988,18 @@
     <div class="metrics-row">
       <div class="metric-card">
         <div class="metric-split">Train</div>
-        <div class="metric-r2">{{ model_info.train_r2 }}</div>
-        <div class="metric-sub">R² &nbsp;·&nbsp; MAE {{ model_info.train_loss }}</div>
+        <div class="metric-r2">{{ model_meta.metrics.train.R2 }}</div>
+        <div class="metric-sub">R² &nbsp;·&nbsp; MAE {{ model_meta.metrics.train.MAE }}</div>
       </div>
       <div class="metric-card">
         <div class="metric-split">Validation</div>
-        <div class="metric-r2">{{ model_info.val_r2 }}</div>
-        <div class="metric-sub">R² &nbsp;·&nbsp; MAE {{ model_info.val_loss }}</div>
+        <div class="metric-r2">{{ model_meta.metrics.val.R2 }}</div>
+        <div class="metric-sub">R² &nbsp;·&nbsp; MAE {{ model_meta.metrics.val.MAE }}</div>
       </div>
       <div class="metric-card" style="border-color:rgba(48,209,88,0.3); background:rgba(48,209,88,0.03)">
         <div class="metric-split" style="color:var(--normal)">Test (held-out)</div>
-        <div class="metric-r2" style="color:var(--normal)">{{ model_info.test_r2 }}</div>
-        <div class="metric-sub">R² &nbsp;·&nbsp; MAE {{ model_info.test_loss }}</div>
+        <div class="metric-r2" style="color:var(--normal)">{{ model_meta.metrics.test.R2 }}</div>
+        <div class="metric-sub">R² &nbsp;·&nbsp; MAE {{ model_meta.metrics.test.MAE }}</div>
       </div>
     </div>
 
@@ -1024,14 +1031,13 @@
       </h2>
     </div>
 
-    <p class="slead" style="margin:0 auto 1.25rem;max-width:600px;text-align:center">
-      Clinically validated on <strong>4.5 million individuals</strong> in Clalit Health Services, Israel.
-      These charts show cases that <strong>population reference ranges missed entirely</strong> —
-      over-personalization catches them, but floods clinicians with false positives.
+    <p class="slead" style="margin:0 auto 1.25rem;max-width:640px;text-align:center">
+      External validation without retraining in eICU-CRD (US intensive care), INSPIRE (perioperative, Seoul National University Hospital) and Clalit Health Services (Israel, 4.5 million adults).
+      These charts cover measurements that <strong>population reference ranges call normal</strong>: how much better, per lab test, NORMA's interval predicts an adverse outcome than each personalised benchmark from the paper.
     </p>
     <div style="text-align:center;margin:0 auto 2rem">
       <span style="display:inline-block;background:rgba(48,209,88,0.08);border:1.5px solid rgba(48,209,88,0.2);border-radius:var(--r-md);padding:0.5rem 1.25rem;font-size:0.95rem;font-weight:600;color:var(--normal)">
-        NORMA detects early disease without the noise.
+        Personalisation helps only when it is anchored to the population.
       </span>
     </div>
 
@@ -1040,13 +1046,16 @@
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--low);vertical-align:middle;margin-right:4px"></span>More cases caught</span>
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--accent);vertical-align:middle;margin-right:4px"></span>Fewer false alarms</span>
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--normal);vertical-align:middle;margin-right:4px"></span>More reliable flags</span>
-      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#cbc9c2;vertical-align:middle;margin-right:4px"></span>Personalized was better</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#cbc9c2;vertical-align:middle;margin-right:4px"></span><span id="validation-neg-label">Comparator was better</span></span>
     </div>
 
-    <!-- Dataset selector -->
-    <div style="display:flex;justify-content:center;gap:0.5rem;margin-bottom:1rem">
-      <button class="ds-btn" data-ds="chs" style="background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:var(--r-sm);padding:0.3rem 0.8rem;font-size:0.76rem;font-weight:600;cursor:pointer;font-family:inherit">CHS</button>
-      <button class="ds-btn" data-ds="eicu" style="background:none;color:var(--text-3);border:1px solid var(--border);border-radius:var(--r-sm);padding:0.3rem 0.8rem;font-size:0.76rem;font-weight:600;cursor:pointer;font-family:inherit">eICU</button>
+    <!-- Dataset + comparator selectors (filled from the results shipped with the app) -->
+    <div style="display:flex;justify-content:center;align-items:center;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap">
+      <span style="font-size:0.72rem;color:var(--text-3);font-weight:500">Cohort</span>
+      <span id="validation-ds-buttons" style="display:inline-flex;gap:0.4rem"></span>
+      <span style="width:1rem"></span>
+      <span style="font-size:0.72rem;color:var(--text-3);font-weight:500">NORMA vs</span>
+      <select id="validation-comparator" class="form-select form-select-sm" style="width:auto;font-size:0.76rem;font-family:inherit"></select>
     </div>
 
     <!-- Column headers (dynamic) -->
@@ -1055,10 +1064,22 @@
     <!-- Radial chart grid -->
     <div id="validation-grid" style="margin:0 auto"></div>
 
-    <p style="text-align:center;font-size:0.72rem;color:var(--text-3);margin-top:1.5rem;max-width:480px;margin-left:auto;margin-right:auto;line-height:1.55">
-      Each wedge = one lab test. Bar height = NORMA's improvement over purely personalized ranges.
-      Center = largest per-test gain. Hover for details.
+    <p style="text-align:center;font-size:0.72rem;color:var(--text-3);margin-top:1.5rem;max-width:520px;margin-left:auto;margin-right:auto;line-height:1.55">
+      Each wedge = one lab test. Bar height = NORMA's sensitivity, specificity or PPV minus the comparator's, among measurements inside the population interval.
+      Centre = largest per-test gain. Hover for details.
     </p>
+
+    <!-- Cohort-level benchmark table -->
+    <div style="max-width:900px;margin:3rem auto 0">
+      <div style="text-align:center;max-width:640px;margin:0 auto 1.25rem">
+        <div class="eyebrow">Benchmark</div>
+        <h3 class="stitle" style="font-size:clamp(1.1rem,2.2vw,1.4rem)">Every method, one patient-level score</h3>
+        <p class="slead" style="margin:0.5rem auto 0;max-width:560px;font-size:0.85rem">
+          Patient-level AUROC of each method's standardised deviation for each outcome, and the share of patients each method flags at its native 95% interval. Cohen m4 is the multi-lab, multi-time-point model of Cohen et al. (2021); NORMA and the Gaussian and Cohen benchmarks are all fitted once on the development cohorts.
+        </p>
+      </div>
+      <div id="benchmark-table-wrap"><div class="chart-loading"><div class="spinner-sm"></div><span>Loading benchmark…</span></div></div>
+    </div>
   </div>
 </section>
 
@@ -1123,7 +1144,7 @@
           <div class="arch-stat"><div class="arch-stat-val">8</div><div class="arch-stat-lbl">Layers</div></div>
           <div class="arch-stat"><div class="arch-stat-val">4</div><div class="arch-stat-lbl">Heads</div></div>
           <div class="arch-stat"><div class="arch-stat-val">64</div><div class="arch-stat-lbl">Dim</div></div>
-          <div class="arch-stat"><div class="arch-stat-val">565K</div><div class="arch-stat-lbl">Params</div></div>
+          <div class="arch-stat"><div class="arch-stat-val">{{ (model_meta.n_params / 1000) | round | int }}K</div><div class="arch-stat-lbl">Params</div></div>
         </div>
         <div style="font-size:0.8rem;color:var(--text-2);line-height:1.65;margin-bottom:0.85rem">
           <strong style="color:var(--text-1)">Causal masking</strong> ensures each step attends only to past observations — no future leakage.
@@ -1141,12 +1162,12 @@
         <div class="arch-stage-sub">Output head</div>
 
         <div class="arch-output-card" style="border-color:rgba(0,113,227,0.15);background:rgba(0,113,227,0.03)">
-          <div class="arch-output-sym" style="color:var(--accent)">μ</div>
-          <div><div class="arch-item-label">Predicted mean</div><div class="arch-item-desc">Expected next lab value</div></div>
+          <div class="arch-output-sym" style="color:var(--accent)">q<sub>50</sub></div>
+          <div><div class="arch-item-label">Predicted median</div><div class="arch-item-desc">Expected next lab value in the queried state</div></div>
         </div>
         <div class="arch-output-card" style="border-color:rgba(191,90,242,0.15);background:rgba(191,90,242,0.03)">
-          <div class="arch-output-sym" style="color:var(--purple)">σ</div>
-          <div><div class="arch-item-label">Predicted uncertainty</div><div class="arch-item-desc">Narrows with data; widens over time</div></div>
+          <div class="arch-output-sym" style="color:var(--purple)">q<sub>2.5</sub>–q<sub>97.5</sub></div>
+          <div><div class="arch-item-label">Predicted quantiles</div><div class="arch-item-desc">2.5, 25, 75 and 97.5th percentiles; asymmetric, narrows with data, widens over time</div></div>
         </div>
 
         <div style="font-size:0.78rem;color:var(--text-2);text-align:center;padding:0.5rem 0;line-height:1.45">
@@ -1154,9 +1175,9 @@
         </div>
 
         <div class="arch-loss">
-          <div class="arch-loss-title"><i class="bi bi-calculator" style="opacity:0.7"></i> Gaussian NLL Loss</div>
-          <div class="arch-loss-eq">ℒ = ½ [ log σ² + (y − μ)² / σ² ]</div>
-          <div class="arch-loss-gloss">Accuracy <em>(y − μ)²</em> · Calibration <em>log σ²</em></div>
+          <div class="arch-loss-title"><i class="bi bi-calculator" style="opacity:0.7"></i> Quantile (pinball) loss</div>
+          <div class="arch-loss-eq">ℒ = Σ<sub>τ</sub> max( τ (y − q<sub>τ</sub>), (τ − 1)(y − q<sub>τ</sub>) )</div>
+          <div class="arch-loss-gloss">τ ∈ {0.025, 0.25, 0.5, 0.75, 0.975} · each quantile is calibrated by construction</div>
         </div>
       </div>
 
@@ -1365,6 +1386,10 @@ loadMetrics();
       lat: 38.5, lon: -98.0, role: 'External Validation',
       sequences: 1122388, patients: '~91K adults',
       color: '#30d158', size: 22 },
+    { name: 'INSPIRE', inst: 'Seoul National University Hospital', city: 'Seoul, Korea',
+      lat: 37.58, lon: 126.99, role: 'External Validation',
+      sequences: null, patients: '~26K adults',
+      color: '#30d158', size: 18 },
     { name: 'Clalit', inst: 'Clalit Health Services', city: 'Israel',
       lat: 31.77, lon: 35.22, role: 'External Validation',
       sequences: null, patients: '4.5M adults',
@@ -1378,7 +1403,7 @@ loadMetrics();
     type: 'scattergeo', mode: 'markers+text',
     lat: sites.map(s => s.lat), lon: sites.map(s => s.lon),
     text: sites.map(s => s.name),
-    textposition: ['top center', 'top center', 'bottom center', 'top right'],
+    textposition: ['top center', 'top center', 'bottom center', 'top center', 'top right'],
     textfont: { family: 'DM Sans,sans-serif', size: 12, color: sites.map(s => s.color), weight: 600 },
     hoverinfo: 'none',
     marker: {
@@ -1519,9 +1544,15 @@ loadMetrics();
 
   const outcomeLabels = {
     mortality:'Mortality', ckd:'Chronic Kidney Disease', t2d:'Type 2 Diabetes',
-    aki:'Acute Kidney Injury', sepsis:'Sepsis', prolonged_los:'Prolonged LOS',
-    anemia_unspecified:'Anemia',
+    aki:'Acute Kidney Injury', sepsis:'Sepsis', prolonged_los:'Prolonged Stay',
+    anemia_unspecified:'Anemia', periop_infection:'Perioperative Infection',
+    unplanned_icu:'Unplanned ICU Admission',
   };
+  const DATASETS    = {{ datasets_json | safe }};     // [{key, label}] with results shipped in app/data
+  const COMPARATORS = {{ comparators_json | safe }};  // [{key, label, html}]
+  let _ds = DATASETS.length ? DATASETS[0].key : null;
+  let _vs = COMPARATORS[0].key;
+  function comparatorLabel() { return (COMPARATORS.find(c => c.key === _vs) || {}).label || _vs; }
 
   // SVG geometry
   const SZ=260, CX=130, CY=130, INNER=48, OUTER=104, GAP=4, PAD=0.022;
@@ -1549,7 +1580,7 @@ loadMetrics();
   tip.style.cssText = 'position:fixed;background:#1d1d1f;color:#fff;padding:8px 12px;border-radius:var(--r-sm);font-size:0.78rem;font-family:"DM Sans",sans-serif;pointer-events:none;opacity:0;transition:opacity 0.12s;z-index:1000;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,0.22)';
   document.body.appendChild(tip);
   function showTip(e,a,v){
-    var desc = v >= 0 ? 'NORMA better' : 'Personalized better';
+    var desc = v >= 0 ? 'NORMA better' : comparatorLabel() + ' better';
     tip.innerHTML='<div style="font-weight:600;font-size:0.82rem;margin-bottom:2px">'+a+'</div>'
       +'<div style="font-size:0.72rem;opacity:0.75">'+desc+': '+(v>=0?'+':'')+((v*100).toFixed(1))+'%</div>';
     tip.style.opacity='1'; moveTip(e);
@@ -1589,7 +1620,7 @@ loadMetrics();
       var lbl = document.createElement('div');
       lbl.style.cssText = 'text-align:right;padding-right:18px';
       lbl.innerHTML = '<div style="font-weight:600;font-size:0.85rem;color:'+metricInfo[metric].color+'">'+metricInfo[metric].title+'</div>'
-        +'<div style="font-size:0.68rem;color:var(--text-3);margin-top:2px">NORMA vs personalized</div>';
+        +'<div style="font-size:0.68rem;color:var(--text-3);margin-top:2px">NORMA vs '+comparatorLabel()+'</div>';
       row.appendChild(lbl);
 
       outcomes.forEach(function(outcome) {
@@ -1674,30 +1705,74 @@ loadMetrics();
     });
   }
 
-  function loadDataset(ds) {
-    grid.innerHTML = '<p style="color:var(--text-3);font-size:0.85rem;padding:2rem 0;text-align:center">Loading validation data\u2026</p>';
-    fetch('/api/validation_circos?dataset='+ds)
+  function loadDataset() {
+    if (!_ds) { grid.innerHTML = '<p style="color:var(--text-3);font-size:0.85rem;padding:2rem 0;text-align:center">No validation results are bundled with this build.</p>'; return; }
+    document.getElementById('validation-neg-label').textContent = comparatorLabel() + ' was better';
+    grid.innerHTML = '<p style="color:var(--text-3);font-size:0.85rem;padding:2rem 0;text-align:center">Loading validation data…</p>';
+    fetch('/api/validation?dataset=' + _ds + '&vs=' + _vs)
       .then(function(r){return r.json();})
       .then(function(data){
         if (data.error) { grid.innerHTML='<p style="color:#ff3b30;padding:1rem">'+data.error+'</p>'; return; }
         renderCharts(data);
       })
       .catch(function(err){ grid.innerHTML='<p style="color:#ff3b30;padding:1rem">Failed to load: '+err+'</p>'; });
+    loadBenchmark();
   }
 
-  // Dataset toggle buttons
-  document.querySelectorAll('.ds-btn').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      document.querySelectorAll('.ds-btn').forEach(function(b){
-        b.style.background='none'; b.style.color='var(--text-3)'; b.style.borderColor='var(--border)';
-      });
-      this.style.background='var(--accent)'; this.style.color='#fff'; this.style.borderColor='var(--accent)';
-      loadDataset(this.dataset.ds);
-    });
-  });
+  function loadBenchmark() {
+    var wrap = document.getElementById('benchmark-table-wrap');
+    fetch('/api/benchmark?dataset=' + _ds)
+      .then(function(r){return r.json();})
+      .then(function(data){
+        if (data.error) { wrap.innerHTML='<p style="color:var(--text-3);font-size:0.85rem;padding:1rem 0">'+data.error+'</p>'; return; }
+        var order = ['NORMA','PopRI','PerRI','Gaussian_eb','Cohen_m4'];
+        var labels = {NORMA:'NORMA', PopRI:'Pop<sub>RI</sub>', PerRI:'Per<sub>RI</sub>', Gaussian_eb:'Empirical Bayes', Cohen_m4:'Cohen'};
+        var byM = {};
+        data.rows.forEach(function(r){ (byM[r.method] = byM[r.method] || {})[r.outcome] = r; });
+        var methods = order.filter(function(m){ return byM[m]; });
+        var html = '<div style="overflow-x:auto"><table class="compare-table"><thead><tr><th>Method</th><th>Flagged</th>'
+          + data.outcomes.map(function(o){ return '<th>'+(outcomeLabels[o]||o)+' <span style="font-weight:400;font-size:0.72rem;color:var(--text-3)">AUROC</span></th>'; }).join('')
+          + '</tr></thead><tbody>';
+        methods.forEach(function(m){
+          var isN = m === 'NORMA';
+          var any = byM[m][data.outcomes[0]] || {};
+          var flag = any.native_flag_rate != null && any.native_flag_rate !== '' ? (100*+any.native_flag_rate).toFixed(0)+'%' : '—';
+          html += '<tr'+(isN?' class="norma-row"':'')+'><td>'+(isN?'<span class="badge-norma"><i class="bi bi-stars"></i> NORMA</span>':labels[m])+'</td><td>'+flag+'</td>';
+          data.outcomes.forEach(function(o){
+            var r = byM[m][o];
+            html += '<td>'+(r && r.auroc !== '' ? (+r.auroc).toFixed(3) : '—')+'</td>';
+          });
+          html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        wrap.innerHTML = html;
+      })
+      .catch(function(err){ wrap.innerHTML='<p style="color:#ff3b30;padding:1rem">Failed to load: '+err+'</p>'; });
+  }
 
-  // Load default
-  loadDataset('chs');
+  // Cohort buttons + comparator select
+  var dsWrap = document.getElementById('validation-ds-buttons');
+  function styleDsButtons() {
+    dsWrap.querySelectorAll('.ds-btn').forEach(function(b){
+      var on = b.dataset.ds === _ds;
+      b.style.cssText = 'border-radius:var(--r-sm);padding:0.3rem 0.8rem;font-size:0.76rem;font-weight:600;cursor:pointer;font-family:inherit;'
+        + (on ? 'background:var(--accent);color:#fff;border:1px solid var(--accent)' : 'background:none;color:var(--text-3);border:1px solid var(--border)');
+    });
+  }
+  DATASETS.forEach(function(d){
+    var b = document.createElement('button');
+    b.className = 'ds-btn'; b.dataset.ds = d.key; b.textContent = d.label;
+    b.addEventListener('click', function(){ _ds = d.key; styleDsButtons(); loadDataset(); });
+    dsWrap.appendChild(b);
+  });
+  styleDsButtons();
+  var vsSel = document.getElementById('validation-comparator');
+  COMPARATORS.forEach(function(c){
+    var o = document.createElement('option'); o.value = c.key; o.textContent = c.label; vsSel.appendChild(o);
+  });
+  vsSel.addEventListener('change', function(){ _vs = this.value; loadDataset(); });
+
+  loadDataset();
 })();
 </script>
 </body>

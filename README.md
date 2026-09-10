@@ -55,7 +55,7 @@ Two ways to run the demo.
 ### Online (no install)
 
 Open [norma-tpy0.onrender.com](https://norma-tpy0.onrender.com/), go to **Try NORMA**, pick a lab test, and load one of the built-in example patients (or type your own history).
-The app shows the NORMA interval next to the population interval and flags the value as low / normal / high.
+The app shows the NORMA interval next to the population interval and the paper's personalised benchmarks (`Per_RI`, empirical-Bayes Gaussian, Cohen et al. 2021 m2), and flags the value as low / normal / high under each.
 Note: the free hosting tier sleeps when idle, so the first load can take ~30 seconds to wake.
 
 ### Terminal
@@ -72,14 +72,14 @@ Expected output:
 ```
 patient analyte  sex            Pop_RI          NORMA_RI  last obs
 ------------------------------------------------------------------
-P1      HGB      F               12-16       12.11-14.56      12.9  g/dL
-P2      CRE      M             0.7-1.3         0.90-1.39      1.31  mg/dL
-P3      A1C      F               4-5.6         5.07-5.77       5.7  %
-P4      PLT      M             150-450     140.78-323.64       215  10³/µL
+P1      HGB      F               12-16       12.48-13.65      12.9  g/dL
+P2      CRE      M             0.7-1.3         0.99-1.30      1.31  mg/dL
+P3      A1C      F               4-5.6         5.11-5.73       5.7  %
+P4      PLT      M             150-450     200.37-244.50       215  10³/µL
 ```
 
 `NORMA_RI` is the individualized 95% interval; `Pop_RI` is the fixed population range.
-For example, patient P4's platelet interval tightens to 141-324 (vs. the population 150-450) given a steadily declining trajectory.
+For example, patient P4's platelet interval tightens to 200-245 (vs. the population 150-450) given a stable trajectory.
 
 Expected run time on a normal desktop: about 10 seconds on CPU (plus a one-time checkpoint download of a few MB on the first run).
 
@@ -101,6 +101,8 @@ Covered analytes are the keys of `REFERENCE_INTERVALS` in [`process/config.py`](
 ```bash
 gunicorn app.app:app          # then open http://127.0.0.1:8000
 ```
+
+The app reads its example histories, NORMA bootstrap metrics, benchmark artifacts and validation summaries from `app/data/` (committed). `python app/build_assets.py` regenerates them from `model/logs/` (NORMA checkpoints and the dev-fitted baseline pickles in `model/logs/baselines/`) and `results/`; only needed after retraining or rerunning the validation pipeline.
 
 ### Train the model (needs processed sequence data)
 
