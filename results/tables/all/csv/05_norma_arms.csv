@@ -1,21 +1,21 @@
-Arm,Group,Head,Loss,Covariates,Idea,Status,Flags
-q_age_set,covariate,quantile,QuantileLoss,"sex, age, setting",the published model,"trained, scored",--use_age_t --use_setting
-334f7e21,covariate,quantile,QuantileLoss,sex,no per-draw covariate; the ablation's reference point,"trained, scored",(none)
-q_age,covariate,quantile,QuantileLoss,"sex, age",age at each draw,"trained, scored",--use_age_t
-q_set,covariate,quantile,QuantileLoss,"sex, setting",care setting,"trained, scored",--use_setting
-q_co,covariate,quantile,QuantileLoss,"sex, analytes",same-draw co-analytes on the history tokens,"trained, scored",--use_coanalytes
-q_age_co,covariate,quantile,QuantileLoss,"sex, age, analytes",leave-one-out from full: no setting,"trained, scored",--use_age_t --use_coanalytes
-q_set_co,covariate,quantile,QuantileLoss,"sex, setting, analytes",leave-one-out from full: no age,"trained, scored",--use_setting --use_coanalytes
-q_age_set_co,covariate,quantile,QuantileLoss,"sex, age, setting, analytes",every covariate,"trained, scored",--use_age_t --use_setting --use_coanalytes
-q_co_q,covariate,quantile,QuantileLoss,"sex, analytes (query)","co-analytes on the query token too, so the encoder cannot use what the query cannot","trained, scored",--use_coanalytes --query_coanalytes
-p_base,patient split,quantile,QuantileLoss,sex; patient split,reference point under a patient-level split,"trained, scored",--split_by patient
-p_co,patient split,quantile,QuantileLoss,"sex, analytes; patient split",was the q_co null an artifact of the patient-analyte split?,"trained, scored",--split_by patient --use_coanalytes
-p_causal,patient split,quantile,QuantileLoss,"sex, causal mask; patient split",effect of masking the cross-attention block,"trained, scored",--split_by patient --causal_memory
-p_full,patient split,quantile,QuantileLoss,"sex, every past draw, causal mask; patient split","every draw in the patient's past, all analytes, irregular times","trained, scored",--split_by patient --use_full_panel --causal_memory
-pa_k5,prior-anchored,--,--,"sex, age, setting; prior anchor k=5","pinball + expected pinball under the population prior, weight k/(n+k)","started, no checkpoint",--loss QuantilePriorLoss --prior_mode anchor --prior_k 5
-pa_k20,prior-anchored,quantile,QuantilePriorLoss,"sex, age, setting; prior anchor k=20","same, stronger prior",stopped at epoch 0,--loss QuantilePriorLoss --prior_mode anchor --prior_k 20
-pa_tau,prior-anchored,quantile,QuantilePriorLoss,"sex, age, setting; prior anchor k=5, tau=365d","same, with n decaying by time since each draw",stopped at epoch 0,--loss QuantilePriorLoss --prior_mode anchor --prior_k 5 --prior_tau 365
-pf_k5,prior-anchored,quantile,QuantilePriorLoss,"sex, age, setting; width floor k=5",soft floor on the interval width instead of an anchor,stopped at epoch 0,--loss QuantilePriorLoss --prior_mode floor --prior_k 5
-pg_k5,prior-anchored,--,--,"sex, age, setting; learned gate k=5",quantiles gated toward the state prior,"started, no checkpoint",--loss QuantilePriorLoss --prior_mode gate --output_mode gate --prior_k 5
-pn_k5,prior-anchored,--,--,"sex, age, setting; conjugate NIG head",conjugate normal-inverse-gamma head,not run,--loss StudentTNLLLoss --output_mode nig --nig_nu0 5
-gk_k5,prior-anchored,--,--,"sex, age, setting; Gaussian KL-aligned k=5","Gaussian head, KL-aligned to the population interval, n-weighted",not run,--loss NORMALoss --output_mode gaussian --align_by_n --prior_k 5 --lambda_align 0.1
+Arm,Group,Head,Loss,Covariates,Idea,Status,Forecast,Calibration (dev),Calibration (cohorts),Sensitivity,Flags
+q_age_set,covariate,quantile,QuantileLoss,"sex, age, setting",the published model,"trained, scored",yes,yes,yes,yes,--use_age_t --use_setting
+334f7e21,covariate,quantile,QuantileLoss,sex,no per-draw covariate; the ablation's reference point,"trained, scored",yes,--,yes,--,(none)
+q_age,covariate,quantile,QuantileLoss,"sex, age",age at each draw,"trained, scored",yes,yes,yes,yes,--use_age_t
+q_set,covariate,quantile,QuantileLoss,"sex, setting",care setting,"trained, scored",yes,yes,--,yes,--use_setting
+q_co,covariate,quantile,QuantileLoss,"sex, analytes",same-draw co-analytes on the history tokens,"trained, scored",yes,yes,--,yes,--use_coanalytes
+q_age_co,covariate,quantile,QuantileLoss,"sex, age, analytes",leave-one-out from full: no setting,"trained, scored",yes,yes,--,--,--use_age_t --use_coanalytes
+q_set_co,covariate,quantile,QuantileLoss,"sex, setting, analytes",leave-one-out from full: no age,"trained, scored",yes,yes,--,--,--use_setting --use_coanalytes
+q_age_set_co,covariate,quantile,QuantileLoss,"sex, age, setting, analytes",every covariate,"trained, scored",yes,yes,yes,--,--use_age_t --use_setting --use_coanalytes
+q_co_q,covariate,quantile,QuantileLoss,"sex, analytes (query)","co-analytes on the query token too, so the encoder cannot use what the query cannot","trained, scored",yes,yes,--,--,--use_coanalytes --query_coanalytes
+p_base,patient split,quantile,QuantileLoss,sex; patient split,reference point under a patient-level split,"trained, scored",yes,yes,--,--,--split_by patient
+p_co,patient split,quantile,QuantileLoss,"sex, analytes; patient split",was the q_co null an artifact of the patient-analyte split?,"trained, scored",yes,yes,--,--,--split_by patient --use_coanalytes
+p_causal,patient split,quantile,QuantileLoss,"sex, causal mask; patient split",effect of masking the cross-attention block,"trained, scored",yes,yes,--,--,--split_by patient --causal_memory
+p_full,patient split,quantile,QuantileLoss,"sex, every past draw, causal mask; patient split","every draw in the patient's past, all analytes, irregular times","trained, scored",yes,yes,--,--,--split_by patient --use_full_panel --causal_memory
+pa_k5,prior-anchored,--,--,"sex, age, setting; prior anchor k=5","pinball + expected pinball under the population prior, weight k/(n+k)","started, no checkpoint",--,--,--,--,--loss QuantilePriorLoss --prior_mode anchor --prior_k 5
+pa_k20,prior-anchored,quantile,QuantilePriorLoss,"sex, age, setting; prior anchor k=20","same, stronger prior",stopped at epoch 0,--,--,--,--,--loss QuantilePriorLoss --prior_mode anchor --prior_k 20
+pa_tau,prior-anchored,quantile,QuantilePriorLoss,"sex, age, setting; prior anchor k=5, tau=365d","same, with n decaying by time since each draw",stopped at epoch 0,--,--,--,--,--loss QuantilePriorLoss --prior_mode anchor --prior_k 5 --prior_tau 365
+pf_k5,prior-anchored,quantile,QuantilePriorLoss,"sex, age, setting; width floor k=5",soft floor on the interval width instead of an anchor,stopped at epoch 0,--,--,--,--,--loss QuantilePriorLoss --prior_mode floor --prior_k 5
+pg_k5,prior-anchored,--,--,"sex, age, setting; learned gate k=5",quantiles gated toward the state prior,"started, no checkpoint",--,--,--,--,--loss QuantilePriorLoss --prior_mode gate --output_mode gate --prior_k 5
+pn_k5,prior-anchored,--,--,"sex, age, setting; conjugate NIG head",conjugate normal-inverse-gamma head,"started, no checkpoint",--,--,--,--,--loss StudentTNLLLoss --output_mode nig --nig_nu0 5
+gk_k5,prior-anchored,--,--,"sex, age, setting; Gaussian KL-aligned k=5","Gaussian head, KL-aligned to the population interval, n-weighted","started, no checkpoint",--,--,--,--,--loss NORMALoss --output_mode gaussian --align_by_n --prior_k 5 --lambda_align 0.1

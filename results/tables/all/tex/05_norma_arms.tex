@@ -1,32 +1,32 @@
 \begin{table}[ht]
 \centering
 \footnotesize
-\begin{tabular}{llllp{4.2cm}l}
+\begin{tabular}{llllp{3.4cm}lcccc}
 \toprule
-Arm & Group & Head & Loss & Covariates & Status \\
+Arm & Group & Head & Loss & Covariates & Status & Forecast & Calibration (dev) & Calibration (cohorts) & Sensitivity \\
 \midrule
-q\_age\_set & covariate & quantile & QuantileLoss & sex, age, setting & trained, scored \\
-334f7e21 & covariate & quantile & QuantileLoss & sex & trained, scored \\
-q\_age & covariate & quantile & QuantileLoss & sex, age & trained, scored \\
-q\_set & covariate & quantile & QuantileLoss & sex, setting & trained, scored \\
-q\_co & covariate & quantile & QuantileLoss & sex, analytes & trained, scored \\
-q\_age\_co & covariate & quantile & QuantileLoss & sex, age, analytes & trained, scored \\
-q\_set\_co & covariate & quantile & QuantileLoss & sex, setting, analytes & trained, scored \\
-q\_age\_set\_co & covariate & quantile & QuantileLoss & sex, age, setting, analytes & trained, scored \\
-q\_co\_q & covariate & quantile & QuantileLoss & sex, analytes (query) & trained, scored \\
+q\_age\_set & covariate & quantile & QuantileLoss & sex, age, setting & trained, scored & yes & yes & yes & yes \\
+334f7e21 & covariate & quantile & QuantileLoss & sex & trained, scored & yes & -- & yes & -- \\
+q\_age & covariate & quantile & QuantileLoss & sex, age & trained, scored & yes & yes & yes & yes \\
+q\_set & covariate & quantile & QuantileLoss & sex, setting & trained, scored & yes & yes & -- & yes \\
+q\_co & covariate & quantile & QuantileLoss & sex, analytes & trained, scored & yes & yes & -- & yes \\
+q\_age\_co & covariate & quantile & QuantileLoss & sex, age, analytes & trained, scored & yes & yes & -- & -- \\
+q\_set\_co & covariate & quantile & QuantileLoss & sex, setting, analytes & trained, scored & yes & yes & -- & -- \\
+q\_age\_set\_co & covariate & quantile & QuantileLoss & sex, age, setting, analytes & trained, scored & yes & yes & yes & -- \\
+q\_co\_q & covariate & quantile & QuantileLoss & sex, analytes (query) & trained, scored & yes & yes & -- & -- \\
 \midrule
-p\_base & patient split & quantile & QuantileLoss & sex; patient split & trained, scored \\
-p\_co & patient split & quantile & QuantileLoss & sex, analytes; patient split & trained, scored \\
-p\_causal & patient split & quantile & QuantileLoss & sex, causal mask; patient split & trained, scored \\
-p\_full & patient split & quantile & QuantileLoss & sex, every past draw, causal mask; patient split & trained, scored \\
+p\_base & patient split & quantile & QuantileLoss & sex; patient split & trained, scored & yes & yes & -- & -- \\
+p\_co & patient split & quantile & QuantileLoss & sex, analytes; patient split & trained, scored & yes & yes & -- & -- \\
+p\_causal & patient split & quantile & QuantileLoss & sex, causal mask; patient split & trained, scored & yes & yes & -- & -- \\
+p\_full & patient split & quantile & QuantileLoss & sex, every past draw, causal mask; patient split & trained, scored & yes & yes & -- & -- \\
 \midrule
-pa\_k5 & prior-anchored & -- & -- & sex, age, setting; prior anchor k=5 & started, no checkpoint \\
-pa\_k20 & prior-anchored & quantile & QuantilePriorLoss & sex, age, setting; prior anchor k=20 & stopped at epoch 0 \\
-pa\_tau & prior-anchored & quantile & QuantilePriorLoss & sex, age, setting; prior anchor k=5, tau=365d & stopped at epoch 0 \\
-pf\_k5 & prior-anchored & quantile & QuantilePriorLoss & sex, age, setting; width floor k=5 & stopped at epoch 0 \\
-pg\_k5 & prior-anchored & -- & -- & sex, age, setting; learned gate k=5 & started, no checkpoint \\
-pn\_k5 & prior-anchored & -- & -- & sex, age, setting; conjugate NIG head & not run \\
-gk\_k5 & prior-anchored & -- & -- & sex, age, setting; Gaussian KL-aligned k=5 & not run \\
+pa\_k5 & prior-anchored & -- & -- & sex, age, setting; prior anchor k=5 & started, no checkpoint & -- & -- & -- & -- \\
+pa\_k20 & prior-anchored & quantile & QuantilePriorLoss & sex, age, setting; prior anchor k=20 & stopped at epoch 0 & -- & -- & -- & -- \\
+pa\_tau & prior-anchored & quantile & QuantilePriorLoss & sex, age, setting; prior anchor k=5, tau=365d & stopped at epoch 0 & -- & -- & -- & -- \\
+pf\_k5 & prior-anchored & quantile & QuantilePriorLoss & sex, age, setting; width floor k=5 & stopped at epoch 0 & -- & -- & -- & -- \\
+pg\_k5 & prior-anchored & -- & -- & sex, age, setting; learned gate k=5 & started, no checkpoint & -- & -- & -- & -- \\
+pn\_k5 & prior-anchored & -- & -- & sex, age, setting; conjugate NIG head & started, no checkpoint & -- & -- & -- & -- \\
+gk\_k5 & prior-anchored & -- & -- & sex, age, setting; Gaussian KL-aligned k=5 & started, no checkpoint & -- & -- & -- & -- \\
 \bottomrule
 \end{tabular}
 \label{tab:05_norma_arms}

@@ -88,7 +88,7 @@ import pandas as pd
 from constants import MEDIAN_ROW, POOLED_ROW, PSEUDO_ANALYTES
 import datasets
 from datasets import (already_done, EXCLUDE_LABS, MODEL_LOG_DIR, NORMA_RUN_ID, dev_results_dir, add_dataset_args,
-                      get_dataset, result_path)
+                      get_dataset, result_path, results_dir)
 from metrics import TARGET_KEYS, build_pairs, pairs_frame, subsample_patients, describe
 
 MODEL_DIR = bootstrap.MODEL_DIR
@@ -938,6 +938,8 @@ def fig_summary_norma_patient():
 # absolute units, with the split groups marked. Arms in different groups are
 # scored on different test rows, so read within a group and treat across-group
 # gaps as indicative only.
+# the cohorts whose 06_calibration.csv the arm table checks
+EXTERNAL_COHORTS = ("eicu", "inspire", "chs")
 NORMA_ALL_SOURCES = [("norma_versions.csv", VERSIONS, "sequence split"),
                      ("norma_versions_patient.csv", PATIENT_VERSIONS, "patient split")]
 NA_METRICS = [("mae", "Test MAE"), ("mape", "Test MAPE (%)"), ("r2", r"Test $R^2$")]
@@ -1221,9 +1223,50 @@ def _arm_status(run_id):
     return out
 
 
+def _arm_coverage():
+    """Which analyses actually contain each arm, read from the result files.
+
+    An arm can be trained and still be absent from an analysis: the external
+    cohorts only carry the arms datasets.NORMA_ABLATION_RUN_IDS forwarded when
+    04_refs and 07_classify last ran, and the sensitivity sweep was run over a
+    smaller set again. Reading the files rather than the constants is what makes
+    this table trustworthy.
+    """
+    import glob
+
+    def as_run(m):
+        m = str(m)
+        return NORMA_RUN_ID if m in ("NORMA", f"NORMA_{NORMA_RUN_ID}") else \
+            m.replace("NORMA_", "").replace("norma_", "")
+
+    cov = {"forecast": set(), "calib_dev": set(), "calib_ext": set(), "sensitivity": set()}
+    for name in ("norma_versions.csv", "norma_versions_patient.csv"):
+        p = find_in(dev_results_dir("05_forecasting"), name)
+        if os.path.exists(p):
+            cov["forecast"] |= set(pd.read_csv(p, keep_default_na=False,
+                                               na_values=[""])["version"])
+    cov["calib_dev"] = {os.path.basename(os.path.dirname(p))
+                        for p in glob.glob(os.path.join(MODEL_LOG_DIR, "*", "calibration_test.csv"))}
+    for c in EXTERNAL_COHORTS:
+        p = find_in(results_dir(c), "06_calibration.csv")
+        if os.path.exists(p):
+            d = pd.read_csv(p)
+            if "method" in d.columns:
+                cov["calib_ext"] |= {as_run(m) for m in d["method"] if "NORMA" in str(m)}
+    p = find_in(dev_results_dir("06_sensitivity"), "sensitivity_methods.csv")
+    if os.path.exists(p):
+        d = pd.read_csv(p)
+        col = "model" if "model" in d.columns else ("method" if "method" in d.columns else None)
+        if col:
+            cov["sensitivity"] = {as_run(m) for m in d[col] if "NORMA" in str(m)}
+    return cov
+
+
 def table_norma_arms():
-    """One row per NORMA arm: head, loss, covariates, split and how far it got."""
+    """One row per NORMA arm: head, loss, covariates, split, how far it got, and
+    which analyses contain it."""
     from run_names import RUN_COVARIATES
+    cov = _arm_coverage()
     rows = []
     for run_id, (group, flags) in ARM_GROUPS.items():
         st = _arm_status(run_id)
@@ -1243,13 +1286,18 @@ def table_norma_arms():
             "Covariates": RUN_COVARIATES.get(run_id, "--"),
             "Idea": ARM_IDEA.get(run_id, ""),
             "Status": state,
+            "Forecast": "yes" if run_id in cov["forecast"] else "--",
+            "Calibration (dev)": "yes" if run_id in cov["calib_dev"] else "--",
+            "Calibration (cohorts)": "yes" if run_id in cov["calib_ext"] else "--",
+            "Sensitivity": "yes" if run_id in cov["sensitivity"] else "--",
             "Flags": flags or "(none)",
         })
     df = pd.DataFrame(rows)
 
-    cols = ["Arm", "Group", "Head", "Loss", "Covariates", "Status"]
-    lines = [r"\begin{table}[ht]", r"\centering", r"\footnotesize",
-             r"\begin{tabular}{llllp{4.2cm}l}", r"\toprule",
+    cols = ["Arm", "Group", "Head", "Loss", "Covariates", "Status",
+            "Forecast", "Calibration (dev)", "Calibration (cohorts)", "Sensitivity"]
+    lines = [r"\begin{table}[ht]", r"\centering", r"\scriptsize",
+             r"\begin{tabular}{llllp{3.4cm}lcccc}", r"\toprule",
              " & ".join(cols) + r" \\", r"\midrule"]
     last = None
     for _, r in df.iterrows():
