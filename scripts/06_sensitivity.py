@@ -186,7 +186,9 @@ def cohen_intervals(recs):
     import cohen
     with open(cohen.DEFAULT_ARTIFACT, "rb") as f:
         artifact = pickle.load(f)
-    print(f"  Cohen artifact {os.path.relpath(cohen.DEFAULT_ARTIFACT, _VAL_DIR)}: {artifact['meta']}")
+    # _VAL_DIR was the validation/ tree removed on 2026-09-08; the repo root is
+    # what makes this path readable now.
+    print(f"  Cohen artifact {os.path.relpath(cohen.DEFAULT_ARTIFACT, bootstrap.BASE_DIR)}: {artifact['meta']}")
     rows = []
     for r in recs:
         if r["feature"] == "horizon":

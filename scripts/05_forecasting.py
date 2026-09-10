@@ -77,6 +77,7 @@ the pipeline (04_refs.py --runs <arms>, then the *_norma figures of each stage).
 import bootstrap
 
 import argparse
+import re
 import importlib.util
 import os
 import time
@@ -1131,15 +1132,6 @@ def table_analyte_performance():
     save_table("05_forecasting", "analyte_performance", lines, pd.DataFrame(rows))
     return ["analyte_performance"]
 
-TABLES = [
-    TableSpec("05_forecasting",   "prediction_performance",  table_prediction_performance,  False, (), None),
-    TableSpec("05_forecasting",   "analyte_performance",     table_analyte_performance,     False, (), None),
-]
-
-
-if __name__ == "__main__":
-    main()
-
 
 # ══════════════════════════════════════════════════════════════════════════
 # What each NORMA arm actually is.
@@ -1153,7 +1145,9 @@ if __name__ == "__main__":
 # Arm -> (group, the flags run_*.sh passes on top of that group's COMMON).
 # COMMON is NORMA2, d_model 64 / 4 heads / 8 layers, 3 states, batch 32,
 # lr 1e-4, 50 epochs, patience 10, seed 42, --train combined --test combined,
-# data_version v3.
+# data_version v3. The prior-anchored group's COMMON also carries
+# --use_age_t --use_setting (every arm there is the main model with a different
+# loss or head), so those flags are repeated per arm below rather than implied.
 ARM_GROUPS = {
     "q_age_set":     ("covariate", "--use_age_t --use_setting"),
     "334f7e21":      ("covariate", ""),
@@ -1168,13 +1162,13 @@ ARM_GROUPS = {
     "p_co":          ("patient split", "--split_by patient --use_coanalytes"),
     "p_causal":      ("patient split", "--split_by patient --causal_memory"),
     "p_full":        ("patient split", "--split_by patient --use_full_panel --causal_memory"),
-    "pa_k5":         ("prior-anchored", "--loss QuantilePriorLoss --prior_mode anchor --prior_k 5"),
-    "pa_k20":        ("prior-anchored", "--loss QuantilePriorLoss --prior_mode anchor --prior_k 20"),
-    "pa_tau":        ("prior-anchored", "--loss QuantilePriorLoss --prior_mode anchor --prior_k 5 --prior_tau 365"),
-    "pf_k5":         ("prior-anchored", "--loss QuantilePriorLoss --prior_mode floor --prior_k 5"),
-    "pg_k5":         ("prior-anchored", "--loss QuantilePriorLoss --prior_mode gate --output_mode gate --prior_k 5"),
-    "pn_k5":         ("prior-anchored", "--loss StudentTNLLLoss --output_mode nig --nig_nu0 5"),
-    "gk_k5":         ("prior-anchored", "--loss NORMALoss --output_mode gaussian --align_by_n --prior_k 5 --lambda_align 0.1"),
+    "pa_k5":         ("prior-anchored", "--use_age_t --use_setting --loss QuantilePriorLoss --prior_mode anchor --prior_k 5"),
+    "pa_k20":        ("prior-anchored", "--use_age_t --use_setting --loss QuantilePriorLoss --prior_mode anchor --prior_k 20"),
+    "pa_tau":        ("prior-anchored", "--use_age_t --use_setting --loss QuantilePriorLoss --prior_mode anchor --prior_k 5 --prior_tau 365"),
+    "pf_k5":         ("prior-anchored", "--use_age_t --use_setting --loss QuantilePriorLoss --prior_mode floor --prior_k 5"),
+    "pg_k5":         ("prior-anchored", "--use_age_t --use_setting --loss QuantilePriorLoss --prior_mode gate --output_mode gate --prior_k 5"),
+    "pn_k5":         ("prior-anchored", "--use_age_t --use_setting --loss StudentTNLLLoss --output_mode nig --nig_nu0 5"),
+    "gk_k5":         ("prior-anchored", "--use_age_t --use_setting --loss NORMALoss --output_mode gaussian --align_by_n --prior_k 5 --lambda_align 0.1"),
 }
 ARM_IDEA = {
     "q_age_set": "the published model",
@@ -1262,54 +1256,122 @@ def _arm_coverage():
     return cov
 
 
+def _flag(flags, name, default=None):
+    """Value of `--name x` in a flag string, or True for a bare switch."""
+    m = re.search(rf"--{name}(?:\s+([^\s-][^\s]*))?", flags)
+    if not m:
+        return default
+    return m.group(1) if m.group(1) else True
+
+
+def _describe(run_id, flags, st):
+    """The configuration columns, from the arm's flags plus its checkpoint."""
+    head = st["head"] or _flag(flags, "output_mode") or "quantile"
+    loss = st["loss"] or _flag(flags, "loss") or "QuantileLoss"
+    params = []
+    for name, fmt in (("prior_mode", "{}"), ("prior_k", "k={}"), ("prior_tau", "tau={}d"),
+                      ("nig_nu0", "nu0={}"), ("lambda_align", "lambda={}")):
+        v = _flag(flags, name)
+        if v not in (None, False, True):
+            params.append(fmt.format(v))
+    if _flag(flags, "align_by_n"):
+        params.append("weighted by n")
+    loss_col = f"{loss} ({', '.join(params)})" if params else loss
+
+    feats = []
+    if _flag(flags, "use_age_t"):
+        feats.append("age at draw")
+    if _flag(flags, "use_setting"):
+        feats.append("care setting")
+    if _flag(flags, "use_full_panel"):
+        feats.append("all analytes, every past draw")
+    elif _flag(flags, "use_coanalytes"):
+        feats.append("same-draw analytes" +
+                     (", history and query" if _flag(flags, "query_coanalytes") else ", history"))
+    features = ", ".join(feats) if feats else "none beyond sex and analyte"
+
+    attn = ("causal: self and cross masked" if _flag(flags, "causal_memory")
+            else "self masked, cross bidirectional")
+    if _flag(flags, "use_full_panel"):
+        attn += "; <= 128 draw tokens"
+
+    split = "patient" if _flag(flags, "split_by") == "patient" else "sequence"
+    return head, loss_col, features, attn, split
+
+
 def table_norma_arms():
-    """One row per NORMA arm: head, loss, covariates, split, how far it got, and
-    which analyses contain it."""
-    from run_names import RUN_COVARIATES
+    """One row per post-ablation NORMA arm: what it is, not how it scored.
+
+    Scope: every arm trained since the covariate ablation began. All are NORMA2
+    at d_model 64 / 4 heads / 8 layers / 3 states, and all were trained on
+    EHRSHOT and MIMIC-IV together (--train combined --test combined). The
+    earlier Gaussian-head architectures are deliberately absent, as are
+    58ba1f1c and 104506cf, which were trained on EHRSHOT alone.
+
+    Every column is derived from the run's own flags and checkpoint, so an arm
+    cannot drift from what it was trained as, and an arm that has not finished
+    still gets a row carrying its intended configuration with a Status saying
+    where it stopped.
+    """
     cov = _arm_coverage()
     rows = []
     for run_id, (group, flags) in ARM_GROUPS.items():
         st = _arm_status(run_id)
+        # Deliberately not "stopped" or "running": whether a partial run is still
+        # on the cluster is transient state this table has no way to read.
         if not st["dir"]:
-            state = "not run"
+            state = "not trained"
         elif st["preds"]:
-            state = "trained, scored"
+            state = "trained"
         elif st["epochs"] is not None:
-            state = f"stopped at epoch {st['epochs']}"
+            state = f"partial, epoch {st['epochs']}"
         else:
             state = "started, no checkpoint"
+        head, loss_col, features, attn, split = _describe(run_id, flags, st)
         rows.append({
-            "Arm": run_id,
-            "Group": group,
-            "Head": st["head"] or ("quantile" if group != "prior-anchored" else "--"),
-            "Loss": st["loss"] or ("QuantileLoss" if group != "prior-anchored" else "--"),
-            "Covariates": RUN_COVARIATES.get(run_id, "--"),
-            "Idea": ARM_IDEA.get(run_id, ""),
-            "Status": state,
+            "Arm": run_id, "Group": group, "Head": head, "Loss": loss_col,
+            "Features": features, "Attention": attn, "Split": split, "Status": state,
             "Forecast": "yes" if run_id in cov["forecast"] else "--",
             "Calibration (dev)": "yes" if run_id in cov["calib_dev"] else "--",
             "Calibration (cohorts)": "yes" if run_id in cov["calib_ext"] else "--",
             "Sensitivity": "yes" if run_id in cov["sensitivity"] else "--",
-            "Flags": flags or "(none)",
+            "Question": ARM_IDEA.get(run_id, ""), "Flags": flags or "(none)",
         })
     df = pd.DataFrame(rows)
 
-    cols = ["Arm", "Group", "Head", "Loss", "Covariates", "Status",
+    # Question and Flags stay in the CSV; the typeset table keeps the configuration.
+    cols = ["Arm", "Group", "Head", "Loss", "Features", "Attention", "Split", "Status",
             "Forecast", "Calibration (dev)", "Calibration (cohorts)", "Sensitivity"]
+    short = {"Calibration (dev)": "Calib. dev", "Calibration (cohorts)": "Calib. cohorts"}
     lines = [r"\begin{table}[ht]", r"\centering", r"\scriptsize",
-             r"\begin{tabular}{llllp{3.4cm}lcccc}", r"\toprule",
-             " & ".join(cols) + r" \\", r"\midrule"]
+             r"\begin{tabular}{lll p{3.2cm} p{2.8cm} p{2.9cm} ll cccc}", r"\toprule",
+             " & ".join(short.get(c, c) for c in cols) + r" \\", r"\midrule"]
     last = None
     for _, r in df.iterrows():
         if last is not None and r["Group"] != last:
             lines.append(r"\midrule")
         last = r["Group"]
-        lines.append(" & ".join(str(r[c]).replace("_", r"\_") for c in cols) + r" \\")
-    lines += [r"\bottomrule", r"\end{tabular}", r"\end{table}"]
-    save_table("05_forecasting", "norma_arms", lines, df)
+        lines.append(" & ".join(str(r[c]).replace("_", r"\_").replace("<=", r"$\leq$")
+                                for c in cols) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}",
+              r"\caption{Every NORMA arm trained since the covariate ablation began. "
+              r"All are NORMA2 at $d_{\mathrm{model}}=64$, 4 heads, 8 layers and 3 states, "
+              r"trained on EHRSHOT and MIMIC-IV together. \emph{Attention}: the decoder "
+              r"layers are called with memory equal to target, so the causal mask applies "
+              r"to self-attention only, leaving the cross-attention block bidirectional "
+              r"over history, unless \texttt{--causal\_memory} masks both.}",
+              r"\end{table}"]
+    save_table("05_forecasting", "norma_arms", lines, df, landscape=True)
     return ["norma_arms"]
 
 
-TABLES = TABLES + [
-    TableSpec("05_forecasting", "norma_arms", table_norma_arms, False, (), None),
+
+TABLES = [
+    TableSpec("05_forecasting",   "prediction_performance",  table_prediction_performance,  False, (), None),
+    TableSpec("05_forecasting",   "analyte_performance",     table_analyte_performance,     False, (), None),
+    TableSpec("05_forecasting",   "norma_arms",              table_norma_arms,              False, (), None),
 ]
+
+
+if __name__ == "__main__":
+    main()

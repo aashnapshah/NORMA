@@ -1,33 +1,34 @@
 \begin{table}[ht]
 \centering
 \footnotesize
-\begin{tabular}{llllp{3.4cm}lcccc}
+\begin{tabular}{lll p{3.2cm} p{2.8cm} p{2.9cm} ll cccc}
 \toprule
-Arm & Group & Head & Loss & Covariates & Status & Forecast & Calibration (dev) & Calibration (cohorts) & Sensitivity \\
+Arm & Group & Head & Loss & Features & Attention & Split & Status & Forecast & Calib. dev & Calib. cohorts & Sensitivity \\
 \midrule
-q\_age\_set & covariate & quantile & QuantileLoss & sex, age, setting & trained, scored & yes & yes & yes & yes \\
-334f7e21 & covariate & quantile & QuantileLoss & sex & trained, scored & yes & -- & yes & -- \\
-q\_age & covariate & quantile & QuantileLoss & sex, age & trained, scored & yes & yes & yes & yes \\
-q\_set & covariate & quantile & QuantileLoss & sex, setting & trained, scored & yes & yes & -- & yes \\
-q\_co & covariate & quantile & QuantileLoss & sex, analytes & trained, scored & yes & yes & -- & yes \\
-q\_age\_co & covariate & quantile & QuantileLoss & sex, age, analytes & trained, scored & yes & yes & -- & -- \\
-q\_set\_co & covariate & quantile & QuantileLoss & sex, setting, analytes & trained, scored & yes & yes & -- & -- \\
-q\_age\_set\_co & covariate & quantile & QuantileLoss & sex, age, setting, analytes & trained, scored & yes & yes & yes & -- \\
-q\_co\_q & covariate & quantile & QuantileLoss & sex, analytes (query) & trained, scored & yes & yes & -- & -- \\
+q\_age\_set & covariate & quantile & QuantileLoss & age at draw, care setting & self masked, cross bidirectional & sequence & trained & yes & yes & yes & yes \\
+334f7e21 & covariate & quantile & QuantileLoss & none beyond sex and analyte & self masked, cross bidirectional & sequence & trained & yes & -- & yes & -- \\
+q\_age & covariate & quantile & QuantileLoss & age at draw & self masked, cross bidirectional & sequence & trained & yes & yes & yes & yes \\
+q\_set & covariate & quantile & QuantileLoss & care setting & self masked, cross bidirectional & sequence & trained & yes & yes & yes & yes \\
+q\_co & covariate & quantile & QuantileLoss & same-draw analytes, history & self masked, cross bidirectional & sequence & trained & yes & yes & yes & yes \\
+q\_age\_co & covariate & quantile & QuantileLoss & age at draw, same-draw analytes, history & self masked, cross bidirectional & sequence & trained & yes & yes & -- & -- \\
+q\_set\_co & covariate & quantile & QuantileLoss & care setting, same-draw analytes, history & self masked, cross bidirectional & sequence & trained & yes & yes & -- & -- \\
+q\_age\_set\_co & covariate & quantile & QuantileLoss & age at draw, care setting, same-draw analytes, history & self masked, cross bidirectional & sequence & trained & yes & yes & yes & -- \\
+q\_co\_q & covariate & quantile & QuantileLoss & same-draw analytes, history and query & self masked, cross bidirectional & sequence & trained & yes & yes & -- & -- \\
 \midrule
-p\_base & patient split & quantile & QuantileLoss & sex; patient split & trained, scored & yes & yes & -- & -- \\
-p\_co & patient split & quantile & QuantileLoss & sex, analytes; patient split & trained, scored & yes & yes & -- & -- \\
-p\_causal & patient split & quantile & QuantileLoss & sex, causal mask; patient split & trained, scored & yes & yes & -- & -- \\
-p\_full & patient split & quantile & QuantileLoss & sex, every past draw, causal mask; patient split & trained, scored & yes & yes & -- & -- \\
+p\_base & patient split & quantile & QuantileLoss & none beyond sex and analyte & self masked, cross bidirectional & patient & trained & yes & yes & -- & -- \\
+p\_co & patient split & quantile & QuantileLoss & same-draw analytes, history & self masked, cross bidirectional & patient & trained & yes & yes & -- & -- \\
+p\_causal & patient split & quantile & QuantileLoss & none beyond sex and analyte & causal: self and cross masked & patient & trained & yes & yes & -- & -- \\
+p\_full & patient split & quantile & QuantileLoss & all analytes, every past draw & causal: self and cross masked; $\leq$ 128 draw tokens & patient & trained & yes & yes & -- & -- \\
 \midrule
-pa\_k5 & prior-anchored & -- & -- & sex, age, setting; prior anchor k=5 & started, no checkpoint & -- & -- & -- & -- \\
-pa\_k20 & prior-anchored & quantile & QuantilePriorLoss & sex, age, setting; prior anchor k=20 & stopped at epoch 0 & -- & -- & -- & -- \\
-pa\_tau & prior-anchored & quantile & QuantilePriorLoss & sex, age, setting; prior anchor k=5, tau=365d & stopped at epoch 0 & -- & -- & -- & -- \\
-pf\_k5 & prior-anchored & quantile & QuantilePriorLoss & sex, age, setting; width floor k=5 & stopped at epoch 0 & -- & -- & -- & -- \\
-pg\_k5 & prior-anchored & -- & -- & sex, age, setting; learned gate k=5 & started, no checkpoint & -- & -- & -- & -- \\
-pn\_k5 & prior-anchored & -- & -- & sex, age, setting; conjugate NIG head & started, no checkpoint & -- & -- & -- & -- \\
-gk\_k5 & prior-anchored & -- & -- & sex, age, setting; Gaussian KL-aligned k=5 & started, no checkpoint & -- & -- & -- & -- \\
+pa\_k5 & prior-anchored & quantile & QuantilePriorLoss (anchor, k=5) & age at draw, care setting & self masked, cross bidirectional & sequence & started, no checkpoint & -- & -- & -- & -- \\
+pa\_k20 & prior-anchored & quantile & QuantilePriorLoss (anchor, k=20) & age at draw, care setting & self masked, cross bidirectional & sequence & partial, epoch 0 & -- & -- & -- & -- \\
+pa\_tau & prior-anchored & quantile & QuantilePriorLoss (anchor, k=5, tau=365d) & age at draw, care setting & self masked, cross bidirectional & sequence & partial, epoch 0 & -- & -- & -- & -- \\
+pf\_k5 & prior-anchored & quantile & QuantilePriorLoss (floor, k=5) & age at draw, care setting & self masked, cross bidirectional & sequence & partial, epoch 0 & -- & -- & -- & -- \\
+pg\_k5 & prior-anchored & gate & QuantilePriorLoss (gate, k=5) & age at draw, care setting & self masked, cross bidirectional & sequence & started, no checkpoint & -- & -- & -- & -- \\
+pn\_k5 & prior-anchored & nig & StudentTNLLLoss (nu0=5) & age at draw, care setting & self masked, cross bidirectional & sequence & partial, epoch 0 & -- & -- & -- & -- \\
+gk\_k5 & prior-anchored & gaussian & NORMALoss (k=5, lambda=0.1, weighted by n) & age at draw, care setting & self masked, cross bidirectional & sequence & partial, epoch 0 & -- & -- & -- & -- \\
 \bottomrule
 \end{tabular}
+\caption{Every NORMA arm trained since the covariate ablation began. All are NORMA2 at $d_{\mathrm{model}}=64$, 4 heads, 8 layers and 3 states, trained on EHRSHOT and MIMIC-IV together. \emph{Attention}: the decoder layers are called with memory equal to target, so the causal mask applies to self-attention only, leaving the cross-attention block bidirectional over history, unless \texttt{--causal\_memory} masks both.}
 \label{tab:05_norma_arms}
 \end{table}
