@@ -114,6 +114,13 @@ PRINT_ORDER = ["PopRI", "PerRI", "Gaussian_mle", "Gaussian_trunc", "Gaussian_eb"
 # --norma_versions: display order; the keys must match NORMA_VERSIONS in figures.py
 VERSIONS = [NORMA_RUN_ID] + [r for r in ["334f7e21", "q_age", "q_set", "q_co", "q_age_set", "q_age_co",
                                          "q_set_co", "q_age_set_co", "q_co_q"] if r != NORMA_RUN_ID]
+# The patient-split arms are their own group: --split_by patient holds out whole
+# patients, so they share no test row with the sequence-split arms above and a
+# paired comparison across the two is impossible, not merely unwise. Selected
+# with --split_group patient, written to its own file.
+PATIENT_VERSIONS = ["p_base", "p_co", "p_causal", "p_full"]
+SPLIT_GROUPS = {"sequence": (VERSIONS, "norma_versions.csv"),
+                "patient": (PATIENT_VERSIONS, "norma_versions_patient.csv")}
 PID_SOURCE = os.path.join(MODEL_DIR, "predictions", "pid_source.csv")
 NV_KEYS = ["pid", "code", "t_next"]
 
@@ -416,11 +423,21 @@ def run_norma_versions(args):
     if not preds:
         raise SystemExit("No version has predictions_combined.csv — nothing to compare.")
 
+    # t_next is not a safe part of the key across arms: --use_full_panel puts the
+    # query on the drawmeta index's absolute clock (data.py sets t_next = q_time)
+    # while every other arm uses sequence-relative time, so p_full shares no row
+    # with p_base under a t_next key even though the targets are identical.
+    # (pid, code) identifies a target uniquely in each arm's test split, so use
+    # that when it does, and only fall back to including t_next when it does not.
+    key = ["pid", "code"]
+    if any(d.duplicated(key).any() for d in preds.values()):
+        key = NV_KEYS
+        print(f"  (pid, code) is not unique in every version; keying on {key}")
     common = None
     for d in preds.values():
-        idx = pd.MultiIndex.from_frame(d[NV_KEYS])
+        idx = pd.MultiIndex.from_frame(d[key])
         common = idx if common is None else common.intersection(idx)
-    print(f"  common test rows across {len(preds)} versions: {len(common):,}")
+    print(f"  common test rows across {len(preds)} versions: {len(common):,} (key: {key})")
     if len(common) == 0:
         # Writing here would replace a good file with an empty one, which is what
         # happened when the patient-split arms (p_base, p_co, p_causal, p_full,
@@ -435,7 +452,7 @@ def run_norma_versions(args):
     src = pd.read_csv(PID_SOURCE).set_index("pid")["source"]
     rows = []
     for v, d in preds.items():
-        d = d[pd.MultiIndex.from_frame(d[NV_KEYS]).isin(common)].copy()
+        d = d[pd.MultiIndex.from_frame(d[key]).isin(common)].copy()
         d["source"] = d.pid.map(src)
         for s in DEV_COHORTS + ["all"]:
             sub = d if s == "all" else d[d.source == s]
@@ -444,7 +461,8 @@ def run_norma_versions(args):
                 rows.append({"version": v, "source": s, "analyte": code,
                              "n": r["n"], "mae": r["mae"], "mape": r["mape"], "r2": r["r2"]})
 
-    out = result_path(dev_results_dir("05_forecasting"), "norma_versions.csv")
+    out = result_path(dev_results_dir("05_forecasting"),
+                      SPLIT_GROUPS[args.split_group][1])
     df = pd.DataFrame(rows)
     df.to_csv(out, index=False)
     print(f"\nWrote {out} ({len(df)} rows)")
@@ -484,11 +502,17 @@ def main():
     g.add_argument("--norma_versions", action="store_true",
                    help="compare the NORMA model versions with each other on the dev test split "
                         "(no dataset) -> results/norma_versions.csv")
-    g.add_argument("--versions", nargs="+", default=VERSIONS)
+    g.add_argument("--split_group", choices=sorted(SPLIT_GROUPS), default="sequence",
+                   help="which group of arms to compare; they cannot be mixed, since "
+                        "--split_by patient changes the test set")
+    g.add_argument("--versions", nargs="+", default=None,
+                   help="override the arms for --split_group (they must share a test split)")
     g.add_argument("--log_dir", default=MODEL_LOG_DIR)
     args = p.parse_args()
 
     if args.norma_versions:
+        if args.versions is None:
+            args.versions = SPLIT_GROUPS[args.split_group][0]
         run_norma_versions(args)
         return
     if args.dataset is None:
@@ -761,13 +785,14 @@ NORMA_VERSIONS = {r: (models.label(NV_KEY[r], short=True), models.color(NV_KEY[r
                   for r in NV_RUNS}
 
 
-def load_norma_versions():
-    path = find_in(dev_results_dir("05_forecasting"), "norma_versions.csv")
+def load_norma_versions(name="norma_versions.csv", versions=None):
+    path = find_in(dev_results_dir("05_forecasting"), name)
     if not os.path.exists(path):
         return None
     d = pd.read_csv(path, keep_default_na=False, na_values=[""])
     d["analyte"] = d["analyte"].replace("", "NA").fillna("NA")
-    d = to_numeric(d[~d.analyte.isin(EXCLUDE_ANALYTES) & d.version.isin(list(NORMA_VERSIONS))].copy())
+    keep = list(versions if versions is not None else NORMA_VERSIONS)
+    d = to_numeric(d[~d.analyte.isin(EXCLUDE_ANALYTES) & d.version.isin(keep)].copy())
     return d if len(d) else None
 
 
@@ -775,7 +800,7 @@ def _nv_shown(d):
     return [v for v in NORMA_VERSIONS if (d.version == v).any()]
 
 
-def _nv_paired(sub, metric, arms, n_boot=2000, seed=0):
+def _nv_paired(sub, metric, arms, n_boot=2000, seed=0, baseline=None):
     """Paired change from the baseline arm, over the analytes both versions scored.
 
     Every version is scored on identical target rows (05_forecasting.py --norma_versions inner-joins
@@ -786,7 +811,7 @@ def _nv_paired(sub, metric, arms, n_boot=2000, seed=0):
     Relative (%) for the error metrics, whose units differ across analytes;
     absolute for R2, which is already unitless.
     """
-    base = sub[sub.version == NORMA_RUN_ID].set_index("analyte")
+    base = sub[sub.version == (baseline or NORMA_RUN_ID)].set_index("analyte")
     rng = np.random.default_rng(seed)
     out = {}
     for v in arms:
@@ -859,6 +884,50 @@ def fig_summary_norma():
                              zero_line=True)}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# summary_norma_patient: the patient-level split group (R3 comment 11).
+# Separate from summary_norma because --split_by patient holds out whole
+# patients, so these arms share no test row with the covariate ladder and the
+# two cannot appear on one paired plot.
+PATIENT_BASE = "p_base"
+PATIENT_VERSION_STYLE = {r: (models.label(f"NORMA_{r}", short=True), models.color(f"NORMA_{r}"))
+                         for r in PATIENT_VERSIONS}
+
+
+def fig_summary_norma_patient():
+    """Each patient-split arm's paired change from p_base, one row per source.
+
+    The chain to read is p_base -> p_causal -> p_full: p_causal isolates the
+    effect of masking the cross-attention block, p_full adds every draw in the
+    patient's past on top of it. p_co answers whether the flat q_co result on
+    the sequence split was an artifact of that split, since conditioning on a
+    patient's other analytes is exactly what a patient-analyte split leaks
+    across (jobs/run_patient_split.sh).
+    """
+    d = load_norma_versions("norma_versions_patient.csv", versions=PATIENT_VERSIONS)
+    if d is None or PATIENT_BASE not in set(d.version):
+        return None
+    arms = [v for v in PATIENT_VERSIONS if v != PATIENT_BASE and (d.version == v).any()]
+    if not arms:
+        return None
+    rows = []
+    for s in DEV_COHORTS:
+        sub = d[d.source == s]
+        if not len(sub):
+            rows.append((s, None)); continue
+        stats = {metric: _nv_paired(sub, metric, arms, baseline=PATIENT_BASE)
+                 for metric, _ in NV_METRICS}
+        rows.append((s, {v: {metric: stats[metric].get(v, (np.nan,) * 3)
+                             for metric, _ in NV_METRICS}
+                         for v in arms if any(v in stats[m] for m, _ in NV_METRICS)}))
+    metrics = [(k, lab.replace("plain NORMA", "p_base"), None) for k, lab in NV_METRICS]
+    return {None: dot_blocks(rows, metrics, arms,
+                             {v: PATIENT_VERSION_STYLE[v][1] for v in arms},
+                             {v: PATIENT_VERSION_STYLE[v][0] for v in arms},
+                             label_rotation=270, row_labels=True, share_x=False,
+                             zero_line=True)}
+
+
 # The arms differ by a fraction of a percent, so an analyte needs a lot of targets
 # before its cells mean anything: EHRSHOT has 74 MPV targets and 1 TGL target, and MPV
 # is where the arms look most different (a 29% spread) purely because of that. Cells
@@ -922,6 +991,7 @@ FIGURES = [
     FigSpec("05_forecasting", "by_analyte", fig_by_analyte, False, (), None),   # by_analyte_{mae,mape,r2}[_normal]
     FigSpec("05_forecasting", "summary_norma", fig_summary_norma, False, (), None),
     FigSpec("05_forecasting", "by_analyte_norma", fig_by_analyte_norma, False, (), None),
+    FigSpec("05_forecasting", "summary_norma_patient", fig_summary_norma_patient, False, (), None),
 ]
 
 
@@ -1005,3 +1075,131 @@ TABLES = [
 
 if __name__ == "__main__":
     main()
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# What each NORMA arm actually is.
+# ══════════════════════════════════════════════════════════════════════════
+# The arms differ along four axes that the short labels cannot carry -- the
+# output head, the loss, the per-measurement covariates and the train/test
+# split -- and several were launched but never finished. One row per arm, read
+# from the run's own checkpoint rather than from a hand-maintained list, so an
+# arm cannot drift from what it was trained as.
+
+# Arm -> (group, the flags run_*.sh passes on top of that group's COMMON).
+# COMMON is NORMA2, d_model 64 / 4 heads / 8 layers, 3 states, batch 32,
+# lr 1e-4, 50 epochs, patience 10, seed 42, --train combined --test combined,
+# data_version v3.
+ARM_GROUPS = {
+    "q_age_set":     ("covariate", "--use_age_t --use_setting"),
+    "334f7e21":      ("covariate", ""),
+    "q_age":         ("covariate", "--use_age_t"),
+    "q_set":         ("covariate", "--use_setting"),
+    "q_co":          ("covariate", "--use_coanalytes"),
+    "q_age_co":      ("covariate", "--use_age_t --use_coanalytes"),
+    "q_set_co":      ("covariate", "--use_setting --use_coanalytes"),
+    "q_age_set_co":  ("covariate", "--use_age_t --use_setting --use_coanalytes"),
+    "q_co_q":        ("covariate", "--use_coanalytes --query_coanalytes"),
+    "p_base":        ("patient split", "--split_by patient"),
+    "p_co":          ("patient split", "--split_by patient --use_coanalytes"),
+    "p_causal":      ("patient split", "--split_by patient --causal_memory"),
+    "p_full":        ("patient split", "--split_by patient --use_full_panel --causal_memory"),
+    "pa_k5":         ("prior-anchored", "--loss QuantilePriorLoss --prior_mode anchor --prior_k 5"),
+    "pa_k20":        ("prior-anchored", "--loss QuantilePriorLoss --prior_mode anchor --prior_k 20"),
+    "pa_tau":        ("prior-anchored", "--loss QuantilePriorLoss --prior_mode anchor --prior_k 5 --prior_tau 365"),
+    "pf_k5":         ("prior-anchored", "--loss QuantilePriorLoss --prior_mode floor --prior_k 5"),
+    "pg_k5":         ("prior-anchored", "--loss QuantilePriorLoss --prior_mode gate --output_mode gate --prior_k 5"),
+    "pn_k5":         ("prior-anchored", "--loss StudentTNLLLoss --output_mode nig --nig_nu0 5"),
+    "gk_k5":         ("prior-anchored", "--loss NORMALoss --output_mode gaussian --align_by_n --prior_k 5 --lambda_align 0.1"),
+}
+ARM_IDEA = {
+    "q_age_set": "the published model",
+    "334f7e21": "no per-draw covariate; the ablation's reference point",
+    "q_age": "age at each draw",
+    "q_set": "care setting",
+    "q_co": "same-draw co-analytes on the history tokens",
+    "q_age_co": "leave-one-out from full: no setting",
+    "q_set_co": "leave-one-out from full: no age",
+    "q_age_set_co": "every covariate",
+    "q_co_q": "co-analytes on the query token too, so the encoder cannot use "
+              "what the query cannot",
+    "p_base": "reference point under a patient-level split",
+    "p_co": "was the q_co null an artifact of the patient-analyte split?",
+    "p_causal": "effect of masking the cross-attention block",
+    "p_full": "every draw in the patient's past, all analytes, irregular times",
+    "pa_k5": "pinball + expected pinball under the population prior, weight k/(n+k)",
+    "pa_k20": "same, stronger prior",
+    "pa_tau": "same, with n decaying by time since each draw",
+    "pf_k5": "soft floor on the interval width instead of an anchor",
+    "pg_k5": "quantiles gated toward the state prior",
+    "pn_k5": "conjugate normal-inverse-gamma head",
+    "gk_k5": "Gaussian head, KL-aligned to the population interval, n-weighted",
+}
+
+
+def _arm_status(run_id):
+    """What exists on disk for this arm: epochs trained, predictions, methods."""
+    import json
+    d = os.path.join(MODEL_LOG_DIR, run_id)
+    out = {"epochs": None, "loss": None, "head": None, "preds": False}
+    for name in ("checkpoint_latest.json", "checkpoint_best.json"):
+        p = os.path.join(d, name)
+        if os.path.exists(p):
+            try:
+                j = json.load(open(p))
+            except Exception:
+                continue
+            hp = j.get("hyperparameters", {}) or {}
+            out["epochs"] = j.get("epoch")
+            out["loss"] = hp.get("loss")
+            out["head"] = hp.get("output_mode")
+            break
+    out["preds"] = os.path.exists(os.path.join(d, "predictions_combined.csv"))
+    out["dir"] = os.path.isdir(d)
+    return out
+
+
+def table_norma_arms():
+    """One row per NORMA arm: head, loss, covariates, split and how far it got."""
+    from run_names import RUN_COVARIATES
+    rows = []
+    for run_id, (group, flags) in ARM_GROUPS.items():
+        st = _arm_status(run_id)
+        if not st["dir"]:
+            state = "not run"
+        elif st["preds"]:
+            state = "trained, scored"
+        elif st["epochs"] is not None:
+            state = f"stopped at epoch {st['epochs']}"
+        else:
+            state = "started, no checkpoint"
+        rows.append({
+            "Arm": run_id,
+            "Group": group,
+            "Head": st["head"] or ("quantile" if group != "prior-anchored" else "--"),
+            "Loss": st["loss"] or ("QuantileLoss" if group != "prior-anchored" else "--"),
+            "Covariates": RUN_COVARIATES.get(run_id, "--"),
+            "Idea": ARM_IDEA.get(run_id, ""),
+            "Status": state,
+            "Flags": flags or "(none)",
+        })
+    df = pd.DataFrame(rows)
+
+    cols = ["Arm", "Group", "Head", "Loss", "Covariates", "Status"]
+    lines = [r"\begin{table}[ht]", r"\centering", r"\footnotesize",
+             r"\begin{tabular}{llllp{4.2cm}l}", r"\toprule",
+             " & ".join(cols) + r" \\", r"\midrule"]
+    last = None
+    for _, r in df.iterrows():
+        if last is not None and r["Group"] != last:
+            lines.append(r"\midrule")
+        last = r["Group"]
+        lines.append(" & ".join(str(r[c]).replace("_", r"\_") for c in cols) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}", r"\end{table}"]
+    save_table("05_forecasting", "norma_arms", lines, df)
+    return ["norma_arms"]
+
+
+TABLES = TABLES + [
+    TableSpec("05_forecasting", "norma_arms", table_norma_arms, False, (), None),
+]

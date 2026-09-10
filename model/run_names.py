@@ -33,7 +33,17 @@ RUN_COVARIATES = {
     "pg_k5": "sex, age, setting; learned gate k=5",
     "pn_k5": "sex, age, setting; conjugate NIG head",
     "gk_k5": "sex, age, setting; Gaussian KL-aligned k=5",
+    # patient-level split arms (run_patient_split.sh, R3 comment 11). Same
+    # COMMON as the covariate ablation minus --use_age_t/--use_setting, plus
+    # --split_by patient, so their reference point is p_base and not 334f7e21.
+    "p_base": "sex; patient split",
+    "p_co": "sex, analytes; patient split",
+    "p_causal": "sex, causal mask; patient split",
+    "p_full": "sex, every past draw, causal mask; patient split",
 }
+
+# the patient-split group compares only within itself (different test set)
+PATIENT_SPLIT_ORDER = ["p_base", "p_co", "p_causal", "p_full"]
 
 # Legend form: "NORMA | sex, age, setting". Same words, no key needed.
 RUN_SHORT = {k: f"NORMA | {v}" for k, v in RUN_COVARIATES.items()}

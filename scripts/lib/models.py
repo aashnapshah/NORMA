@@ -117,6 +117,12 @@ MODELS = {m.key: m for m in [
     _m("NORMA_q_set_co", arm_label("q_set_co"), RUN_SHORT["q_set_co"], "NORMA_arm", "norma_arm", "D", ['q_set_co']),
     _m("NORMA_q_age_set_co", arm_label("q_age_set_co"), RUN_SHORT["q_age_set_co"], "NORMA_arm", "norma_arm", "D", ['q_age_set_co']),
     _m("NORMA_q_co_q", arm_label("q_co_q"), RUN_SHORT["q_co_q"], "NORMA_arm", "norma_arm", "D", ['q_co_q']),
+    # patient-split arms: their own group, compared against p_base rather than
+    # against the covariate ladder (holding out whole patients changes the test set)
+    _m("NORMA_p_base", arm_label("p_base"), RUN_SHORT["p_base"], "NORMA_arm", "norma_arm", "D", ['p_base']),
+    _m("NORMA_p_co", arm_label("p_co"), RUN_SHORT["p_co"], "NORMA_arm", "norma_arm", "D", ['p_co']),
+    _m("NORMA_p_causal", arm_label("p_causal"), RUN_SHORT["p_causal"], "NORMA_arm", "norma_arm", "D", ['p_causal']),
+    _m("NORMA_p_full", arm_label("p_full"), RUN_SHORT["p_full"], "NORMA_arm", "norma_arm", "D", ['p_full']),
 ]}
 
 # Colours, kept next to the registry rather than inside it so a family ramp is
@@ -145,6 +151,11 @@ COLORS = {
     "NORMA_q_co": HUES["gaussian"],
     "NORMA_334f7e21": HUES["norma_alt"],
     "NORMA_q_co_q": lighten(HUES["gaussian"], 0.45),
+    # patient-split group: reuses the same hues, read only against each other
+    "NORMA_p_base": HUES["norma_alt"],
+    "NORMA_p_co": HUES["gaussian"],
+    "NORMA_p_causal": HUES["cohen"],
+    "NORMA_p_full": HUES["perri"],
 }
 
 # Which query gets an open marker: the realized-state forecast is not a

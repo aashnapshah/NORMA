@@ -43,7 +43,9 @@
 #         RESUME=1 bash run_patient_split.sh p_base  # resume an interrupted arm
 #         EVAL=1   bash run_patient_split.sh p_base  # eval only, from checkpoint_latest
 set -euo pipefail
-cd "$(dirname "$0")"
+# these scripts moved into model/jobs/; train.py is one level up, and the
+# sbatch body below inherits this working directory
+cd "$(dirname "$0")/.."
 mkdir -p logs/patient_split
 
 declare -A FLAGS=(

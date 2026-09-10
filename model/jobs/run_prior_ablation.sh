@@ -29,7 +29,9 @@
 #         RESUME=1 bash run_prior_ablation.sh pa_k5
 #         EVAL=1 bash run_prior_ablation.sh pa_k5    # predict/evaluate only
 set -euo pipefail
-cd "$(dirname "$0")"
+# these scripts moved into model/jobs/; train.py is one level up, and the
+# sbatch body below inherits this working directory
+cd "$(dirname "$0")/.."
 mkdir -p logs/prior_ablation
 
 declare -A FLAGS=(

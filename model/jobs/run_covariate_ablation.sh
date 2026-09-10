@@ -34,7 +34,9 @@
 #                                                        #  from checkpoint_latest; training done)
 #         Compare afterwards with:  python compare_ablation.py
 set -euo pipefail
-cd "$(dirname "$0")"
+# these scripts moved into model/jobs/; train.py is one level up, and the
+# sbatch body below inherits this working directory
+cd "$(dirname "$0")/.."
 mkdir -p logs/ablation
 
 declare -A FLAGS=(
