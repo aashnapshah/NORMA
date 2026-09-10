@@ -111,7 +111,13 @@ NORMA_RUN_ID = "q_age_set"
 # every cohort's ref_intervals, so only 07_classify onward needs re-running.
 # q_age_co, q_set_co and q_co_q are NOT here: they have no ref_intervals rows
 # yet, which needs 04_refs.py --only norma per cohort first.
-NORMA_ABLATION_RUN_IDS = ["334f7e21", "q_age", "q_set", "q_co", "q_age_set_co"]
+# The four patient-split arms are here so the cohort-level figures can carry
+# them: their split changes the dev test set, not the external cohorts, where
+# every method is scored on the same rows regardless of how it was trained.
+# Only the paired dev forecasting figure has to keep them apart.
+NORMA_ABLATION_RUN_IDS = ["334f7e21", "q_age", "q_set", "q_co", "q_age_co", "q_set_co",
+                          "q_age_set_co", "q_co_q",
+                          "p_base", "p_co", "p_causal", "p_full"]
 # Which weights of NORMA_RUN_ID every script loads (04_refs.py (norma step),
 # 16_benchmark, predict_states). "latest" (epoch 39) is what produced the
 # published dev-set predictions_combined.csv and all leak-free variant files;
