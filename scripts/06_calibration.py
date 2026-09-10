@@ -650,8 +650,68 @@ def fig_conformal_norma():
     return {"": fig}
 
 
+def _load_arm_calibration():
+    """Per-analyte dev-test calibration for every arm that has one.
+
+    model/logs/<arm>/calibration_test.csv is written per training run, so this
+    needs no pipeline stage: it is the one view where an arm's coverage can be
+    read without 04_refs having been run over a cohort. Arms trained under
+    --split_by patient measure it on their own held-out patients rather than the
+    sequence split, which the row labels carry.
+    """
+    from datasets import MODEL_LOG_DIR
+    out = {}
+    for run in ALL_ARMS:
+        p = os.path.join(MODEL_LOG_DIR, run, "calibration_test.csv")
+        if not os.path.exists(p):
+            continue
+        d = pd.read_csv(p, keep_default_na=False, na_values=[""])
+        d = d[~d["code"].isin(EXCLUDE_ANALYTES)]
+        if len(d):
+            out[f"NORMA_{run}"] = to_numeric(d)
+    return out
+
+
+def fig_calibration_dev_norma():
+    """Coverage, width and Pop_RI agreement of every arm on the development test
+    split: median across analytes, whisker = IQR.
+
+    The cohort-level calibration figure can only show the arms 04_refs was run
+    over; this one is written by training itself, so it reaches every arm that
+    finished -- the patient-split arms included, which no cohort figure has.
+    """
+    per_arm = _load_arm_calibration()
+    if len(per_arm) < 2:
+        return {}
+    methods = list(ALL_ARM_METHODS)
+    labels = {m: m.replace("NORMA_", "") for m in methods}
+
+    def stat(d, col, state):
+        sub = d[d["state"] == state] if state else d
+        v = pd.to_numeric(sub[col], errors="coerce").dropna()
+        if not len(v):
+            return (np.nan, np.nan, np.nan)
+        return (float(v.median()), float(v.quantile(0.25)), float(v.quantile(0.75)))
+
+    block = {}
+    for m, d in per_arm.items():
+        block[m] = {"coverage95": stat(d, "coverage95", "normal"),
+                    "width_rel": stat(d, "width_rel", "normal"),
+                    "inside_pop": stat(d, "inside_pop", "normal")}
+    metrics = [("coverage95", "Coverage of 95% interval", None),
+               ("width_rel", r"Width / Pop$_{RI}$ width", None),
+               ("inside_pop", r"Fraction inside Pop$_{RI}$", None)]
+    fig = dot_blocks([("dev test split", block)], metrics, methods,
+                     ALL_ARM_COLORS, labels, W=7.0, row_h=0.16,
+                     row_labels=True, notes=arm_notes(set(per_arm), methods))
+    for ax in fig.axes[:1]:
+        ax.axvline(0.95, color=DARK, lw=0.6, ls=(0, (3, 2)), zorder=1)
+    return {"": fig}
+
+
 FIGURES = [
     FigSpec("06_calibration", "calibration", fig_calibration, False, (), None),
+    FigSpec("06_calibration", "calibration_dev_norma", fig_calibration_dev_norma, False, (), None),
     FigSpec("06_calibration", "conformal_norma", fig_conformal_norma, False, (), None),
     FigSpec("06_calibration", "calibration_norma", fig_calibration_norma, False, (), None),
     FigSpec("06_calibration", "calibration_dev", fig_calibration_dev, False, (), None),
