@@ -38,6 +38,7 @@ Usage:
 """
 import warnings
 
+import bootstrap  # noqa: F401  -- puts the pipeline's import roots on sys.path
 import numpy as np
 
 warnings.filterwarnings('ignore')

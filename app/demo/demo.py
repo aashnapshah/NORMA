@@ -27,12 +27,14 @@ import pandas as pd
 import torch
 
 # Make the NORMA model + config importable regardless of where you run from.
+# This script lives in app/demo/, so the repo root is two levels up -- it was
+# demo/ until the 2026-09-08 move, and process/ now sits under scripts/.
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(ROOT, "model"))
-sys.path.insert(0, os.path.join(ROOT, "process"))
 
-from config import REFERENCE_INTERVALS          # noqa: E402  population ranges + vocab
+import bootstrap  # noqa: F401,E402  puts the pipeline's import roots on sys.path
+from process.config import REFERENCE_INTERVALS  # noqa: E402  population ranges + vocab
 from utils import create_model                   # noqa: E402  builds NORMA from checkpoint
 
 # Public model weights. run_id q_age_set = NORMA2, quantile head, with age-at-draw and care-setting

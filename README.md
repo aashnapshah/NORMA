@@ -60,11 +60,10 @@ Note: the free hosting tier sleeps when idle, so the first load can take ~30 sec
 
 ### Terminal
 
-Runs a small synthetic dataset ([`demo/demo_patients.csv`](demo/demo_patients.csv), 4 patients) through the public checkpoint:
+Runs a small synthetic dataset ([`app/demo/demo_patients.csv`](app/demo/demo_patients.csv), 4 patients) through the public checkpoint:
 
 ```bash
-cd demo
-python demo.py
+python app/demo/demo.py
 ```
 
 Expected output:
@@ -90,11 +89,11 @@ Expected run time on a normal desktop: about 10 seconds on CPU (plus a one-time 
 `demo.py` accepts any history file with the same columns (`patient_id, sex, age, analyte, day, value`), where `day` is days since the patient's first measurement:
 
 ```bash
-python demo/demo.py --input my_patients.csv       # your data
-python demo/demo.py --horizon 180                 # predict 180 days out
+python app/demo/demo.py --input my_patients.csv   # your data
+python app/demo/demo.py --horizon 180             # predict 180 days out
 ```
 
-Covered analytes are the keys of `REFERENCE_INTERVALS` in [`process/config.py`](process/config.py) (30+ common CBC, metabolic, liver, and lipid tests plus HbA1c).
+Covered analytes are the keys of `REFERENCE_INTERVALS` in [`scripts/process/config.py`](scripts/process/config.py) (30+ common CBC, metabolic, liver, and lipid tests plus HbA1c).
 
 ### Run the web app locally
 
@@ -107,32 +106,46 @@ The app reads its example histories, NORMA bootstrap metrics, benchmark artifact
 ### Train the model (needs processed sequence data)
 
 Training uses longitudinal sequences derived from MIMIC-IV and EHRSHOT, which are access-restricted and not distributed here.
-With processed sequences in `data/processed/`, the two parameterizations reported in the paper are:
+With processed sequences in `data/processed/`, the published model is the quantile
+parameterization, with age at draw and care setting as covariates (run `q_age_set`):
 
 ```bash
-# Gaussian parameterization
-python model/train.py --model NormaLight --loss GaussianNLLLoss --output_mode gaussian --epochs 50
+python model/train.py --model NORMA2 --loss QuantileLoss --output_mode quantile \
+    --use_age_t --use_setting --epochs 50
+```
 
-# Quantile parameterization
-python model/train.py --model NORMA2 --loss QuantileLoss --output_mode quantile --epochs 50
+The earlier Gaussian parameterization is not used for any reported result; its
+architectures live in [`model/legacy.py`](model/legacy.py) so their checkpoints stay
+loadable.
+
+```bash
+python model/train.py --model NormaLight --loss GaussianNLLLoss --output_mode gaussian --epochs 50
 ```
 
 See `python model/train.py --help` for the full list of flags (architecture, batch size, learning rate, etc.).
 
 ### Reproduce the paper results
 
-The validation pipeline (external cohorts, outcome analyses, figures) lives in [`validation/`](validation/); see [`validation/README.md`](validation/README.md) and [`validation/PIPELINE.md`](validation/PIPELINE.md).
+The pipeline (external cohorts, outcome analyses, figures) is the numbered stages in
+[`scripts/`](scripts/), run in order from `02_index_labs.py` to `17_outcomes.py`; each takes
+`--dataset` and `--only <step>`. Launchers for each stage are in
+[`scripts/jobs/`](scripts/jobs/). Outputs land in `results/` (figures, tables and the raw
+per-cohort tables) and are not committed.
 These scripts require the access-restricted clinical cohorts (CHS, eICU-CRD, INSPIRE) and are provided for transparency rather than one-command reproduction.
 
 ## Repository structure
 
 ```
-model/         NORMA architecture, training, inference, loss functions
-process/       raw EHR processing and reference-interval config
-validation/    external-cohort validation pipeline (results + figures)
-app/           interactive Flask web app (deployed on Render)
-manuscript/    figure and table generation for the paper
-demo/          small synthetic dataset + terminal demo script
+model/             NORMA architecture, training, inference, loss functions
+  model/baselines/ reference-interval baselines (Cohen et al. m2/m3/m4, Gaussian, forecasting)
+  model/legacy.py  superseded architectures, kept so old checkpoints load
+scripts/           the numbered pipeline stages, 02_index_labs.py .. 17_outcomes.py
+  scripts/lib/     shared constants, datasets, metrics, figure and model registries
+  scripts/process/ raw EHR processing and reference-interval config
+  scripts/jobs/    SLURM launchers for each stage
+app/               interactive Flask web app (deployed on Render)
+  app/demo/        small synthetic dataset + terminal demo script
+results/           figures, tables and raw per-cohort outputs (regenerated, not committed)
 requirements.txt
 ```
 
