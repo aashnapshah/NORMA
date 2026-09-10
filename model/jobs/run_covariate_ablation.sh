@@ -16,7 +16,7 @@
 #   q_co_q        co-analytes, query sees last panel too  symmetry fix for q_co
 #   q_age_co      age + co-analytes                       leave-one-out from full: -setting
 #   q_set_co      setting + co-analytes                   leave-one-out from full: -age
-# Since 2026-09-03 q_age_set_co is the MAIN model (validation/lib/config.NORMA_RUN_ID);
+# Since 2026-09-04 q_age_set is the MAIN model (scripts/lib/datasets.NORMA_RUN_ID);
 # the ablation is read as leave-one-out from it.
 #
 # Requires ../../data/processed/combined_{sequences,panel}_v3.* (process/covariates.py).

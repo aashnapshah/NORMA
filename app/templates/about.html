@@ -1144,7 +1144,7 @@
           <div class="arch-stat"><div class="arch-stat-val">8</div><div class="arch-stat-lbl">Layers</div></div>
           <div class="arch-stat"><div class="arch-stat-val">4</div><div class="arch-stat-lbl">Heads</div></div>
           <div class="arch-stat"><div class="arch-stat-val">64</div><div class="arch-stat-lbl">Dim</div></div>
-          <div class="arch-stat"><div class="arch-stat-val">{{ (model_meta.n_params / 1000) | round | int }}K</div><div class="arch-stat-lbl">Params</div></div>
+          {% if model_meta.n_params %}<div class="arch-stat"><div class="arch-stat-val">{{ (model_meta.n_params / 1000) | round | int }}K</div><div class="arch-stat-lbl">Params</div></div>{% endif %}
         </div>
         <div style="font-size:0.8rem;color:var(--text-2);line-height:1.65;margin-bottom:0.85rem">
           <strong style="color:var(--text-1)">Causal masking</strong> ensures each step attends only to past observations — no future leakage.

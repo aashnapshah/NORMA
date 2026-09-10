@@ -6,7 +6,7 @@ import os
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from data import TEST_VOCAB, INVERSE_TEST_VOCAB
 from model import is_quantile_mode
-from utils import *
+from utils import run_model, to_device_batch
 
 CODE_TO_TEST_NAME = {i: test_name for test_name, i in TEST_VOCAB.items()}
 

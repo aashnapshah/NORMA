@@ -6,5 +6,7 @@
 #SBATCH -t 6:00:00
 #SBATCH -p short
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-export PYTHONPATH=../process:.
-python evaluate.py --cohorts eicu inspire --common_rows --output_dir ../validation/results/prediction/raw/cohorts_common
+# output_dir pointed into the validation/ tree that was removed on 2026-09-08;
+# the dev raw results live under results/raw/dev/ now. PYTHONPATH is handled by
+# model/bootstrap.py.
+python evaluate.py --cohorts eicu inspire --common_rows --output_dir ../results/raw/dev --suffix cohorts_common

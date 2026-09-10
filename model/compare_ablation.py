@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+import bootstrap  # noqa: F401  -- puts the pipeline's import roots on sys.path
 from evaluate import calibration_by_analyte, EXCLUDE_CODES  # noqa: E402
 from run_names import arm_label  # noqa: E402
 

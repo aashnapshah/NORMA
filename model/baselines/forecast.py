@@ -189,13 +189,7 @@ def main():
 
     import pandas as pd
 
-    # model/data.py does a bare `from config import ...`, so scripts/process
-    # itself has to be importable, not just scripts/
-    for p in (MODEL_DIR, os.path.join(ROOT_DIR, 'scripts'),
-              os.path.join(ROOT_DIR, 'scripts', 'process')):
-        if p not in sys.path:
-            sys.path.insert(0, p)
-    from data import load_and_split_data
+    from data import load_and_split_data   # local: data.py pulls in torch
 
     p = argparse.ArgumentParser()
     p.add_argument('--source', default='combined')

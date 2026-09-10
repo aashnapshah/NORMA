@@ -1,7 +1,5 @@
 import sys, os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'process'))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
+import bootstrap  # noqa: F401  -- puts the pipeline's import roots on sys.path
 
 import numpy as np
 import pandas as pd
@@ -11,7 +9,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
 
-from config import REFERENCE_INTERVALS
+from process.config import REFERENCE_INTERVALS
 from utils import load_checkpoint, create_model
 from model import is_quantile_mode
 from data import TEST_VOCAB

@@ -20,8 +20,9 @@ conda activate normal   # sksurv/lifelines live here, not in the default python
 
 set -euo pipefail
 MODE=${1:?usage: sbatch jobs/run_eval_forecasting.sh dev|dev_common|eicu|eicu_common|inspire|inspire_common}
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
-export PYTHONPATH=../scripts:../scripts/process:.
+# evaluate.py lives in model/; its relative paths below (../scripts, ../results)
+# assume that as the working directory. model/bootstrap.py handles sys.path.
+cd "$(dirname "${BASH_SOURCE[0]}")/../../model"
 RAW=../results/raw/dev
 case "$MODE" in
   dev)

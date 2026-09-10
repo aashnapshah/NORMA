@@ -15,9 +15,8 @@ import warnings
 if hasattr(pd.errors, 'SettingWithCopyWarning'):
     warnings.filterwarnings('ignore', category=pd.errors.SettingWithCopyWarning)
 
-sys.path.append('../../NORMA/process/')
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'process'))  # repo-relative
-from config import REFERENCE_INTERVALS
+import bootstrap  # noqa: F401  -- puts the pipeline's import roots on sys.path
+from process.config import REFERENCE_INTERVALS
 
 TEST_VOCAB = {test_name: i for i, test_name in enumerate(REFERENCE_INTERVALS.keys())}
 INVERSE_TEST_VOCAB = {v: k for k, v in TEST_VOCAB.items()}

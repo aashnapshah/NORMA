@@ -20,10 +20,12 @@ load_dotenv()
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(ROOT)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, 'model'))
-sys.path.insert(0, os.path.join(PROJECT_ROOT, 'process'))
 sys.path.insert(0, ROOT)
 
-from config import REFERENCE_INTERVALS  # noqa: E402
+# process/ moved under scripts/ on 2026-09-08, which left this import pointing at
+# a directory that no longer exists; model/bootstrap.py owns the path list now.
+import bootstrap  # noqa: F401,E402
+from process.config import REFERENCE_INTERVALS  # noqa: E402
 import benchmarks as bm                  # noqa: E402
 
 # Vocab built directly (data.py pulls in torch at import time)
@@ -75,6 +77,19 @@ def _bootstrap_metrics():
     return out
 
 
+def _n_params_from_checkpoint():
+    """Parameter count, for app/data/metrics/checkpoint_best.json files written
+    before build_assets.py started recording n_params. Returns None on the
+    deployed host, where the checkpoint is fetched from Hugging Face lazily and
+    model/logs/ is absent; the template omits the stat in that case."""
+    p = os.path.join(LOG_DIR, NORMA_RUN_ID, 'checkpoint_best.pth')
+    if not os.path.exists(p):
+        return None
+    import torch
+    sd = torch.load(p, map_location='cpu')['model_state_dict']
+    return int(sum(v.numel() for v in sd.values()))
+
+
 def _model_meta():
     meta = {}
     p = os.path.join(METRICS_DIR, 'checkpoint_best.json')
@@ -89,7 +104,7 @@ def _model_meta():
         'nlayers': hp.get('nlayers', 8),
         'nhead': hp.get('nhead', 4),
         'nstates': hp.get('nstates', 3),
-        'n_params': meta.get('n_params'),
+        'n_params': meta.get('n_params') or _n_params_from_checkpoint(),
         'epoch': meta.get('epoch'),
         'n_tests': len(_covered_tests()),
         'metrics': _bootstrap_metrics(),

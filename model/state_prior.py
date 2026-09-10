@@ -22,8 +22,7 @@ import json
 import argparse
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'process'))
+import bootstrap  # noqa: F401  -- puts the pipeline's import roots on sys.path
 
 STATE_NAMES = ['low', 'normal', 'high']
 

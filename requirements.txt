@@ -1,20 +1,44 @@
-flask>=3.0
+# Pinned as lower bounds; the floors are the versions the published results were
+# produced with. Verified against every `import` in model/, scripts/ and app/.
+
+# --- Core: data handling and the model -------------------------------------
 numpy>=1.24
 pandas>=1.5
+pyarrow>=14.0            # parquet engine for results/raw/ and the CHS bundles
+scipy>=1.10              # truncated-Gaussian and EB fits in baselines/gaussian.py
 torch>=2.0
-gunicorn>=21.0
-huggingface_hub>=0.20
-python-dotenv>=1.0
-scikit-learn>=1.3
-xgboost>=2.0
+safetensors>=0.4         # portable weight export in model/train.py
+tqdm>=4.60
 
-# Manuscript / figures (imported at module load by manuscript/config.py)
+# --- Baselines and statistics ----------------------------------------------
+scikit-learn>=1.3
+xgboost>=2.0             # Cohen et al. m2/m3/m4
+statsmodels>=0.14        # ARIMA / ARIMAX forecasting baselines
+lifelines>=0.27          # Cox models, 13_cox.py
+joblib>=1.2              # parallel reference-interval computation
+
+# --- Figures and tables -----------------------------------------------------
 matplotlib>=3.7
 seaborn>=0.13
+pyfonts>=1.0             # pip-installable font helper used by scripts/lib/figlib.py
 
-# Example: pip-installable font helper used by scripts/plots.py and manuscript/config.py
-pyfonts>=1.0
+# --- Web app (app/) ---------------------------------------------------------
+flask>=3.0
+gunicorn>=21.0
+huggingface_hub>=0.20    # fetches the published checkpoint when logs/ is absent
+python-dotenv>=1.0
 
-# Example: Tectonic is a separate binary (manuscript PDF / standalone tex), not a real PyPI dep for the engine.
-#   brew install tectonic
-#   conda install -c conda-forge tectonic
+# --- Training only ----------------------------------------------------------
+# model/train.py imports wandb at module level, so training needs it even with
+# logging disabled. Nothing else does: utils.py and compare_ablation.py import
+# it lazily. Note that a stale model/wandb/ artifacts directory will shadow a
+# missing install as a namespace package, turning the ImportError into a later
+# AttributeError -- install it rather than relying on that.
+wandb>=0.16
+
+# --- Optional ---------------------------------------------------------------
+# Imported lazily by the one step named; the rest of the pipeline runs without it.
+# scikit-survival>=0.22  # 14_patient_level.py, the survival-model c-index step
+#
+# Tectonic is a separate binary (manuscript PDF), not a PyPI dependency:
+#   brew install tectonic   |   conda install -c conda-forge tectonic

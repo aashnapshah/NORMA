@@ -32,8 +32,7 @@ from torch.utils.data import DataLoader, Sampler
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOTDIR = os.path.dirname(HERE)
-sys.path.insert(0, HERE)
-sys.path.insert(0, os.path.join(ROOTDIR, 'process'))
+import bootstrap  # noqa: F401  -- puts the pipeline's import roots on sys.path
 
 from utils import load_checkpoint, create_model, to_device_batch, run_model
 from model import is_quantile_mode

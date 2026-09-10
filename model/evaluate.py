@@ -3,7 +3,9 @@ Evaluate NORMA forecasting performance.
 
 Two modes:
   1. Called from train.py during training → saves per-run metrics to logs/
-  2. Standalone → compares NORMA runs + baselines → validation/results/dev/raw/prediction/raw/
+  2. Standalone → compares NORMA runs + baselines → results/raw/dev/
+     (driven by scripts/jobs/run_eval_forecasting.sh and
+     model/jobs/run_eval_cohorts_common.sh; the stage scripts do not call it)
 
 Usage:
     python evaluate.py
@@ -21,13 +23,8 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 warnings.filterwarnings('ignore')
 
+import bootstrap  # noqa: F401  -- puts the pipeline's import roots on sys.path
 ROOTDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# process/ moved under scripts/ in the 2026-09-08 layout change; scripts/ carries
-# `process.config`, scripts/process/ the bare `from config import ...` model/ does
-sys.path.insert(0, os.path.join(ROOTDIR, 'scripts'))
-sys.path.insert(0, os.path.join(ROOTDIR, 'scripts', 'process'))
-sys.path.insert(0, ROOTDIR)
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from process.config import REFERENCE_INTERVALS
 from data import TEST_VOCAB, CODE_TO_TEST_NAME

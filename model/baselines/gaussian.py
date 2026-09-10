@@ -62,6 +62,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
+from common import REFERENCE_INTERVALS, detect_cols, sex_key
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(os.path.dirname(_BASE_DIR))   # norma root
@@ -332,19 +333,6 @@ def estimate_eb_prior(stats, min_patients=20):
     return prior
 
 
-def _popri_lookup():
-    if ROOT_DIR not in sys.path:
-        sys.path.insert(0, ROOT_DIR)
-    from process.config import REFERENCE_INTERVALS
-    return REFERENCE_INTERVALS
-
-
-def _sex_key(sex_val):
-    if isinstance(sex_val, str):
-        return "F" if sex_val[:1].upper() == "F" else "M"
-    return "F" if sex_val == 1 else "M"
-
-
 def _pair_stats_from_values(records):
     """records: iterable of (analyte, sex_key, values_within_popri) -> stats frame."""
     rows = []
@@ -371,7 +359,7 @@ def build_dev_prior(dev_dir=DEFAULT_DEV_DIR, source="combined",
     sequences (target excluded), keeping only values inside the PopRI.
     """
     from cohen import load_dev_sequences
-    ri = _popri_lookup()
+    ri = REFERENCE_INTERVALS
     train_seq, _, _ = load_dev_sequences(dev_dir, source=source)
     keep_src = set(train_sources) if train_sources else None
     pts = {}
@@ -428,7 +416,7 @@ def build_popri_prior(z=1.96):
     the population spread into within- and between-person parts -- the quantity
     a reference interval cannot supply and a fitted artifact used to.
     """
-    ri = _popri_lookup()
+    ri = REFERENCE_INTERVALS
     prior = {}
     for analyte, by_sex in ri.items():
         for sk, entry in by_sex.items():
@@ -484,22 +472,13 @@ def load_or_build_prior(prior_source="cohort", prior_path=None, rebuild=False,
 # Cohort application
 # ---------------------------------------------------------------------------
 
-def _detect_cols(df):
-    return {
-        "pid": "patient_id" if "patient_id" in df.columns else "uniquepid",
-        "analyte": "analyte" if "analyte" in df.columns else "lab_code",
-        "value": "value" if "value" in df.columns else "labresult",
-        "time": "timestamp" if "timestamp" in df.columns else "labresultoffset",
-    }
-
-
 def build_pair_values(split_df, pop_rows):
     """For each pop row (one per patient-analyte pair), collect PopRI-normal
     baseline values.
 
     Returns list of (row_dict, analyte, sex_key, normal_values, pop_low, pop_high).
     """
-    c = _detect_cols(split_df)
+    c = detect_cols(split_df)
     df = split_df[split_df["split"] == "baseline"].dropna(subset=[c["value"]])
     df = df.drop_duplicates(subset=[c["pid"], c["analyte"], c["time"]])
     wanted = set(zip(pop_rows["patient_id"].astype(str), pop_rows["analyte"]))
@@ -521,7 +500,7 @@ def build_pair_values(split_df, pop_rows):
             normal = vals[(vals >= low) & (vals <= high)]
         else:
             normal = np.array([])
-        out.append((row, row["analyte"], _sex_key(row["sex"]), normal, low, high))
+        out.append((row, row["analyte"], sex_key(row["sex"]), normal, low, high))
     return out
 
 

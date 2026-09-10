@@ -24,18 +24,18 @@ set -e
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 echo "=== Step 1: build MIMIC healthy-filter event tables ==="
-python model/baselines/cohen_healthy.py --build --sources mimiciv
+python scripts/process/cohen_events.py --build_healthy --sources mimiciv
 
 echo ""
 echo "=== Step 2: attrition — how much of MIMIC survives the healthy filter? ==="
 python - <<'PYEOF'
 import os, pandas as pd
-CACHE = "validation/artifacts/cohen_healthy"
 for src in ("ehrshot", "mimiciv"):
-    have = [f for f in os.listdir(CACHE) if f.startswith(src)]
+    d = os.path.join("results", "raw", src)
+    have = [f for f in os.listdir(d) if f.startswith("cohen_")] if os.path.isdir(d) else []
     print(f"  {src}: {sorted(have)}")
     for f in sorted(have):
-        n = len(pd.read_parquet(os.path.join(CACHE, f)))
+        n = len(pd.read_parquet(os.path.join(d, f)))
         print(f"      {f}: {n:,} rows")
 PYEOF
 

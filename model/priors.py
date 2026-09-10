@@ -25,7 +25,8 @@ import numpy as np
 import torch
 from scipy.stats import norm
 
-from config import REFERENCE_INTERVALS
+import bootstrap  # noqa: F401  -- puts the pipeline's import roots on sys.path
+from process.config import REFERENCE_INTERVALS
 from data import TEST_VOCAB
 
 QUANTILES = (0.025, 0.25, 0.50, 0.75, 0.975)

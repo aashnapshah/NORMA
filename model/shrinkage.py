@@ -38,11 +38,10 @@ import pandas as pd
 from scipy.stats import norm
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
-sys.path.insert(0, os.path.join(HERE, '..', 'process'))
+import bootstrap  # noqa: F401  -- puts the pipeline's import roots on sys.path
 from evaluate import EXCLUDE_CODES  # noqa: E402
 from data import TEST_VOCAB  # noqa: E402
-from config import REFERENCE_INTERVALS  # noqa: E402
+from process.config import REFERENCE_INTERVALS  # noqa: E402
 
 QCOLS = ['q025', 'q25', 'q50', 'q75', 'q975']
 LEVELS = np.array([0.025, 0.25, 0.50, 0.75, 0.975])
