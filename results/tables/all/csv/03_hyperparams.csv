@@ -1,0 +1,9 @@
+Component,NORMA
+Temporal encoding,Log-delta-t + periodic
+Health-state encoding,Ternary (low / normal / high)
+Laboratory values,Within-sequence normalization
+Age representation,Binned (decade-wide)
+Context token,Yes
+Output head,"Quantile ($\tau \in \{.025,.25,.50,.75,.975\}$)"
+Architecture,"8 layers, d\_model 64, 4 heads"
+Training,"Adam, lr $10^{-4}$, weight decay $10^{-3}$, batch 32, early stopping (patience 10)"

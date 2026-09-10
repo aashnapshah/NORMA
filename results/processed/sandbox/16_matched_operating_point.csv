@@ -1,0 +1,17 @@
+analyte,method,outcome,subset,n_patients,n_events,anchor,sensitivity,specificity,ppv,n_flagged
+WBC,PerRI,mortality,pop_normal,23.0,4.0,native,0.5,0.9473684210526316,0.6666666666666666,3.0
+WBC,PerRI,mortality,pop_normal,23.0,4.0,rate_of:PerRI,0.5,0.9473684210526316,0.6666666666666666,3.0
+WBC,NORMA_q_age_set,mortality,pop_normal,23.0,4.0,native,0.5,0.8947368421052632,0.5,4.0
+WBC,NORMA_q_age_set,mortality,pop_normal,23.0,4.0,rate_of:PerRI,0.25,0.8947368421052632,0.3333333333333333,3.0
+WBC,PerRI,t2d,pop_normal,23.0,2.0,native,0.0,0.8571428571428571,0.0,3.0
+WBC,PerRI,t2d,pop_normal,23.0,2.0,rate_of:PerRI,0.0,0.8571428571428571,0.0,3.0
+WBC,NORMA_q_age_set,t2d,pop_normal,23.0,2.0,native,0.0,0.8095238095238095,0.0,4.0
+WBC,NORMA_q_age_set,t2d,pop_normal,23.0,2.0,rate_of:PerRI,0.0,0.8571428571428571,0.0,3.0
+WBC,PerRI,ckd,pop_normal,23.0,3.0,native,0.3333333333333333,0.9,0.3333333333333333,3.0
+WBC,PerRI,ckd,pop_normal,23.0,3.0,rate_of:PerRI,0.3333333333333333,0.9,0.3333333333333333,3.0
+WBC,NORMA_q_age_set,ckd,pop_normal,23.0,3.0,native,0.3333333333333333,0.85,0.25,4.0
+WBC,NORMA_q_age_set,ckd,pop_normal,23.0,3.0,rate_of:PerRI,0.0,0.85,0.0,3.0
+WBC,PerRI,anemia_unspecified,pop_normal,23.0,4.0,native,0.25,0.8947368421052632,0.3333333333333333,3.0
+WBC,PerRI,anemia_unspecified,pop_normal,23.0,4.0,rate_of:PerRI,0.25,0.8947368421052632,0.3333333333333333,3.0
+WBC,NORMA_q_age_set,anemia_unspecified,pop_normal,23.0,4.0,native,0.5,0.8947368421052632,0.5,4.0
+WBC,NORMA_q_age_set,anemia_unspecified,pop_normal,23.0,4.0,rate_of:PerRI,0.5,0.9473684210526316,0.6666666666666666,3.0

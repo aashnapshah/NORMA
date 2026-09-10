@@ -1,0 +1,4 @@
+split,n_patients,n_sequences,age_mean,age_std,pct_female,pct_male,span_days_median,span_days_q25,span_days_q75
+all,45,597,61.2,14.0,46.7,53.3,5367.0,5280.0,5423.0
+baseline,45,597,59.9,14.3,46.7,53.3,3598.0,3552.0,3624.0
+index,45,528,68.1,13.6,46.7,53.3,1671.0,1609.0,1764.0
