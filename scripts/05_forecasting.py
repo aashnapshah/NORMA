@@ -824,6 +824,14 @@ NV_METRICS = [("mae", "Change in MAE (%)"), ("mape", "Change in MAPE (%)"),
 def fig_summary_norma():
     """Each arm's paired change from plain NORMA, one row per development source.
 
+    Read the co-analyte arms (q_co, q_co_q, q_age_co, q_set_co, q_age_set_co)
+    with the split in mind: every arm here uses the published patient-analyte
+    split, where one patient's other analytes can sit across the train/test
+    boundary. That is fine while a model sees only the target analyte, and not
+    fine once it conditions on co-analytes (jobs/run_patient_split.sh, R3
+    comment 11). The p_* arms re-run that question under --split_by patient and
+    cannot appear here, because holding out whole patients changes the test set.
+
     Left of the dashed line is better for MAE and MAPE, right of it for R2. The
     baseline arm is the dashed line itself rather than a row of zeros. Each source
     gets its own x axis (share_x=False): EHRSHOT and MIMIC-IV differ by ~20% on MAE
