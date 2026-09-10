@@ -214,7 +214,7 @@ class NORMA(nn.Module):
     def forward(self, x_h, s_h, t_h, sex, age, lab, s_next, t_next, pad_mask=None):
         B, T = x_h.shape[:2]
         sex = sex.view(-1).long()
-        age = age.view(-1).float()
+        age = age.view(-1, 1).float()   # (B, 1) for nn.Linear(1, d_model), as NormaLight does
         lab = lab.view(-1).long()
         s_h = s_h.long()
         s_next = s_next.view(-1).long()
