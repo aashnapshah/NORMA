@@ -105,9 +105,13 @@ NORMA_RUN_ID = "q_age_set"
 # contains (lib/models.RUN_COVARIATES). q_age_co, q_set_co and q_co_q are
 # appended once trained and pushed through 04_refs.py (norma step).
 # Shown as an additive ladder: sex -> +age -> +setting (main) -> +analytes.
-# q_set / q_co (setting-only, analytes-only) exist in ref_intervals but are not
-# shown: Aashna 2026-09-03, "extra stuff for not that much new info".
-NORMA_ABLATION_RUN_IDS = ["334f7e21", "q_age", "q_age_set_co"]
+# q_set and q_co (setting-only, analytes-only) were left out on 2026-09-03 as
+# "extra stuff for not that much new info", and added back on 2026-09-10 so the
+# ablation figures show the whole ladder. Both already have norma_<arm> rows in
+# every cohort's ref_intervals, so only 07_classify onward needs re-running.
+# q_age_co, q_set_co and q_co_q are NOT here: they have no ref_intervals rows
+# yet, which needs 04_refs.py --only norma per cohort first.
+NORMA_ABLATION_RUN_IDS = ["334f7e21", "q_age", "q_set", "q_co", "q_age_set_co"]
 # Which weights of NORMA_RUN_ID every script loads (04_refs.py (norma step),
 # 16_benchmark, predict_states). "latest" (epoch 39) is what produced the
 # published dev-set predictions_combined.csv and all leak-free variant files;
