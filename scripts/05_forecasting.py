@@ -421,6 +421,16 @@ def run_norma_versions(args):
         idx = pd.MultiIndex.from_frame(d[NV_KEYS])
         common = idx if common is None else common.intersection(idx)
     print(f"  common test rows across {len(preds)} versions: {len(common):,}")
+    if len(common) == 0:
+        # Writing here would replace a good file with an empty one, which is what
+        # happened when the patient-split arms (p_base, p_co, p_causal, p_full,
+        # trained with --split_by patient) were passed alongside the
+        # sequence-split covariate arms: their test rows are different sequences,
+        # so the intersection is empty by construction.
+        raise SystemExit(
+            "No test row is shared by all versions, so nothing can be compared "
+            "pairwise. Versions trained with different --split_by values do not "
+            "share a test split; compare them separately.")
 
     src = pd.read_csv(PID_SOURCE).set_index("pid")["source"]
     rows = []
@@ -442,7 +452,12 @@ def run_norma_versions(args):
         sub = df[df.source == s]
         if not len(sub):
             continue
-        w = sub.groupby("version").apply(lambda g: np.average(g.mae, weights=g.n)).sort_values()
+        # skip analytes _metrics could not score (n < 2, e.g. EHRSHOT has one
+        # TGL target): np.average propagates a single NaN to the whole mean
+        def _wmean(g):
+            ok = np.isfinite(g.mae) & np.isfinite(g.n) & (g.n > 0)
+            return np.average(g.mae[ok], weights=g.n[ok]) if ok.any() else np.nan
+        w = sub.groupby("version")[["mae", "n"]].apply(_wmean).sort_values()
         print(f"  {s:8s} weighted mean MAE: " + "  ".join(f"{k} {v:.3f}" for k, v in w.items()))
 
 
@@ -732,8 +747,14 @@ def fig_by_analyte():
 # norma_versions.csv is keyed by bare training run id; the registry keys the same
 # arms as the rest of the pipeline sees them (NORMA / NORMA_<arm>), so the labels
 # and colours here are the ones 06_calibration and 07_classify use for the arms.
-NV_RUNS = [NORMA_RUN_ID] + list(ABLATION_RUN_IDS)
-NV_KEY = {NORMA_RUN_ID: "NORMA", **{r: f"NORMA_{r}" for r in ABLATION_RUN_IDS}}
+# Every covariate arm, in the additive-ladder order of run_names.RUN_ORDER, not
+# just the three that datasets.NORMA_ABLATION_RUN_IDS carries through the rest of
+# the pipeline. This figure is the one place the arms are compared with each
+# other, so showing the whole ladder is the point of it; _nv_shown() still drops
+# any arm that norma_versions.csv does not contain.
+from run_names import RUN_ORDER  # noqa: E402
+NV_RUNS = [NORMA_RUN_ID] + [r for r in RUN_ORDER if r != NORMA_RUN_ID]
+NV_KEY = {NORMA_RUN_ID: "NORMA", **{r: f"NORMA_{r}" for r in NV_RUNS if r != NORMA_RUN_ID}}
 # Short labels: this figure is about the forecast, so the baseline arm reads
 # "NORMA" rather than the interval's NORMA_RI.
 NORMA_VERSIONS = {r: (models.label(NV_KEY[r], short=True), models.color(NV_KEY[r]))
