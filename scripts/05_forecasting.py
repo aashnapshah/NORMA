@@ -398,13 +398,27 @@ def run_cohort(args):
 # ----------------------------------------------------------------- --norma_versions (dev test split)
 
 def _load_version(run_id, log_dir):
-    """Test-split rows of one version: pid, code, t_next, x_next, q50."""
+    """Test-split rows of one version: pid, code, t_next, x_next and the centre.
+
+    The quantile head writes q50; the Gaussian and NIG heads write mu and no
+    quantiles at all, so the centre column has to be chosen per run rather than
+    assumed -- otherwise a prior-anchored arm cannot be scored beside the
+    covariate arms it is meant to be compared with. Renamed to q50 so every
+    caller downstream sees one name.
+    """
     path = os.path.join(log_dir, run_id, "predictions_combined.csv")
     if not os.path.exists(path):
         return None
-    df = pd.read_csv(path, usecols=NV_KEYS + ["x_next", "q50", "split"],
+    have = set(pd.read_csv(path, nrows=0).columns)
+    centre = "q50" if "q50" in have else "mu"
+    if centre not in have:
+        print(f"  skip {run_id}: neither q50 nor mu in predictions_combined.csv")
+        return None
+    df = pd.read_csv(path, usecols=NV_KEYS + ["x_next", centre, "split"],
                      keep_default_na=False, na_values=[""])
     df = df[df.split == "test"].drop(columns="split")
+    if centre != "q50":
+        df = df.rename(columns={centre: "q50"})
     df["code"] = df["code"].replace("", "NA").fillna("NA")   # sodium reads as NaN
     return df[~df.code.isin(set(EXCLUDE_LABS))]
 
