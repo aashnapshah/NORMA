@@ -355,10 +355,55 @@ class BaseDataset(ABC):
     # Per-patient Gaussian fits to PopRI-normal history (see gaussian.py)
     gaussian_models = ["mle", "trunc", "eb"]
 
+    norma_alias = None
+    # A cohort the current model was never run on scores the NORMA run it does have as
+    # NORMA, instead of reporting no NORMA at all.  Only where that is the situation:
+    # eICU and INSPIRE carry the configured runs, so nothing is ever renamed there.
+    auto_norma_alias = False
+
+    def _resolve_alias(self, df):
+        """The NORMA run to score as the main one: --norma_alias, else the single run the
+        cohort has when none of the configured ones are there, else nothing."""
+        if self.norma_alias:
+            return self.norma_alias
+        if not self.auto_norma_alias or self.no_norma or not self.run_ids:
+            return None
+        runs = {str(m)[len("norma_"):] for m in df["method"].unique() if str(m).startswith("norma_")}
+        if not runs or runs & set(self.run_ids):
+            return None
+        if len(runs) > 1:
+            print(f"  several NORMA runs on this cohort and none is configured {sorted(runs)}; "
+                  f"pass --norma_alias to pick one")
+            return None
+        return runs.pop()
+
+    def _alias_norma(self, df):
+        """norma_<RUN> rows stand in for the main run's, where the main model was never
+        applied (CHS).  The main run's own rows win if present."""
+        if df is None or "method" not in df.columns:
+            return df
+        alias = self._resolve_alias(df)
+        if not alias:
+            return df
+        old, new = f"norma_{alias}", f"norma_{self.primary_norma_run}"
+        is_old = df["method"] == old
+        if not is_old.any():
+            return df
+        if (df["method"] == new).any():
+            return df[~is_old]
+        if not getattr(self, "_alias_said", False):
+            print(f"  NORMA: this cohort has no {self.primary_norma_run} rows; scoring its "
+                  f"{alias} rows as NORMA (--norma_alias to choose, --no_norma to drop them)")
+            self._alias_said = True
+        df = df.copy()
+        df.loc[is_old, "method"] = new
+        return df
+
     def _filter_methods(self, df):
         """Keep only base/pop/per, Cohen/Gaussian benchmarks, and configured NORMA run IDs."""
         # --no_norma leaves run_ids empty on purpose, and that has to still filter:
         # otherwise a leftover ref_intervals_norma.parquet would come back in.
+        df = self._alias_norma(df)
         if "method" in df.columns and (self.run_ids or self.no_norma):
             keep = ({'base', 'pop', 'per'}
                     | {f'cohen_{m}' for m in self.cohen_models}
@@ -406,6 +451,9 @@ class BaseDataset(ABC):
     def norma_predictions_path(self):
         """Where 04_refs (norma step) writes this cohort's per-state predictions."""
         return result_path(output_dirs(self.output_sub()), self.NORMA_PREDICTIONS_FILE, "04_refs")
+
+    def has_norma_predictions(self):
+        return not self.no_norma and os.path.exists(self.norma_predictions_path())
 
     def load_norma_predictions(self, columns=None):
         """Read them back (chunked cohorts concatenate their chunks)."""
@@ -713,6 +761,16 @@ class CHSDataset(BaseDataset):
     name = "chs"
     time_unit = "days"
     exclude_labs = []
+    # the model is not rerun inside Clalit, so the chunks hold whichever NORMA run was
+    # applied there; it is scored as NORMA (see BaseDataset._resolve_alias)
+    auto_norma_alias = True
+    # An index measurement has to come AFTER the baseline history that predicts it and
+    # sets its interval.  02_index_labs applies this when it cuts the split; it is
+    # applied again on every read because a chunk can hold an index_labs.parquet from
+    # an older split (renamed in beside split_df.pkl), and such a file classifies and
+    # forecasts measurements the baseline period has already seen.  0 = keep everything.
+    index_gap_days = 30
+    _gap_said = False
     # main run only: the covariate-ablation arms would need their four extra
     # checkpoints carried into Clalit and four more CPU passes (decided 2026-09-01)
     run_ids = [NORMA_RUN_ID]
@@ -748,6 +806,13 @@ class CHSDataset(BaseDataset):
     primary_outcomes = ["mortality", "t2d", "ckd", "anemia_unspecified"]
     mortality_outcome = "mortality"
     eval_windows = [365, 1095, 1825, 3650]  # days: 1yr, 3yr, 5yr, 10yr
+    # Two different clocks, and they have to be reconciled before any time-to-event maths:
+    #   lab `timestamp`  days from 2005-01-01  (index period opens at 2015-01-01 = day 3652)
+    #   *_days outcomes  days from 2015-01-01  (see attach_outcomes)
+    # Subtracting one from the other raw puts every patient ~3652 days in the past, which
+    # is what silently emptied every Cox stay table.
+    timestamp_epoch = "2005-01-01"
+    outcome_ref_date = "2015-01-01"
 
     PATIENT_COLS = {
         "patient_id": "patient_id",
@@ -831,9 +896,17 @@ class CHSDataset(BaseDataset):
         return df
 
     def _standardize(self, df):
-        """Encode sex as int and convert datetime timestamps to days."""
+        """Encode sex as int, drop index rows the baseline period does not precede, and
+        convert datetime timestamps to days.
+
+        In that order: the time origin is the first measurement that survives, so every
+        stage reading the same chunk agrees on it.  The drop is here rather than in each
+        stage because every CHS path -- load_index_labs, iter_chunks, 10_mortality's
+        direct read -- comes through this method."""
         if "gender" in df.columns and "sex" not in df.columns:
             df["sex"] = (df["gender"] == "F").astype(int)
+        df = drop_early_index(df, self.index_gap_days, report=not self._gap_said)
+        self._gap_said = True
         if "timestamp" in df.columns and pd.api.types.is_datetime64_any_dtype(df["timestamp"]):
             min_t = df["timestamp"].min()
             df["timestamp"] = (df["timestamp"] - min_t).dt.days
@@ -862,15 +935,17 @@ class CHSDataset(BaseDataset):
         for i, d in enumerate(dirs):
             p = find_in(d, filename)
             if os.path.exists(p):
-                frames.append(pd.read_parquet(p, columns=cols))
+                # the analyte filter runs per chunk -- --analytes HGB on 250 chunks must
+                # not cost the memory of every analyte first -- but `postprocess` stays on
+                # the concatenation: _standardize dates times from the FIRST measurement
+                # of what it is given, and per chunk that would be a different origin each
+                frames.append(self._filter_analytes(fix_analyte(pd.read_parquet(p, columns=cols))))
             if (i + 1) % 50 == 0 or i == len(dirs) - 1:
                 print(f"    {i + 1}/{len(dirs)} {label} loaded")
         if not frames:
             return None
         df = pd.concat(frames, ignore_index=True)
-        if postprocess:
-            df = postprocess(df)
-        return self._filter_analytes(df)
+        return postprocess(df) if postprocess else df
 
     def load_index_labs(self):
         df = self._load_from_chunks(
@@ -910,20 +985,26 @@ class CHSDataset(BaseDataset):
         for i, d in enumerate(dirs):
             part = read_classification(d, usecols)
             if part is not None:
-                frames.append(part)
+                # filter each chunk as it is read, not the concatenation: --analytes HGB
+                # on 250 chunks otherwise materialises every analyte first and only then
+                # throws 29 of 30 away, which is where the memory goes
+                frames.append(self._filter_norma(self._filter_analytes(fix_analyte(part))))
             if (i + 1) % 50 == 0 or i == len(dirs) - 1:
                 print(f"    {i + 1}/{len(dirs)} classification loaded")
         if not frames:
             raise FileNotFoundError(
                 f"No {CLASSIFICATION_FILE} in {self.data_root}/chunk_*/"
             )
-        return self._filter_norma(
-            self._filter_analytes(fix_analyte(pd.concat(frames, ignore_index=True))))
+        return pd.concat(frames, ignore_index=True)
 
     def norma_predictions_path(self):
         """Per chunk, next to that chunk's index_labs — 04_refs.py (norma step) runs
         chunk by chunk on CPU inside Clalit, so there is no cohort-wide file."""
         return stage_path(self.data_dir, self.NORMA_PREDICTIONS_FILE, REFS_STAGE)
+
+    def has_norma_predictions(self):
+        return not self.no_norma and any(
+            os.path.exists(find_in(d, self.NORMA_PREDICTIONS_FILE)) for d in self._chunk_dirs())
 
     def load_norma_predictions(self, columns=None):
         if self.no_norma:
@@ -962,8 +1043,8 @@ class CHSDataset(BaseDataset):
             index_labs = self._filter_analytes(self._standardize(pd.read_parquet(sp_path))) if os.path.exists(sp_path) else None
             raw_ref = read_ref_intervals(d)
             ref_df = self._filter_analytes(_coerce_ri(fix_analyte(raw_ref))) if raw_ref is not None else None
-            if ref_df is not None and self.no_norma:
-                ref_df = ref_df[~ref_df["method"].map(is_norma_method)]
+            if ref_df is not None:
+                ref_df = self._filter_methods(ref_df)   # --norma_alias, --drop_arms, --no_norma
             yield i, d, index_labs, ref_df
             if (i + 1) % 50 == 0 or i == len(dirs) - 1:
                 print(f"    {i + 1}/{len(dirs)} chunks processed")
@@ -975,7 +1056,7 @@ class CHSDataset(BaseDataset):
         diagnosis = diagnosis.drop_duplicates(subset=["patient_id"])
 
         # Reference date for followup (baseline cutoff)
-        ref_date = pd.Timestamp("2015-01-01")
+        ref_date = pd.Timestamp(self.outcome_ref_date)
 
         # Mortality: died_10yr, death_days, followup_days
         if "death_date" in diagnosis.columns:
@@ -1002,7 +1083,11 @@ class CHSDataset(BaseDataset):
                     diagnosis[outcome_name] - ref_date
                 ).dt.days
 
-        return df.merge(diagnosis, on="patient_id", how="left")
+        # A frame classified by an older run may already carry some of these columns
+        # (e.g. has_t2d but not has_anemia_unspecified). Replace them all, so a merge
+        # never leaves _x/_y duplicates and every outcome comes from this diagnosis table.
+        stale = [c for c in diagnosis.columns if c != "patient_id" and c in df.columns]
+        return df.drop(columns=stale).merge(diagnosis, on="patient_id", how="left")
 
 
 # ── INSPIRE Dataset ────────────────────────────────────────────
@@ -1295,6 +1380,12 @@ def add_dataset_args(parser, required=True):
     parser.add_argument("--no_norma", action="store_true",
                         help="baselines only: drop every NORMA arm, so the stage runs "
                              "on a cohort the model was never applied to")
+    parser.add_argument("--drop_arms", type=str, default=None,
+                        help="comma-separated ref_intervals methods to leave out "
+                             "(cohen_m3,gaussian_eb,...): arms a cohort has no rows for")
+    parser.add_argument("--norma_alias", type=str, default=None,
+                        help="read norma_<RUN> rows as the main NORMA run, for a cohort "
+                             "where only an older model was applied (CHS)")
     return parser
 
 
@@ -1334,7 +1425,24 @@ def get_dataset(args):
     if getattr(args, "chunk", None) is not None:
         kwargs["chunk"] = args.chunk
     ds = cls(**kwargs)
+    ds.norma_alias = getattr(args, "norma_alias", None)
+    if getattr(args, "drop_arms", None):
+        drop_arms(ds, [a.strip() for a in args.drop_arms.split(",") if a.strip()])
     if getattr(args, "no_norma", False):
+        disable_norma(ds)
+    return ds
+
+
+def drop_arms(ds, methods):
+    """--drop_arms: take ref_intervals methods off the dataset's arm lists, so a
+    cohort missing an arm runs as if it were never configured.  Dropping every
+    NORMA run is --no_norma."""
+    drop = set(methods)
+    ds.cohen_models = [m for m in ds.cohen_models if f"cohen_{m}" not in drop]
+    ds.gaussian_models = [m for m in ds.gaussian_models if f"gaussian_{m}" not in drop]
+    ds.run_ids = [r for r in ds.run_ids if f"norma_{r}" not in drop]
+    print(f"  arms dropped: {', '.join(sorted(drop))}")
+    if not ds.run_ids:
         disable_norma(ds)
     return ds
 
@@ -1376,8 +1484,11 @@ def cached_chunk_frames(ds, cache_file, compute, force=False):
     has no classification).  Frames come from the cache when it exists, except for
     the analytes in ds._analytes, which are recomputed and written back.
     """
+    import time
     analytes = ds._analytes
-    for chunk_dir in ds._chunk_dirs():
+    dirs = ds._chunk_dirs()
+    t0 = time.time()
+    for n, chunk_dir in enumerate(dirs, 1):
         name = os.path.basename(chunk_dir)
         path = os.path.join(chunk_dir, cache_file)
         cached = None
@@ -1385,7 +1496,7 @@ def cached_chunk_frames(ds, cache_file, compute, force=False):
             cached = pd.read_parquet(path)
 
         if cached is not None and analytes is None:
-            print(f"    {name}: cached")
+            print(progress(n, len(dirs), t0, name, "cached"))
             yield cached
             continue
 
@@ -1399,7 +1510,7 @@ def cached_chunk_frames(ds, cache_file, compute, force=False):
             kept = cached[~cached["analyte"].isin(analytes)]
             fresh = pd.concat([kept, fresh], ignore_index=True)
         fresh.to_parquet(path, index=False)
-        print(f"    {name}: {'updated' if analytes else 'computed'}")
+        print(progress(n, len(dirs), t0, name, "updated" if analytes else "computed"))
         yield fresh
 
 
@@ -1532,6 +1643,95 @@ REF_COLUMNS = ["patient_id", "analyte", "sex", "age", "n_bl", "t_span",
 NUMERIC = ["ri_low", "ri_high", "ri_mean", "ri_std", "age"]
 
 
+def drop_early_index(df, min_gap_days, report=False):
+    """Index rows that are not at least `min_gap_days` after their pair's last baseline
+    draw: dropped.  Baseline rows are never touched -- a pair keeps its history even
+    with nothing left to score, because those values are still co-analyte context
+    (02_index_labs.index_gap_filter, applied to whatever is on disk)."""
+    if not min_gap_days or df is None or not {"split", "timestamp"} <= set(df.columns):
+        return df
+    keys = ["patient_id", "analyte"]
+    is_index = (df["split"] == "index").to_numpy()
+    if not is_index.any() or (df["split"] == "baseline").sum() == 0:
+        return df
+    last_bl = df[~is_index].groupby(keys)["timestamp"].max().rename("_last_bl")
+    gap = df.join(last_bl, on=keys)["_last_bl"].rsub(df["timestamp"])
+    if pd.api.types.is_timedelta64_dtype(gap):
+        gap = gap.dt.days
+    too_soon = is_index & gap.lt(min_gap_days).fillna(False).to_numpy()
+    if not too_soon.any():
+        return df
+    if report:
+        print(f"  index gap: dropped {int(too_soon.sum()):,} of {int(is_index.sum()):,} index rows "
+              f"less than {min_gap_days:g} days after their pair's last baseline draw")
+    return df[~too_soon].reset_index(drop=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Per-chunk caches, split by analyte
+# ═══════════════════════════════════════════════════════════════════════════
+
+# A chunked cohort's stages reduce each chunk once and then work one ANALYTE at a time.
+# Held in one file per chunk, that means reading every chunk's whole cache once per
+# analyte -- thirty passes over the same bytes, which over a network share is most of the
+# runtime.  One file per analyte inside a per-chunk directory makes a read touch only the
+# slice it needs.  Plain files, no hive layout: the reader is pd.read_parquet on a path.
+
+def progress(done, total, t0, label="", extra=""):
+    """One line per chunk: where the loop is, and how long the rest should take.
+
+    A stage over 250 chunks otherwise prints nothing for an hour, and there is no way to
+    tell a slow chunk from a stuck one.  The estimate is the mean of what has run, which
+    is close enough to be useful and is marked as an estimate.
+    """
+    import time
+    elapsed = time.time() - t0
+    rate = elapsed / max(done, 1)
+    left = rate * max(total - done, 0)
+    pct = 100.0 * done / max(total, 1)
+    def hm(sec):
+        return f"{sec / 60:.0f}m" if sec < 3600 else f"{sec / 3600:.1f}h"
+    return (f"  [{done}/{total}] {label}{' ' if label else ''}{pct:.0f}% · "
+            f"{hm(elapsed)} elapsed · ~{hm(left)} left{(' · ' + extra) if extra else ''}")
+
+
+def analyte_cache_dir(chunk_dir, name):
+    """<chunk>/<name>/ -- the directory a split cache lives in (name has no extension)."""
+    return os.path.join(chunk_dir, name)
+
+
+def analyte_cache_ready(chunk_dir, name):
+    return bool(glob.glob(os.path.join(analyte_cache_dir(chunk_dir, name), "*.parquet")))
+
+
+def write_analyte_cache(df, chunk_dir, name, column="analyte"):
+    """One parquet per analyte, written atomically-ish (a tmp file then a rename)."""
+    out = analyte_cache_dir(chunk_dir, name)
+    os.makedirs(out, exist_ok=True)
+    for analyte, part in df.groupby(column, observed=True):
+        safe = str(analyte).replace(os.sep, "_") or "NA"
+        path = os.path.join(out, f"{safe}.parquet")
+        tmp = f"{path}.tmp-{os.getpid()}"
+        part.to_parquet(tmp, index=False)
+        os.replace(tmp, path)
+    return out
+
+
+def read_analyte_cache(chunk_dir, name, analyte):
+    safe = str(analyte).replace(os.sep, "_") or "NA"
+    path = os.path.join(analyte_cache_dir(chunk_dir, name), f"{safe}.parquet")
+    return pd.read_parquet(path) if os.path.exists(path) else None
+
+
+def cached_analytes(chunk_dirs, name):
+    """Every analyte any chunk has a slice for."""
+    out = set()
+    for d in chunk_dirs:
+        for p in glob.glob(os.path.join(analyte_cache_dir(d, name), "*.parquet")):
+            out.add(os.path.splitext(os.path.basename(p))[0])
+    return sorted(out)
+
+
 def is_norma_method(method):
     """A NORMA arm's rows — method is "norma_<run_id>"."""
     return str(method).startswith("norma")
@@ -1618,12 +1818,29 @@ def write_ref_intervals(ds, ref_df, half=None, directory=None):
     if "sex" in ref_df.columns:
         ref_df["sex"] = _sex_as_int(ref_df["sex"])
     is_norma = ref_df["method"].map(is_norma_method)
+    if half == "baselines" and is_norma.any():
+        # A pre-2026-09-08 chunk keeps its NORMA rows inside ref_intervals.parquet, so
+        # they arrive here with the baselines half; writing that half alone would
+        # delete them.  Move them into the NORMA file first (runs the file lacks only).
+        _move_legacy_norma_rows(norma_p, ref_df[is_norma])
     for name, path, part in (("norma", norma_p, ref_df[is_norma]),
                              ("baselines", base_p, ref_df[~is_norma])):
         if half is not None and half != name:
             continue
         part.to_parquet(path, index=False)
         print(f"Saved {len(part):,} {name} ref intervals to {path}")
+
+
+def _move_legacy_norma_rows(norma_p, rows):
+    existing = _read_ref_file(norma_p)
+    have = set() if existing is None else set(existing["method"].unique())
+    new = rows[~rows["method"].isin(have)]
+    if new.empty:
+        return
+    out = new if existing is None else pd.concat([existing, new], ignore_index=True)
+    out.to_parquet(norma_p, index=False)
+    print(f"Moved {len(new):,} NORMA rows ({', '.join(sorted(new['method'].unique()))}) "
+          f"out of the baselines file into {norma_p}")
 
 
 def upsert_ref_rows(ds, rows, methods, analytes=None):

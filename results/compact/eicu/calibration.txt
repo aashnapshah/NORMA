@@ -1,0 +1,7 @@
+eicu  calibration
+method  PopRI  PerRI  Cohen_m4  Gaussian_eb  NORMA
+state                                             
+all     0.515  0.676     0.495       0.5470  0.556
+high    0.000  0.521     0.211       0.0696  0.152
+low     0.000  0.684     0.204       0.1550  0.204
+normal  1.000  0.689     0.770       0.9170  0.911

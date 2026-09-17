@@ -167,15 +167,61 @@ def build_classification(index_labs, ref_df, time_unit, window_hours):
     return mark_exposures(result, time_unit, window_hours)
 
 
+# Caches other stages derived from a chunk's classification.  When the classification is
+# rebuilt they describe rows that no longer exist, and every stage reuses its cache when
+# it is there -- so they are moved aside with it.
+DERIVED_CACHES = ["prevalence_counts.parquet", "eval_counts.parquet", "mortality_extract.parquet",
+                  "mortality_zbins.parquet", "11_future_pairs", "11_lead_measurements",
+                  "11_lead_patients", "12_patient_scores", "13_stay_tables", "17_cohort"]
+
+
+def expected_columns(ref_df):
+    """What build_classification will write for the methods this chunk has intervals for.
+
+    A chunk classified by an older version is missing whole columns -- `<method>_z` did
+    not always exist -- and every stage that reads them silently drops its patients.  So
+    the skip is "already classified WITH these columns", not "the file is there".
+    """
+    want = {"pop_side", "t_hours", "t0_hours", "exp_first", "exp_window", "exp_window_worst"}
+    for method in ref_df["method"].astype(str).unique():
+        cls_col = class_column(f"{method}_ri_low")
+        if cls_col:
+            name = cls_col[:-len("_class")]
+            want |= {cls_col, f"{name}_z", f"{name}_zs"}
+    return want
+
+
+def stale_caches(chunk_dir):
+    """Move this chunk's derived caches aside; the stages rebuild them from the new rows."""
+    moved = 0
+    for name in DERIVED_CACHES:
+        path = datasets.find_in(chunk_dir, name)
+        if os.path.exists(path):
+            dest = path + ".bak-reclassified"
+            if os.path.exists(dest):
+                import shutil
+                shutil.rmtree(path) if os.path.isdir(path) else os.remove(path)
+            else:
+                os.replace(path, dest)
+            moved += 1
+    return moved
+
+
 def classify_chunks(ds, args):
     """CHS: one pair of classification files per chunk."""
     analytes = ds._analytes
-    n_rows = n_patients = n_skipped = 0
+    n_rows = n_patients = n_skipped = n_refreshed = 0
     for i, chunk_dir, index_labs, ref_df in ds.iter_chunks():
         out_path = datasets.classification_paths(chunk_dir)[0]
         if not args.force and analytes is None and os.path.exists(out_path):
-            n_skipped += 1
-            continue
+            have = datasets.classification_column_names(chunk_dir) or set()
+            missing = sorted(expected_columns(ref_df) - have) if ref_df is not None else []
+            if not missing:
+                n_skipped += 1
+                continue
+            print(f"    chunk_{i}: reclassifying, it has no {', '.join(missing[:4])}"
+                  f"{f' (+{len(missing) - 4} more)' if len(missing) > 4 else ''}")
+            n_refreshed += 1
         if index_labs is None or ref_df is None:
             continue
         result = build_classification(index_labs, ref_df, ds.time_unit, args.window_hours)
@@ -184,11 +230,15 @@ def classify_chunks(ds, args):
             kept = existing[~existing["analyte"].isin(analytes)]
             result = pd.concat([kept, result], ignore_index=True)
         datasets.write_classification(result, chunk_dir, atomic=_atomic_parquet)
+        stale_caches(chunk_dir)             # what other stages derived from the old rows
         n_rows += len(result)
         n_patients += result["patient_id"].nunique()
         print(f"    chunk_{i}: {len(result)} rows")
     if n_skipped:
-        print(f"  Skipped {n_skipped} chunks (already classified)")
+        print(f"  Skipped {n_skipped} chunks (already classified, with every column)")
+    if n_refreshed:
+        print(f"  Reclassified {n_refreshed} chunk(s) written by an older version; their "
+              f"derived caches were set aside, so the stages below rebuild those chunks")
     print(f"  Classified {n_rows} new rows, {n_patients} patients")
 
 

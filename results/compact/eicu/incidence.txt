@@ -1,0 +1,6 @@
+eicu  incidence
+method     PopRI  PerRI  Cohen_m4  Gaussian_eb  NORMA
+outcome                                              
+aki        1.120  0.849      1.09        0.814   1.00
+mortality  1.100  1.070      1.15        1.090   1.04
+sepsis     0.853  1.240      1.04        1.320   1.15

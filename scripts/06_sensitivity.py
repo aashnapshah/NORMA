@@ -29,7 +29,10 @@ Methods, keyed as in the figure code (_BM_SUPP):
 
 Widths are the 95% interval as % of the Pop_RI width; the centre shift is the
 interval centre relative to the Pop_RI midpoint the histories are drawn around.
-N_DRAWS histories per (analyte, sweep value), averaged.
+N_DRAWS histories per (analyte, sweep value), averaged.  ci_norm_lo/hi are the
+2.5/97.5 percentiles across those draws, which at this N_DRAWS is the min/max --
+they are kept for schema compatibility with model/sensitivity_analysis.py and are
+not a 95% interval.  Nothing reads them; the figures plot ci_norm_mean.
 
 Needs the Cohen artifact and the dev EB prior in artifacts/, not ref_intervals.
 Output: results/raw/dev/06_sensitivity_methods.csv, one row per
@@ -86,7 +89,12 @@ NORMA_CHECKPOINT, NORMA_RUN_ID = _VCFG.NORMA_CHECKPOINT, _VCFG.NORMA_RUN_ID
 NORMA_ABLATION_RUN_IDS = getattr(_VCFG, "NORMA_ABLATION_RUN_IDS", [])
 
 BASE_SD = 0.10        # history noise sd as a fraction of the Pop_RI width (= history_std value 1.0)
-N_DRAWS = 20
+# Draws per (analyte, sweep value). They only feed ci_norm_mean -- ci_norm_lo/hi are
+# written but read by nothing -- so the question is the standard error of one plotted
+# point against the range its curve traverses. At 8 draws that is 3-5% of the range
+# on all three sweeps (history_length 2.2/64.6, history_std 4.5/131.7, horizon
+# 3.5/66.2), invisible on a smooth trend read across 12-17 x-values. It was 20.
+N_DRAWS = 8
 PER_N_STD = 2         # PerRI = setpoint +/- 2 SD (04_refs --gmm_n_std default)
 Z = 1.96
 SWEEP_METHODS = ["PopRI", "PerRI", "Gaussian_mle", "Gaussian_trunc", "Gaussian_eb", "Cohen_m4", "NORMA"]
@@ -108,7 +116,11 @@ def make_histories(labs, features, n_draws, seed):
                     horizon = float(v)
                 elif feat == "history_std":
                     sd = float(v) * span / 10.0
-                for i in range(n_draws):
+                # sd = 0 is make_flat_history, which is deterministic: every draw is
+                # the same history and the same prediction (verified: the across-draw
+                # spread of every sd=0 row is exactly 0). One draw, not n_draws.
+                draws = n_draws if sd > 0 else 1
+                for i in range(draws):
                     rng = np.random.default_rng([seed, i, labs.index(lab), n_hist])
                     # identical draws for the horizon sweep and the n=10 / sd=base points
                     if sd > 0:
@@ -131,6 +143,14 @@ def norma_intervals(recs, run_id, checkpoint):
     from utils import load_checkpoint, create_model, uses_covariates
     from data import TEST_VOCAB
     device = torch.device("cpu")
+    # One thread, deliberately. Every call here is a batch of one with ~12 tokens at
+    # d_model 64, so splitting each matmul across threads costs more in barrier
+    # synchronisation than the arithmetic it saves -- and on a shared node (load
+    # average 33 on 4 usable cores when this was measured) a descheduled worker
+    # leaves the others spinning. Measured on q_age_set, history of 10: 165 ms/call
+    # at 4 threads against 8.7 ms/call at 1, a 19x difference that put the 13-arm
+    # sweep at 5-6 hours instead of ~1.
+    torch.set_num_threads(1)
     ckpt, hparams = load_checkpoint(MODEL_LOG_DIR, run_id, best=(checkpoint == "best"),
                                     device=device, quiet=True)
     model = create_model(hparams, ncodes=len(TEST_VOCAB), checkpoint=ckpt).to(device).eval()
@@ -394,26 +414,47 @@ def fig_sensitivity():
 
 
 def fig_sensitivity_norma():
-    """The same three sweeps for the NORMA covariate-ablation arms only (baseline vs + age at
-    draw / care setting / same-draw co-analytes). Each arm is queried on a history of the one
-    analyte, so the setting is 'unknown' and the co-analyte panel is empty -- the arms are being
-    asked what they do with a lone analyte, not what their extra inputs buy on real panels."""
+    """The same three sweeps for every NORMA arm that has been swept: the covariate
+    ablation (baseline vs + age at draw / care setting / same-draw co-analytes) and the
+    patient-split family. Each arm is queried on a history of the one analyte, so the
+    setting is 'unknown' and the co-analyte panel is empty -- the arms are being asked
+    what they do with a lone analyte, not what their extra inputs buy on real panels.
+
+    Unlike the paired forecasting figures, the patient-split arms belong here: every arm
+    is given the SAME synthetic histories, so nothing depends on which test rows an arm
+    was trained away from, and no shared test split is needed to put them on one axis."""
     df, _ = _load_sensitivity()
     if df is None:
         return {}
+    # The sweep labels whichever run is the main model as bare "NORMA" (the arms are
+    # NORMA_<run>), so without this the main model is absent from the one figure that
+    # compares the arms with each other -- and arm_notes reports it as "not run here"
+    # while its curve sits in the file under another name. Map the row rather than
+    # sweeping the same checkpoint twice under both names.
+    main_arm = f"NORMA_{NORMA_RUN_ID}"
+    row_key = {m: m for m in ALL_ARM_METHODS}
     present = set(df["model"])
+    if "NORMA" in present and main_arm not in present:
+        present.add(main_arm)
+        row_key[main_arm] = "NORMA"
     arms = [m for m in ALL_ARM_METHODS if m in present]
     if len(arms) < 2:          # nothing to compare until the arms have been swept
         return {}
     # A curve cannot be drawn for an arm with no sweep, so the arms that are
     # absent are named underneath instead of being left unmentioned.
     notes = arm_notes(present)
-    fig, axes = plt.subplots(1, len(_SENS_PANELS), figsize=(7.2, 2.3), squeeze=False)
+    # The legend is planned before the figure exists: with every trained arm shown
+    # it wraps to several rows, and a figure sized for a one-row legend would give
+    # those rows the panels' space instead of its own.
+    arm_labels = [ALL_ARM_LABELS.get(m, m) for m in arms]
+    _, legend_in = plan_legend(arm_labels, 7.2)
+    fig, axes = plt.subplots(1, len(_SENS_PANELS), figsize=(7.2, 2.3 + legend_in),
+                             squeeze=False)
     for c, (feat, xlabel, ycol, use_log) in enumerate(_SENS_PANELS):
         ax = axes[0, c]
         curves = []
         for m in arms:
-            fsub = df[(df["model"] == m) & (df["feature"] == feat)]
+            fsub = df[(df["model"] == row_key[m]) & (df["feature"] == feat)]
             if fsub.empty:
                 continue
             curves.append(_sens_panel(ax, fsub, ycol, use_log, ALL_ARM_COLORS.get(m, "#999999"),
@@ -424,10 +465,8 @@ def fig_sensitivity_norma():
         style_axes(ax, xlabel, None)
     axes[0, 0].set_ylabel(_SENS_YLABEL, fontsize=FONT_AXIS)
     handles, labels = axes[0, 0].get_legend_handles_labels()
-    fig.legend(handles, labels, frameon=False, fontsize=FONT_LEGEND, ncol=len(labels),
-               loc="upper center", bbox_to_anchor=(0.5, 1.0), handlelength=1.8,
-               handletextpad=0.4, columnspacing=1.0)
-    fig.tight_layout(w_pad=0.8, rect=(0, 0, 1, 1 - 0.26 / fig.get_figheight()))
+    used_in = top_legend(fig, handles, labels)
+    fig.tight_layout(w_pad=0.8, rect=(0, 0, 1, 1 - used_in / fig.get_figheight()))
     if notes:
         by_reason = {}
         for m, why in notes.items():

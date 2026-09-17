@@ -149,6 +149,18 @@ class TimeSeriesDataset(Dataset):
             s_h = torch.from_numpy(sv).long()
             t_h = torch.from_numpy(rt_sel.astype(np.float32)).float().unsqueeze(-1)
             t_next = torch.tensor([q_time], dtype=torch.float)  # same absolute clock
+            # age_h was built above from age_t, i.e. one entry per draw of the TARGET
+            # analyte. The history is now one entry per panel row, so the two lengths
+            # disagree and model.forward would add (B,T_panel,D) to (B,T_target,D).
+            # Rebuild it on the panel clock: drawmeta carries no age, but age at the
+            # query is known and row_time is absolute, so age at a panel row is just
+            # the query age less the elapsed years. --use_setting has no such
+            # derivation (train.py rejects it with --use_full_panel).
+            if 'age_h' in extras:
+                age_q = float(extras['age_next'][0])
+                age_rows = age_q + (rt_sel.astype(np.float32) - np.float32(q_time)) / np.float32(365.25)
+                extras['age_h'] = torch.from_numpy(age_rows.astype(np.float32))
+            extras.pop('setting_h', None)
             extras['obs_h'] = torch.from_numpy(obs).long()
             extras['co_h'] = torch.from_numpy(np.nan_to_num(co, nan=0.0))
             extras['co_mask'] = torch.from_numpy(np.isfinite(co).astype(np.float32))

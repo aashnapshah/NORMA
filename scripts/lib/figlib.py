@@ -700,6 +700,49 @@ def _method_legend(ax, methods, markers=None, **kw):
         else:
             handles.append(Patch(facecolor=METHOD_COLORS[m], alpha=0.85, label=_ri(m)))
     ax.legend(handles=handles, frameon=False, fontsize=FONT_LEGEND, **kw)
+
+
+def plan_legend(labels, width_in, fontsize=FONT_LEGEND, handlelength=1.8,
+                handletextpad=0.4, columnspacing=1.0, pad_in=0.06):
+    """(ncol, height_in) for a centred legend of `labels` across `width_in`.
+
+    Separate from top_legend so a caller can size the figure before creating it:
+    the legend sits above the panels, so its height has to be known first or the
+    panels shrink to absorb it.
+    """
+    if not len(labels):
+        return 1, 0.0
+    char_in = 0.52 * fontsize / 72.0          # mean glyph advance at this size
+    line_in = 1.45 * fontsize / 72.0          # row pitch
+    widest = max(len(l) for l in labels)
+    entry_in = (handlelength + handletextpad + columnspacing) * fontsize / 72.0 + widest * char_in
+    ncol = max(1, min(len(labels), int(width_in // entry_in)))
+    nrow = int(np.ceil(len(labels) / ncol))
+    return ncol, nrow * line_in + pad_in
+
+
+def top_legend(fig, handles, labels, fontsize=FONT_LEGEND, handlelength=1.8,
+               handletextpad=0.4, columnspacing=1.0, pad_in=0.06):
+    """Legend above the panels, centred, wrapped to as many rows as it needs.
+
+    Call sites used to pass ncol=len(labels), which is fine for the four or five
+    series a cohort figure carries and unreadable once an arm figure shows every
+    trained arm: thirteen entries of "NORMA | sex, age, setting, analytes" do not
+    fit across 7.2 inches in one row. The number of columns is chosen from the
+    widest label so the row fits the figure, and the height the legend needs is
+    returned in inches for the caller's tight_layout rect -- reserving a fixed
+    0.26 in silently overlaps the panels as soon as the legend wraps.
+    """
+    if not handles:
+        return 0.0
+    ncol, height_in = plan_legend(labels, fig.get_figwidth(), fontsize, handlelength,
+                                  handletextpad, columnspacing, pad_in)
+    fig.legend(handles, labels, frameon=False, fontsize=fontsize, ncol=ncol,
+               loc="upper center", bbox_to_anchor=(0.5, 1.0), handlelength=handlelength,
+               handletextpad=handletextpad, columnspacing=columnspacing)
+    return height_in
+
+
 _CIRCOS_NEG = "#C0C0C0"
 _CIRCOS_CI = 0.20     # whisker clip: rings are 0.5 apart, so whiskers never meet
 

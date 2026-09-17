@@ -52,13 +52,23 @@ STATE_INFORMED = ['mean_state', 'last_state', 'arimax', 'arimax_raw']
 # ═══════════════════════════════════════════════════════════════════════════
 
 def arima_forecast(x, exog_h=None, exog_next=None, order=ORDER):
+    """One-step ARIMA forecast, or NaN.
+
+    The fit is wrapped in catch_warnings because a 4-5 point lab history routinely
+    fails to converge and statsmodels emits a ConvergenceWarning per fit -- hundreds
+    of thousands of them on a real cohort, which on a remote console costs more time
+    than the fitting.  The module-level filterwarnings does not hold: statsmodels
+    resets the filters itself during the fit.  A non-converged fit is not an error
+    here; `_sane` already rejects the forecasts that come back divergent."""
     from statsmodels.tsa.arima.model import ARIMA
     if len(x) < sum(order):
         return np.nan
     try:
-        fit = ARIMA(x, exog=exog_h, order=order, enforce_stationarity=False,
-                    enforce_invertibility=False).fit()
-        return float(np.asarray(fit.forecast(1, exog=exog_next)).ravel()[0])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            fit = ARIMA(x, exog=exog_h, order=order, enforce_stationarity=False,
+                        enforce_invertibility=False).fit()
+            return float(np.asarray(fit.forecast(1, exog=exog_next)).ravel()[0])
     except Exception:
         return np.nan
 

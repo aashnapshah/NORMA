@@ -1,0 +1,18 @@
+eicu  forecasting
+                 mae   mape      r2
+method                             
+ARIMA           2.36  10.60  0.4140
+Cohen_m2        3.02  30.30 -0.0368
+Cohen_m3        3.11  37.50 -0.0119
+Cohen_m4        3.08  29.70  0.0828
+Gaussian_eb     3.40  33.50 -0.1650
+Gaussian_mle    3.31  33.40 -0.2170
+Gaussian_trunc  5.58  51.50 -4.8000
+Last            1.99   8.94  0.6560
+Mean            2.56  12.80  0.5290
+NORMA           2.12   9.37  0.7000
+NORMA           2.56  17.40  0.3720
+NORMA           2.58  26.60  0.1810
+NORMA           1.31   7.95  0.8190
+PerRI           2.59  12.30  0.4780
+PopRI           4.00  40.10 -0.4290

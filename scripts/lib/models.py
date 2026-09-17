@@ -40,7 +40,8 @@ import os as _os, sys as _sys
 _MODEL_DIR = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))), "model")   # lib is norma/scripts/lib
 if _MODEL_DIR not in _sys.path:
     _sys.path.append(_MODEL_DIR)
-from run_names import RUN_COVARIATES, RUN_SHORT, SHORT_KEY, arm_label  # noqa: E402
+from run_names import (RUN_COVARIATES, RUN_SHORT, SHORT_KEY, arm_label,  # noqa: E402
+                       MULTI_PRIOR_ORDER, PRIOR_ORDER)
 
 HUES = {
     "norma":     "#0097A7",   # teal, the model this paper is about
@@ -123,6 +124,14 @@ MODELS = {m.key: m for m in [
     _m("NORMA_p_co", arm_label("p_co"), RUN_SHORT["p_co"], "NORMA_arm", "norma_arm", "D", ['p_co']),
     _m("NORMA_p_causal", arm_label("p_causal"), RUN_SHORT["p_causal"], "NORMA_arm", "norma_arm", "D", ['p_causal']),
     _m("NORMA_p_full", arm_label("p_full"), RUN_SHORT["p_full"], "NORMA_arm", "norma_arm", "D", ['p_full']),
+    # prior-anchored arms, two input families (run_prior_ablation.sh). They had no
+    # rows here at all, so every one of them resolved to the #999999 fallback and
+    # plotted as the same grey line. Each family is read against its own
+    # reference -- m_* against p_full, the rest against q_age_set -- so the two
+    # reuse one hue set, as the patient-split group already does.
+] + [
+    _m(f"NORMA_{r}", arm_label(r), RUN_SHORT[r], "NORMA_arm", "norma_arm", "D", [r])
+    for r in MULTI_PRIOR_ORDER + PRIOR_ORDER
 ]}
 
 # Colours, kept next to the registry rather than inside it so a family ramp is
@@ -156,6 +165,14 @@ COLORS = {
     "NORMA_p_co": HUES["gaussian"],
     "NORMA_p_causal": HUES["cohen"],
     "NORMA_p_full": HUES["perri"],
+    # prior-anchored families: one ramp of seven, used twice. m_pa_k5 and pa_k5
+    # share a colour because they are never read against each other -- each sits
+    # beside its own reference model, and fig_norma_all marks the group.
+    **{f"NORMA_{r}": c for fam in (MULTI_PRIOR_ORDER, PRIOR_ORDER)
+       for r, c in zip(fam, [HUES["norma_alt"], HUES["perri"], HUES["cohen"],
+                             HUES["gaussian"], HUES["popri"],
+                             lighten(HUES["perri"], 0.45),
+                             lighten(HUES["cohen"], 0.45)])},
 }
 
 # Which query gets an open marker: the realized-state forecast is not a

@@ -75,6 +75,7 @@ from sklearn.metrics import average_precision_score
 from sklearn.model_selection import train_test_split
 
 from constants import ANCHOR, MIN_EVENTS, MIN_PATIENTS
+import datasets
 from datasets import already_done, cached_chunk_frames, read_chunk_classification, EXCLUDE_LABS, NORMA_RUN_ID, add_dataset_args, get_dataset, save_csv
 from metrics import delong_auc_cov, delong_test, hours_from_admit, to_hours, pop_side, signed_z
 
@@ -383,7 +384,122 @@ def auc_rows(pat, z_cols, methods, event_col, ref_col, meta):
     return rows
 
 
-def run_auroc(ds, cls, results_dir):
+# ── per-chunk patient scores (chunked cohorts) ──────────────────────────────
+# AUROC needs one score per patient, not every draw: the worst deviation each patient
+# reaches.  That reduction is chunk-local -- a patient's draws never span chunks -- so
+# it is cached per chunk and the AUCs are computed from the cached scores, which is the
+# same arithmetic on the same numbers as the unchunked path.
+AUROC_CACHE = "12_patient_scores"      # a directory: one parquet per analyte
+
+
+def chunk_patient_scores(ds, args):
+    """<chunk>/12_patient_scores.parquet: per (subset, analyte, patient) worst z per
+    method, plus the `Overall` row per patient, with every outcome's event flag."""
+    methods = [m for m in ds.methods if f"{m}_z" in set(ds.classification_columns())]
+    z_cols = [f"{m}_z" for m in methods]
+    made = reused = 0
+    for chunk_dir in ds._chunk_dirs():
+        if datasets.analyte_cache_ready(chunk_dir, AUROC_CACHE) and not args.force:
+            reused += 1
+            continue
+        i = int(os.path.basename(chunk_dir).rsplit("_", 1)[-1])
+        sub_ds = datasets.DATASETS[ds.name](chunk=i)
+        sub_ds.norma_alias, sub_ds.run_ids, sub_ds.no_norma = ds.norma_alias, ds.run_ids, ds.no_norma
+        sub_ds.cohen_models, sub_ds.gaussian_models = ds.cohen_models, ds.gaussian_models
+        cls = datasets.read_classification(chunk_dir)
+        if cls is None:
+            continue
+        cls = _fix_analyte(cls)
+        # attach when any primary outcome lacks its column: a frame classified by an older
+        # run carries that run's outcomes and would otherwise lose one added since
+        wanted = [ds.outcomes[o]["event_col"] for o in ds.primary_outcomes if o in ds.outcomes]
+        if any(c not in cls.columns for c in wanted):
+            cls = sub_ds.attach_outcomes(cls)
+        event_cols = [c for c in wanted if c in cls.columns]
+        if len(event_cols) < len(wanted):
+            print(f"    {os.path.basename(chunk_dir)}: no column for "
+                  f"{sorted(set(wanted) - set(event_cols))} after attach_outcomes")
+        # a chunk classified by an older version can be missing a method's columns
+        # entirely; it keeps its rows, with that method empty, and is reported below
+        missing = [c for c in z_cols if c not in cls.columns]
+        if missing:
+            print(f"    {os.path.basename(chunk_dir)}: no {', '.join(missing)} "
+                  f"(classified by an older version; re-run 07_classify --force to fix)")
+            for c in missing:
+                cls[c] = np.nan
+        for c in z_cols:
+            cls[c] = pd.to_numeric(cls[c], errors="coerce").replace([np.inf, -np.inf], np.nan)
+        frames = []
+        subsets = [("all", cls)]
+        if "PopRI_class" in cls.columns:
+            subsets.append(("pop_normal", cls[cls["PopRI_class"] == 1]))
+        for name, sub in subsets:
+            if not len(sub):
+                continue
+            if "PopRI_class" not in sub.columns:      # the pop_normal subset needs it
+                continue
+            keep = [c for c in ["age", "sex"] if c in sub.columns]
+            agg = {c: "max" for c in z_cols}
+            agg.update({c: "first" for c in event_cols + keep})
+            per_analyte = sub.groupby(["analyte", "patient_id"], observed=True).agg(agg).reset_index()
+            pooled = per_analyte.groupby("patient_id", observed=True).agg(agg).reset_index()
+            pooled["analyte"] = OVERALL
+            frames.append(pd.concat([per_analyte, pooled], ignore_index=True).assign(subset=name))
+        del cls
+        datasets.write_analyte_cache(pd.concat(frames, ignore_index=True), chunk_dir, AUROC_CACHE)
+        made += 1
+        print(f"    {os.path.basename(chunk_dir)}: patient scores cached")
+    print(f"  patient-score cache: {made} chunk(s) computed, {reused} reused")
+    return methods
+
+
+def iter_cached_scores(ds, subset):
+    """(analyte, scores) over the cohort, one analyte at a time out of the caches."""
+    dirs = ds._chunk_dirs()
+    analytes = datasets.cached_analytes(dirs, AUROC_CACHE)
+    if ds._analytes is not None:
+        analytes = [a for a in analytes if a in set(ds._analytes) | {OVERALL}]
+    for analyte in analytes:
+        frames = []
+        for c in dirs:                       # only this analyte's slice of each chunk
+            d = datasets.read_analyte_cache(c, AUROC_CACHE, analyte)
+            if d is not None:
+                d = d[d["subset"] == subset]
+                if len(d):
+                    frames.append(d)
+        if frames:
+            yield analyte, pd.concat(frames, ignore_index=True)
+
+
+def run_auroc_chunked(ds, args, results_dir):
+    methods = chunk_patient_scores(ds, args)
+    z_cols = [f"{m}_z" for m in methods]
+    ref_col = f"NORMA_{NORMA_RUN_ID}_z"
+    if ref_col not in z_cols:
+        ref_col = None
+    rows = []
+    for outcome in ds.primary_outcomes:
+        event_col = ds.outcomes[outcome]["event_col"]
+        for subset in ("all", "pop_normal"):
+            n = 0
+            for analyte, pat in iter_cached_scores(ds, subset):
+                if event_col not in pat.columns:
+                    continue
+                for c in z_cols:                      # chunks that lacked a method
+                    if c not in pat.columns:
+                        pat[c] = np.nan
+                pat = pat.dropna(subset=[event_col])
+                n += len(pat)
+                rows += auc_rows(pat, z_cols, methods, event_col, ref_col,
+                                 dict(outcome=outcome, subset=subset, analyte=analyte))
+            print(f"  {outcome:16s} {subset:11s} {n:>8,} patient-analyte scores")
+    return rows
+
+
+def run_auroc(ds, cls, results_dir, args=None):
+    if cls is None:                      # chunked cohort: from the per-chunk score caches
+        rows = run_auroc_chunked(ds, args, results_dir)
+        return _save_auroc(rows, results_dir, ds)
     df = cls.copy()
     methods = [m for m in ds.methods if f"{m}_z" in df.columns]
     if not methods:
@@ -418,6 +534,10 @@ def run_auroc(ds, cls, results_dir):
             rows += auc_rows(pooled, z_cols, methods, event_col, ref_col, meta)
             print(f"  {outcome:16s} {subset:11s} {len(per_analyte):>8,} patient-analyte scores")
 
+    return _save_auroc(rows, results_dir, ds)
+
+
+def _save_auroc(rows, results_dir, ds):
     if not rows:
         print("  No results to save.")
         return
@@ -701,14 +821,16 @@ def main():
         return
     print(f"  Methods: {ds.methods}")
     cls = None
-    if args.dataset != "chs" or set(args.only) - {"metrics"}:
+    # CHS: metrics works off the per-chunk count caches and auroc off the per-chunk score
+    # caches; only the deviation step still needs every draw in one frame.
+    if args.dataset != "chs" or "deviation" in todo:
         cls = load_classified(ds)
     if "metrics" in todo:
         print("=== metrics ===")
         run_metrics(ds, cls, args, results_dir)
     if "auroc" in todo:
         print("=== auroc ===")
-        run_auroc(ds, cls, results_dir)
+        run_auroc(ds, cls, results_dir, args)
     if "deviation" in todo:
         print("=== deviation ===")
         run_deviation(ds, cls, args, results_dir)

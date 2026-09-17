@@ -1,0 +1,17 @@
+outcome,method,auc,auc_lo,auc_hi,subset,analyte
+anemia_unspecified,Gaussian_eb,0.663,0.655,0.671,all,Overall
+anemia_unspecified,NORMA,0.613,0.605,0.622,all,Overall
+anemia_unspecified,PerRI,0.525,0.516,0.533,all,Overall
+anemia_unspecified,PopRI,0.676,0.669,0.684,all,Overall
+ckd,Gaussian_eb,0.649,0.643,0.655,all,Overall
+ckd,NORMA,0.596,0.589,0.602,all,Overall
+ckd,PerRI,0.539,0.532,0.546,all,Overall
+ckd,PopRI,0.684,0.677,0.69,all,Overall
+mortality,Gaussian_eb,0.664,0.657,0.671,all,Overall
+mortality,NORMA,0.601,0.593,0.608,all,Overall
+mortality,PerRI,0.541,0.533,0.549,all,Overall
+mortality,PopRI,0.697,0.69,0.703,all,Overall
+t2d,Gaussian_eb,0.693,0.686,0.7,all,Overall
+t2d,NORMA,0.609,0.602,0.616,all,Overall
+t2d,PerRI,0.532,0.525,0.54,all,Overall
+t2d,PopRI,0.835,0.83,0.84,all,Overall

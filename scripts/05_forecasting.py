@@ -364,10 +364,13 @@ def run_cohort(args):
         os.makedirs(results_dir, exist_ok=True)
 
     recs = None
-    if ds.no_norma:
-        # No NORMA predictions to take the target rows from, so the targets are built
+    score_norma = bool(args.norma_predictions) or ds.has_norma_predictions()
+    if not score_norma:
+        # No NORMA predictions to take the target rows from (--no_norma, or a cohort
+        # whose NORMA intervals came without them, as on CHS), so the targets are built
         # here; the baselines and the interval centres are scored on exactly those.
-        print("  Targets from index_labs (--no_norma: NORMA is not scored)")
+        why = "--no_norma" if ds.no_norma else "no norma_predictions.parquet"
+        print(f"  Targets from index_labs ({why}: NORMA forecasts are not scored)")
         recs = build_targets(ds, args)
         describe(recs, args.target)
         targets = _fix_analyte(pairs_frame(recs))
@@ -388,7 +391,7 @@ def run_cohort(args):
     print(f"    {len(static):,} (patient, analyte) pairs")
     df = df.merge(static, on=["patient_id", "analyte"], how="inner")
     print(f"  Merged: {len(df):,} targets with "
-          + ("baseline and interval-centre predictions" if ds.no_norma
+          + ("baseline and interval-centre predictions" if not score_norma
              else "NORMA, baseline and interval-centre predictions"))
 
     rows = score_frame(df, ds.name, args.min_n)
@@ -999,6 +1002,29 @@ def _na_weighted(sub, metric):
     return float(np.average(sub.loc[ok, metric], weights=sub.loc[ok, "n"]))
 
 
+def _na_weighted_ci(sub, metric, n_boot=2000, seed=0):
+    """The same mean with a 95% bootstrap interval over analytes.
+
+    Analytes are the resampling unit, as in _nv_paired: the error bar says how
+    much the number depends on which analytes went into it, not how much it
+    depends on which patients did (the arms all see the same targets, so the
+    within-analyte sampling noise is shared and cancels when arms are compared).
+    """
+    ok = (np.isfinite(sub[metric]) & np.isfinite(sub["n"]) & (sub["n"] > 0)).to_numpy()
+    v = sub.loc[ok, metric].to_numpy(float)
+    w = sub.loc[ok, "n"].to_numpy(float)
+    if not len(v):
+        return (np.nan, np.nan, np.nan)
+    mean = float(np.average(v, weights=w))
+    if len(v) < 2:
+        return (mean, np.nan, np.nan)
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, len(v), size=(n_boot, len(v)))
+    boot = (v[idx] * w[idx]).sum(1) / w[idx].sum(1)
+    lo, hi = np.percentile(boot, [2.5, 97.5])
+    return (mean, float(lo), float(hi))
+
+
 def fig_norma_all():
     """Every scored arm's absolute test metrics, grouped by train/test split."""
     frames = []
@@ -1207,6 +1233,16 @@ ARM_GROUPS = {
     "p_co":          ("patient split", "--split_by patient --use_coanalytes"),
     "p_causal":      ("patient split", "--split_by patient --causal_memory"),
     "p_full":        ("patient split", "--split_by patient --use_full_panel --causal_memory"),
+    # The same losses on p_full's inputs and split, so the only thing varying
+    # against p_full is the loss. Listed first: the prior question is about the
+    # arm with the most context to be overconfident from.
+    "m_pa_k5":         ("prior-anchored, multivariate", "--split_by patient --use_full_panel --causal_memory --use_age_t --loss QuantilePriorLoss --prior_mode anchor --prior_k 5"),
+    "m_pa_k20":        ("prior-anchored, multivariate", "--split_by patient --use_full_panel --causal_memory --use_age_t --loss QuantilePriorLoss --prior_mode anchor --prior_k 20"),
+    "m_pa_tau":        ("prior-anchored, multivariate", "--split_by patient --use_full_panel --causal_memory --use_age_t --loss QuantilePriorLoss --prior_mode anchor --prior_k 5 --prior_tau 365"),
+    "m_pf_k5":         ("prior-anchored, multivariate", "--split_by patient --use_full_panel --causal_memory --use_age_t --loss QuantilePriorLoss --prior_mode floor --prior_k 5"),
+    "m_pg_k5":         ("prior-anchored, multivariate", "--split_by patient --use_full_panel --causal_memory --use_age_t --loss QuantilePriorLoss --prior_mode gate --output_mode gate --prior_k 5"),
+    "m_pn_k5":         ("prior-anchored, multivariate", "--split_by patient --use_full_panel --causal_memory --use_age_t --loss StudentTNLLLoss --output_mode nig --nig_nu0 5"),
+    "m_gk_k5":         ("prior-anchored, multivariate", "--split_by patient --use_full_panel --causal_memory --use_age_t --loss NORMALoss --output_mode gaussian --align_by_n --prior_k 5 --lambda_align 0.1"),
     "pa_k5":         ("prior-anchored", "--use_age_t --use_setting --loss QuantilePriorLoss --prior_mode anchor --prior_k 5"),
     "pa_k20":        ("prior-anchored", "--use_age_t --use_setting --loss QuantilePriorLoss --prior_mode anchor --prior_k 20"),
     "pa_tau":        ("prior-anchored", "--use_age_t --use_setting --loss QuantilePriorLoss --prior_mode anchor --prior_k 5 --prior_tau 365"),
@@ -1230,6 +1266,13 @@ ARM_IDEA = {
     "p_co": "was the q_co null an artifact of the patient-analyte split?",
     "p_causal": "effect of masking the cross-attention block",
     "p_full": "every draw in the patient's past, all analytes, irregular times",
+    "m_pa_k5": "pinball + expected pinball under the population prior, weight k/(n+k), on the multivariate arm",
+    "m_pa_k20": "same, stronger prior, on the multivariate arm",
+    "m_pa_tau": "same, with n decaying by time since each draw, on the multivariate arm",
+    "m_pf_k5": "soft floor on the interval width instead of an anchor, on the multivariate arm",
+    "m_pg_k5": "quantiles gated toward the state prior, on the multivariate arm",
+    "m_pn_k5": "conjugate normal-inverse-gamma head, on the multivariate arm",
+    "m_gk_k5": "Gaussian head, KL-aligned to the population interval, n-weighted, on the multivariate arm",
     "pa_k5": "pinball + expected pinball under the population prior, weight k/(n+k)",
     "pa_k20": "same, stronger prior",
     "pa_tau": "same, with n decaying by time since each draw",
@@ -1301,6 +1344,57 @@ def _arm_coverage():
     return cov
 
 
+def _arm_r2():
+    """Each arm's test R^2: the n-weighted mean over analytes fig_norma_all plots,
+    with a bootstrap interval over analytes.
+
+    Both split groups are read, and an arm is only comparable with the arms it
+    shares a test split with -- the sequence-split and patient-split arms are
+    scored on different rows, so the two blocks of the table are two scales.
+    """
+    frames = []
+    for name in ("norma_versions.csv", "norma_versions_patient.csv"):
+        p = find_in(dev_results_dir("05_forecasting"), name)
+        if os.path.exists(p):
+            frames.append(pd.read_csv(p))
+    if not frames:
+        return {}
+    d = pd.concat(frames, ignore_index=True)
+    return {str(v): _na_weighted_ci(g, "r2") for v, g in d.groupby("version")}
+
+
+def _arm_width():
+    """Each arm's mean 95% interval width as a multiple of the population
+    reference interval, from the calibration file training itself writes.
+
+    Normal-queried rows only, which is what fig_calibration_dev_norma shows and
+    the only state where the comparison is like for like: the population
+    interval IS the normal interval, so a high- or low-state query is not
+    trying to reproduce it. Below 1 the arm is narrower than the population
+    interval, above 1 it is wider.
+    """
+    out = {}
+    for run_id in ARM_GROUPS:
+        p = os.path.join(MODEL_LOG_DIR, run_id, "calibration_test.csv")
+        if not os.path.exists(p):
+            continue
+        d = pd.read_csv(p)
+        d = d[(d["state"] == "normal") & (~d["code"].isin(EXCLUDE_ANALYTES))]
+        if len(d):
+            out[run_id] = _na_weighted_ci(d, "width_rel")
+    return out
+
+
+def _fmt_pm(stat, d=3):
+    """value +- half the 95% bootstrap interval, or -- for an arm with no number."""
+    if stat is None or not np.isfinite(stat[0]):
+        return "--"
+    mean, lo, hi = stat
+    if not (np.isfinite(lo) and np.isfinite(hi)):
+        return f"{mean:.{d}f}"
+    return f"{mean:.{d}f} \u00b1 {(hi - lo) / 2:.{d}f}"
+
+
 def _flag(flags, name, default=None):
     """Value of `--name x` in a flag string, or True for a bare switch."""
     m = re.search(rf"--{name}(?:\s+([^\s-][^\s]*))?", flags)
@@ -1323,22 +1417,25 @@ def _describe(run_id, flags, st):
         params.append("weighted by n")
     loss_col = f"{loss} ({', '.join(params)})" if params else loss
 
-    feats = []
+    # The analyte identity is unconditional (model.py embeds it for every arm) and
+    # stays in the caption. Sex is too, but it is listed in every row anyway: a
+    # Features cell reading "age, setting" invites the reading that the arm does
+    # not use sex, and the covariate names only mean anything against a baseline.
+    feats = ["sex"]
     if _flag(flags, "use_age_t"):
-        feats.append("age at draw")
+        feats.append("age")
     if _flag(flags, "use_setting"):
-        feats.append("care setting")
+        feats.append("setting")
     if _flag(flags, "use_full_panel"):
-        feats.append("all analytes, every past draw")
+        feats.append("all past draws")
     elif _flag(flags, "use_coanalytes"):
-        feats.append("same-draw analytes" +
-                     (", history and query" if _flag(flags, "query_coanalytes") else ", history"))
-    features = ", ".join(feats) if feats else "none beyond sex and analyte"
+        feats.append("co-analytes + query" if _flag(flags, "query_coanalytes") else "co-analytes")
+    features = ", ".join(feats)
 
-    attn = ("causal: self and cross masked" if _flag(flags, "causal_memory")
-            else "self masked, cross bidirectional")
+    # Short enough to sit on one line: the caption carries what the two mean.
+    attn = "fully causal" if _flag(flags, "causal_memory") else "cross bidirectional"
     if _flag(flags, "use_full_panel"):
-        attn += "; <= 128 draw tokens"
+        attn += ", <= 128 tokens"
 
     split = "patient" if _flag(flags, "split_by") == "patient" else "sequence"
     return head, loss_col, features, attn, split
@@ -1359,6 +1456,7 @@ def table_norma_arms():
     where it stopped.
     """
     cov = _arm_coverage()
+    r2, width = _arm_r2(), _arm_width()
     rows = []
     for run_id, (group, flags) in ARM_GROUPS.items():
         st = _arm_status(run_id)
@@ -1376,37 +1474,66 @@ def table_norma_arms():
         rows.append({
             "Arm": run_id, "Group": group, "Head": head, "Loss": loss_col,
             "Features": features, "Attention": attn, "Split": split, "Status": state,
-            "Forecast": "yes" if run_id in cov["forecast"] else "--",
+            "R2": _fmt_pm(r2.get(run_id) if run_id in cov["forecast"] else None),
+            "Width / Pop RI": _fmt_pm(width.get(run_id)),
             "Calibration (dev)": "yes" if run_id in cov["calib_dev"] else "--",
             "Calibration (cohorts)": "yes" if run_id in cov["calib_ext"] else "--",
             "Sensitivity": "yes" if run_id in cov["sensitivity"] else "--",
             "Question": ARM_IDEA.get(run_id, ""), "Flags": flags or "(none)",
+            **dict(zip(("R2_mean", "R2_lo", "R2_hi"),
+                       r2.get(run_id, (np.nan,) * 3) if run_id in cov["forecast"]
+                       else (np.nan,) * 3)),
+            **dict(zip(("width_mean", "width_lo", "width_hi"),
+                       width.get(run_id, (np.nan,) * 3))),
         })
     df = pd.DataFrame(rows)
 
     # Question and Flags stay in the CSV; the typeset table keeps the configuration.
-    cols = ["Arm", "Group", "Head", "Loss", "Features", "Attention", "Split", "Status",
-            "Forecast", "Calibration (dev)", "Calibration (cohorts)", "Sensitivity"]
-    short = {"Calibration (dev)": "Calib. dev", "Calibration (cohorts)": "Calib. cohorts"}
-    lines = [r"\begin{table}[ht]", r"\centering", r"\scriptsize",
-             r"\begin{tabular}{lll p{3.2cm} p{2.8cm} p{2.9cm} ll cccc}", r"\toprule",
-             " & ".join(short.get(c, c) for c in cols) + r" \\", r"\midrule"]
+    # Calib. dev is not a column of its own: the width ratio comes from exactly
+    # that file, so a number there IS the flag, as R2 is for the forecasting step.
+    # Group is not a column: it repeats down every row of a block and costs width
+    # the three wrapping columns need. It becomes a sub-header above each block.
+    cols = ["Arm", "Head", "Loss", "Features", "Attention", "Split", "Status",
+            "R2", "Width / Pop RI"]
+    short = {"R2": r"$R^2$", "Width / Pop RI": r"Width / Pop$_{RI}$"}
+    # Which analyses an arm has been through (Calib. cohorts / Sensitivity) is
+    # pipeline bookkeeping rather than a property of the arm, so it stays in the
+    # CSV and is off the typeset table. The width those two and Group freed goes
+    # to Loss, Features and Attention, whose longest cells used to wrap to three
+    # lines ("QuantilePriorLoss (anchor, k=5, tau=365d)", "sex, age, setting,
+    # co-analytes + query", "fully causal, <= 128 tokens").
+    lines = [r"\begin{table}[ht]", r"\centering", r"\setlength{\tabcolsep}{4pt}",
+             r"\begin{tabular}{ll p{3.0cm} p{3.2cm} p{2.6cm} l p{1.9cm} rr}", r"\toprule",
+             " & ".join(short.get(c, c) for c in cols) + r" \\"]
     last = None
     for _, r in df.iterrows():
-        if last is not None and r["Group"] != last:
+        if r["Group"] != last:
             lines.append(r"\midrule")
+            lines.append(r"\multicolumn{%d}{l}{\emph{%s}} \\" % (len(cols), r["Group"]))
         last = r["Group"]
         lines.append(" & ".join(str(r[c]).replace("_", r"\_").replace("<=", r"$\leq$")
                                 for c in cols) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}",
               r"\caption{Every NORMA arm trained since the covariate ablation began. "
               r"All are NORMA2 at $d_{\mathrm{model}}=64$, 4 heads, 8 layers and 3 states, "
-              r"trained on EHRSHOT and MIMIC-IV together. \emph{Attention}: the decoder "
+              r"trained on EHRSHOT and MIMIC-IV together. Every arm conditions on the "
+              r"analyte identity and on age at the first draw; \emph{Features} lists the "
+              r"per-draw covariates each arm uses, sex included. "
+              r"$R^2$ is the test $R^2$ on the development split and "
+              r"\emph{Width / Pop$_{RI}$} the mean 95\% interval width divided by the "
+              r"population reference interval width on normal-state queries; both are means "
+              r"over analytes weighted by the number of targets, pooled over EHRSHOT and "
+              r"MIMIC-IV, $\pm$ half a 95\% bootstrap interval over analytes (2{,}000 "
+              r"resamples). They are comparable within a split group and only indicative "
+              r"across them, since the patient-split arms are scored on different rows. "
+              r"A width below 1 is narrower than the population interval. "
+              r"\emph{Attention}: the decoder "
               r"layers are called with memory equal to target, so the causal mask applies "
               r"to self-attention only, leaving the cross-attention block bidirectional "
               r"over history, unless \texttt{--causal\_memory} masks both.}",
               r"\end{table}"]
-    save_table("05_forecasting", "norma_arms", lines, df, landscape=True)
+    save_table("05_forecasting", "norma_arms", lines, df, landscape=True,
+               font_size="scriptsize")
     return ["norma_arms"]
 
 

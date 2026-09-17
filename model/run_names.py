@@ -40,6 +40,19 @@ RUN_COVARIATES = {
     "p_co": "sex, analytes; patient split",
     "p_causal": "sex, causal mask; patient split",
     "p_full": "sex, every past draw, causal mask; patient split",
+    # prior-anchored on the multivariate arm (run_prior_ablation.sh): p_full's
+    # inputs and split with each prior-anchored loss, so the only thing varying
+    # against p_full is the loss. These are the arms the prior question is
+    # actually about -- a width floor matters most where the model has the most
+    # context to be overconfident from -- so they lead the prior group and the
+    # sex/age/setting variants follow.
+    "m_pa_k5":  "sex, age, every past draw, causal mask; patient split; prior anchor k=5",
+    "m_pa_k20": "sex, age, every past draw, causal mask; patient split; prior anchor k=20",
+    "m_pa_tau": "sex, age, every past draw, causal mask; patient split; prior anchor k=5, tau=365d",
+    "m_pf_k5":  "sex, age, every past draw, causal mask; patient split; width floor k=5",
+    "m_pg_k5":  "sex, age, every past draw, causal mask; patient split; learned gate k=5",
+    "m_pn_k5":  "sex, age, every past draw, causal mask; patient split; conjugate NIG head",
+    "m_gk_k5":  "sex, age, every past draw, causal mask; patient split; Gaussian KL-aligned k=5",
 }
 
 # the patient-split group compares only within itself (different test set)
@@ -53,8 +66,14 @@ SHORT_KEY = ("every run also uses age at the first draw and the analyte code; "
 RUN_ORDER = ["334f7e21", "q_age", "q_set", "q_co", "q_age_set", "q_age_co", "q_set_co",
              "q_age_set_co", "q_co_q"]
 
-# prior-anchored arms (run_prior_ablation.sh): the main model's covariates with a
-# different loss or output head
+# prior-anchored arms (run_prior_ablation.sh): a different loss or output head on
+# fixed inputs. Two input families: MULTI_PRIOR_ORDER puts each loss on p_full's
+# multivariate patient-split inputs, PRIOR_ORDER on the main model's
+# sex/age/setting inputs. The multivariate family is listed first because it is
+# the one the question is about; the names differ only by the m_ prefix so the
+# two are read as a pair.
+MULTI_PRIOR_ORDER = ["m_pa_k5", "m_pa_k20", "m_pa_tau", "m_pf_k5", "m_pg_k5",
+                     "m_pn_k5", "m_gk_k5"]
 PRIOR_ORDER = ["pa_k5", "pa_k20", "pa_tau", "pf_k5", "pg_k5", "pn_k5", "gk_k5"]
 
 # Every arm trained since the covariate ablation began, in reading order, with the
@@ -63,25 +82,33 @@ PRIOR_ORDER = ["pa_k5", "pa_k20", "pa_tau", "pf_k5", "pg_k5", "pn_k5", "gk_k5"]
 # figlib's ABLATION registry comment already warns about.
 ARM_GROUP = ({r: "covariate" for r in RUN_ORDER}
              | {r: "patient split" for r in PATIENT_SPLIT_ORDER}
+             | {r: "prior-anchored, multivariate" for r in MULTI_PRIOR_ORDER}
              | {r: "prior-anchored" for r in PRIOR_ORDER})
-ALL_ARMS = RUN_ORDER + PATIENT_SPLIT_ORDER + PRIOR_ORDER
+ALL_ARMS = RUN_ORDER + PATIENT_SPLIT_ORDER + MULTI_PRIOR_ORDER + PRIOR_ORDER
+PRIOR_GROUPS = set(MULTI_PRIOR_ORDER) | set(PRIOR_ORDER)
 
 
 def arm_short(run_id):
     """Legend label for an arm.
 
-    The prior-anchored arms all carry the main model's covariates and differ only
-    in the loss, so their shared prefix is dropped -- seven rows repeating
-    "sex, age, setting" says nothing, and "NORMA | prior anchor k=5" says what
-    the arm is. Every other group keeps its covariates, including the
+    Within a prior-anchored family every arm carries the same inputs and differs
+    only in the loss, so the shared prefix is dropped -- rows repeating
+    "sex, age, setting" say nothing, and "NORMA | prior anchor k=5" says what the
+    arm is. The loss is the last semicolon-separated segment in both families.
+
+    The multivariate family keeps a ", full panel" marker rather than dropping
+    its prefix outright: m_pa_k5 and pa_k5 are the same loss on different inputs,
+    so bare loss names would give two different arms the same label on any figure
+    that shows both. Every other group keeps its covariates, including the
     patient-split arms, whose semicolon separates the covariates from the split
     marker rather than a shared prefix.
     """
     cov = RUN_COVARIATES.get(run_id)
     if cov is None:
         return f"NORMA_{run_id}"
-    if run_id in PRIOR_ORDER and ";" in cov:
-        cov = cov.split(";", 1)[1].strip()
+    if run_id in PRIOR_GROUPS and ";" in cov:
+        loss = cov.rsplit(";", 1)[1].strip()
+        cov = f"{loss}, full panel" if run_id in MULTI_PRIOR_ORDER else loss
     return f"NORMA | {cov}"
 
 # Legend form: "NORMA | sex, age, setting". Same words, no key needed.

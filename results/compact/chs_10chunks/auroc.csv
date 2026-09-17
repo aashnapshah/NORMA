@@ -1,0 +1,5 @@
+outcome,PopRI,PerRI,Gaussian_mle,Gaussian_trunc,Gaussian_eb,NORMA
+anemia_unspecified,0.676,0.525,0.667,0.661,0.663,0.613
+ckd,0.684,0.539,0.653,0.642,0.649,0.596
+mortality,0.697,0.541,0.666,0.659,0.664,0.601
+t2d,0.835,0.532,0.696,0.675,0.693,0.609

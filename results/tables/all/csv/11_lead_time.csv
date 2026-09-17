@@ -1,9 +1,9 @@
-Cohort,Method,RR future abnormal,Early flags (own),Median lead h (own),Alerts/100 pt-d (own),Early flags (matched),Median lead h (matched),Alerts/100 pt-d (matched)
-eICU-CRD,Pop$_{RI}$,1.62,---,---,---,---,---,---
-eICU-CRD,Per$_{RI}$,0.85,---,---,---,---,---,---
-eICU-CRD,Cohen,1.01,---,---,---,---,---,---
-eICU-CRD,NORMA$_{RI}$,1.31,---,---,---,---,---,---
-INSPIRE,Pop$_{RI}$,1.65,---,---,---,---,---,---
-INSPIRE,Per$_{RI}$,0.85,---,---,---,---,---,---
-INSPIRE,Cohen,1.06,---,---,---,---,---,---
-INSPIRE,NORMA$_{RI}$,1.21,---,---,---,---,---,---
+Cohort,Method,RR future abnormal,AUROC future abnormal,Early flags (own),Median lead h (own),Alerts/100 pt-d (own),Early flags (matched),Median lead h (matched),Alerts/100 pt-d (matched)
+eICU-CRD,Pop$_{RI}$,5.25,0.80,---,---,---,---,---,---
+eICU-CRD,Per$_{RI}$,1.72,0.63,---,---,---,---,---,---
+eICU-CRD,Cohen,2.24,0.67,---,---,---,---,---,---
+eICU-CRD,NORMA$_{RI}$,2.33,0.68,---,---,---,---,---,---
+INSPIRE,Pop$_{RI}$,3.39,0.71,---,---,---,---,---,---
+INSPIRE,Per$_{RI}$,1.41,0.60,---,---,---,---,---,---
+INSPIRE,Cohen,2.03,0.65,---,---,---,---,---,---
+INSPIRE,NORMA$_{RI}$,2.06,0.65,---,---,---,---,---,---

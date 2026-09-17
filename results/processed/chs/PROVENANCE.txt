@@ -1,0 +1,6 @@
+Rebuilt by jobs/compact_import.py from results/compact/chs_10chunks/.
+Those tables were transcribed from screenshots of the cohort's own run, so:
+  - every number is rounded to three significant figures
+  - only the rows and columns the figures draw are here
+  - a missing column is missing, not zero
+Files: 05_forecast.csv, 07_prevalence.csv, 06_calibration.csv, 06_conformal.csv, 11_future_abnormal.csv, 11_lead_time.csv, 12_auroc.csv

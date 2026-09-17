@@ -448,6 +448,16 @@ def parse_args():
         # of _load_data(); setting it later builds a model with no co_proj and silently
         # drops co_h in NORMA2.forward.
         args.use_coanalytes = True
+        if getattr(args, 'use_setting', False):
+            # data.py rebuilds age_h on the panel clock (age at the query less the
+            # elapsed years) but cannot do the same for the care setting: drawmeta
+            # carries row_time only, and a setting is not a function of time. Left
+            # unguarded this trains on a silently dropped setting embedding, since
+            # NORMA2.forward skips it when setting_h is None.
+            raise SystemExit(
+                '--use_setting is not supported with --use_full_panel: the setting of a '
+                'panel row is not in drawmeta (scripts/process/draw_meta.py would have to '
+                'emit a row_setting column). Use --use_age_t alone on full-panel arms.')
     if getattr(args, 'query_coanalytes', False) and not getattr(args, 'use_coanalytes', False):
         raise SystemExit('--query_coanalytes requires --use_coanalytes (there is no co_proj without it)')
     return args

@@ -53,6 +53,7 @@ from joblib import Parallel, delayed
 from lifelines import CoxPHFitter
 from statsmodels.stats.multitest import multipletests
 
+import datasets
 from datasets import already_done, add_dataset_args, get_dataset, save_csv, EXCLUDE_LABS
 from metrics import EXPOSURES, WINDOW_HOURS, exposure_rows, mark_exposures, stay_col, to_hours, method_prefix
 
@@ -81,7 +82,13 @@ def method_z(df, method):
     return z.replace([np.inf, -np.inf], np.nan)
 
 
-def stay_table(rows, landmark, methods, outcome_cfg, unit):
+# Why a stay table can come out empty, kept per (exposure, outcome) so the "no models"
+# message can say which it was.  This used to be silent: CHS dropped every row and the
+# only clue was a message about follow-up that was true of nothing in particular.
+DROPS = {}
+
+
+def stay_table(rows, landmark, methods, outcome_cfg, unit, shift_hours=0.0, drop_key=None):
     """One row per (stay, analyte): each method's class / z of the exposure, the
     landmark, and the outcome with follow-up measured from the landmark."""
     stay = stay_col(rows)
@@ -98,7 +105,7 @@ def stay_table(rows, landmark, methods, outcome_cfg, unit):
     table = (rows.sort_values("t_hours").groupby(keys, sort=False)
              .agg(age=("age", "first"), sex=("sex", "first"), landmark=("_landmark", "first"),
                   event=("_event", "first"), t_event=("_t_event", "first"),
-                  t_censor=("_t_censor", "first")))
+                  t_censor=("_t_censor", "first"), t0=("t0_hours", "first")))
     # per method the most deviant exposure row (for first / window_worst there is one row)
     for m in methods:
         sub = rows[keys + [f"z__{m}", f"cls__{m}"]].dropna(subset=[f"cls__{m}"])
@@ -113,14 +120,133 @@ def stay_table(rows, landmark, methods, outcome_cfg, unit):
 
     table = table.reset_index()
     end = np.where(table["event"] == 1, table["t_event"], table["t_censor"])
-    table["duration"] = end - table["landmark"]
+    # The landmark is hours from the patient's FIRST HISTORY measurement, counted on the
+    # cohort's own timestamp epoch (lib/metrics exposure_rows -> t0_hours).  The outcome
+    # columns are counted from a different date: CHS builds death_days / followup_days
+    # relative to 2015-01-01 while its timestamps run from 2005-01-01, so subtracting the
+    # two raw put every patient ~3652 days in the past and the `> 0` filter emptied the
+    # cohort.  shift_hours rebases the landmark onto the outcome clock; it is 0 for a
+    # cohort whose two clocks already agree, which is every other cohort here.
+    table["duration"] = end - (table["landmark"] - shift_hours)
     table["age"] = pd.to_numeric(table["age"], errors="coerce")
     table["sex"] = pd.to_numeric(table["sex"], errors="coerce")
-    table = table.dropna(subset=["duration", "event", "age", "sex"])
-    return table[table["duration"] > 0]
+    n_in = len(table)
+    kept = table.dropna(subset=["duration", "event", "age", "sex"])
+    n_nan = n_in - len(kept)
+    out = kept[kept["duration"] > 0]
+    if drop_key is not None and n_in:
+        d = DROPS.setdefault(drop_key, {"rows": 0, "nan": 0, "nonpositive": 0, "kept": 0})
+        d["rows"] += n_in
+        d["nan"] += n_nan
+        d["nonpositive"] += len(kept) - len(out)
+        d["kept"] += len(out)
+    return out
 
 
-def analyte_table(df, analyte, methods, cfg, unit, exposure, window_hours, min_rows):
+# ── per-chunk stay tables (chunked cohorts) ────────────────────────────────
+# The models need one row per (patient, analyte), not every draw, and that reduction is
+# chunk-local -- a patient's measurements never span chunks.  So each chunk is reduced
+# once, cached beside it, and the fits read one analyte at a time across the caches.
+# The reduction is `stay_table`, the same function the unchunked path calls.
+COX_CACHE = "13_stay_tables"           # a directory: one parquet per analyte
+
+
+def chunk_stay_tables(ds, args, unit, shift_hours=0.0):
+    """<chunk>/13_stay_tables.parquet: the stay table per (analyte, exposure), with every
+    outcome's event and times as columns so one pass serves all of them."""
+    import datasets as _ds
+    methods = [m for m in ds.methods if f"{m}_class" in set(ds.classification_columns())]
+    made = reused = 0
+    for chunk_dir in ds._chunk_dirs():
+        if _ds.analyte_cache_ready(chunk_dir, COX_CACHE) and not args.force:
+            reused += 1
+            continue
+        i = int(os.path.basename(chunk_dir).rsplit("_", 1)[-1])
+        sub_ds = _ds.DATASETS[ds.name](chunk=i)
+        for attr in ("norma_alias", "run_ids", "no_norma", "cohen_models", "gaussian_models"):
+            setattr(sub_ds, attr, getattr(ds, attr))
+        df = _ds.read_classification(chunk_dir)
+        if df is None:
+            continue
+        df["analyte"] = df["analyte"].replace("", "NA").fillna("NA")
+        df = df[~df["analyte"].isin(set(EXCLUDE_LABS))]
+        df["age"] = pd.to_numeric(df["age"], errors="coerce")
+        df["sex"] = pd.to_numeric(df["sex"], errors="coerce")
+        if "exp_first" not in df.columns:
+            df = mark_exposures(df, ds.time_unit, args.window_hours)
+        # Every time-to-event outcome the cohort defines, not just those whose columns the
+        # classification frame happens to carry: a frame written by an older run has the
+        # outcomes of that run (has_t2d, has_ckd) and would silently drop one added since
+        # (has_anemia_unspecified) before attach_outcomes could supply it.
+        outcomes = survival_outcomes(sub_ds)
+        if any(cfg["event_col"] not in df.columns for _, cfg in outcomes):
+            df = sub_ds.attach_outcomes(df)
+        missing = [o for o, cfg in outcomes if cfg["event_col"] not in df.columns]
+        if missing:
+            print(f"    {os.path.basename(chunk_dir)}: no event column for {missing} after "
+                  f"attach_outcomes (not in this chunk's diagnosis table); skipped")
+            outcomes = [(o, cfg) for o, cfg in outcomes if o not in missing]
+        frames = []
+        for exposure in args.exposures:
+            for analyte in sorted(df["analyte"].unique()):
+                lab = df[df["analyte"] == analyte]
+                if len(lab) < 20:
+                    continue
+                rows, landmark = exposure_rows(lab, exposure, args.window_hours)
+                if rows.empty:
+                    continue
+                base = None
+                for outcome, cfg in outcomes:
+                    t = stay_table(rows, landmark, methods, cfg, unit, shift_hours,
+                                   drop_key=(exposure, outcome))
+                    if not len(t):
+                        continue
+                    keep = [c for c in t.columns if c not in ("event", "t_event", "t_censor", "duration")]
+                    t = t.rename(columns={"event": f"event__{outcome}",
+                                          "t_event": f"t_event__{outcome}",
+                                          "t_censor": f"t_censor__{outcome}",
+                                          "duration": f"duration__{outcome}"})
+                    base = t if base is None else base.merge(
+                        t[[c for c in t.columns if c not in keep] + ["patient_id", "analyte"]],
+                        on=["patient_id", "analyte"], how="outer")
+                if base is not None and len(base):
+                    frames.append(base.assign(exposure=exposure))
+        del df
+        if frames:
+            _ds.write_analyte_cache(pd.concat(frames, ignore_index=True), chunk_dir, COX_CACHE)
+        made += 1
+        print(f"    {os.path.basename(chunk_dir)}: stay tables cached")
+    print(f"  stay-table cache: {made} chunk(s) computed, {reused} reused")
+    return methods
+
+
+def cached_analyte_table(ds, analyte, exposure, outcome):
+    """One analyte's stay table for this outcome, pooled over the chunks."""
+    import datasets as _ds
+    frames = []
+    for chunk_dir in ds._chunk_dirs():       # only this analyte's slice of each chunk
+        d = _ds.read_analyte_cache(chunk_dir, COX_CACHE, analyte)
+        if d is None:
+            continue
+        d = d[d["exposure"] == exposure]
+        if len(d):
+            frames.append(d)
+    if not frames:
+        return None
+    t = pd.concat(frames, ignore_index=True)
+    ren = {f"{c}__{outcome}": c for c in ("event", "t_event", "t_censor", "duration")}
+    if not set(ren) <= set(t.columns):
+        _CACHE_LACKS.add(outcome)          # reported once per outcome by run_models
+        return None
+    t = t.rename(columns=ren)
+    return t[t["duration"] > 0]
+
+
+_CACHE_LACKS = set()      # outcomes whose columns no stay-table cache carries
+
+
+def analyte_table(df, analyte, methods, cfg, unit, exposure, window_hours, min_rows,
+                  shift_hours=0.0, outcome=None):
     """Stay table for one analyte, restricted to the stays every method can score."""
     lab = df[df["analyte"] == analyte]
     if len(lab) < 20:
@@ -128,7 +254,8 @@ def analyte_table(df, analyte, methods, cfg, unit, exposure, window_hours, min_r
     rows, landmark = exposure_rows(lab, exposure, window_hours)
     if rows.empty:
         return None
-    table = stay_table(rows, landmark, methods, cfg, unit)
+    table = stay_table(rows, landmark, methods, cfg, unit, shift_hours,
+                       drop_key=(exposure, outcome))
     table = table.dropna(subset=[f"cls__{m}" for m in methods])
     return table if len(table) >= min_rows else None
 
@@ -143,12 +270,13 @@ def fit_cox(df, covariates):
     return cph
 
 
-def survival_outcomes(ds, df):
+def survival_outcomes(ds, df=None):
     """(key, cfg) of the primary outcomes that are time-to-event."""
     outcomes = []
     for key in ds.primary_outcomes:
         cfg = ds.outcomes.get(key)
-        if cfg is None or cfg["event_col"] not in df.columns:
+        # df is None for a chunked cohort: the outcome columns are attached per chunk
+        if cfg is None or (df is not None and cfg["event_col"] not in df.columns):
             continue
         if not cfg.get("survival", True):
             print(f"  {key}: skipped, not a time-to-event outcome (the label is defined by the "
@@ -213,9 +341,17 @@ def fit_one(table, method, encoding, analyte, outcome, exposure):
 
 
 def models_for_analyte(df, analyte, methods, outcome, cfg, unit, exposure, window_hours,
-                       encodings, subsets):
+                       encodings, subsets, table=None, shift_hours=0.0):
     """All (method, encoding, subset) models for one analyte; returns {subset: rows}."""
-    table = analyte_table(df, analyte, methods, cfg, unit, exposure, window_hours, min_rows=10)
+    if table is None:
+        if df is None:              # chunked cohort with nothing cached for this analyte
+            return {}
+        table = analyte_table(df, analyte, methods, cfg, unit, exposure, window_hours, min_rows=10,
+                              shift_hours=shift_hours, outcome=outcome)
+    elif len(table) < 10:
+        table = None
+    else:
+        table = table.dropna(subset=[f"cls__{m}" for m in methods])
     if table is None:
         return {}
     out = {}
@@ -241,15 +377,82 @@ def apply_fdr(df):
     return df
 
 
-def run_models(ds, df, methods, analytes, unit, args, results_dir):
+def done_slices(results_dir, force):
+    """(outcome, exposure) pairs already in cox.csv, so an interrupted run resumes.
+
+    The fitting is the long half of this stage and it used to write nothing until every
+    outcome was done; a crash at 90% left nothing behind.  Each (exposure, outcome) slice
+    is now written as it finishes, and a rerun skips what is already there."""
+    if force:
+        return set()
+    path = datasets.find_in(results_dir, "cox.csv")
+    if not os.path.exists(path) or not os.path.getsize(path):
+        return set()
+    d = pd.read_csv(path, usecols=lambda c: c in ("outcome", "exposure"))
+    if not {"outcome", "exposure"} <= set(d.columns):
+        return set()
+    return set(map(tuple, d.drop_duplicates().to_numpy()))
+
+
+def save_slice(results, ds, args, results_dir, decimals):
+    """One (exposure, outcome) slice of the results, upserted into cox.csv."""
+    for subset, rows in results.items():
+        if not rows:
+            continue
+        out = apply_fdr(pd.DataFrame(rows)).round(decimals)
+        out.insert(0, "subset", subset)        # one file, the subset is a column
+        path = os.path.join(results_dir, "cox.csv")
+        if args.dry_run:
+            print(f"  [dry run] {subset}: {len(out)} rows -> {path}")
+            continue
+        # FDR groups by (outcome, exposure, encoding), so a slice's own values are final;
+        # p_fdr_global spans the file and is redone once every slice is written.
+        save_csv(out, path, analytes=ds._analytes, keys=("subset", "outcome", "exposure"))
+        print(f"  Saved {len(out)} rows -> {path}  (FDR<0.05: {(out.p_fdr < 0.05).sum()})")
+
+
+def refresh_global_fdr(results_dir, dry_run):
+    path = datasets.find_in(results_dir, "cox.csv")
+    if dry_run or not os.path.exists(path) or not os.path.getsize(path):
+        return
+    d = pd.read_csv(path)
+    if "p_value" not in d.columns or not len(d):
+        return
+    ok = d["p_value"].notna()
+    d.loc[ok, "p_fdr_global"] = multipletests(d.loc[ok, "p_value"].to_numpy(), method="fdr_bh")[1]
+    d.to_csv(path, index=False)
+
+
+def run_models(ds, df, methods, analytes, unit, args, results_dir, shift_hours=0.0):
     print(f"  exposures {args.exposures}; encodings {args.encodings}")
-    results = {s: [] for s in args.subsets}
+    chunked = df is None
+    decimals = {"HR": 3, "HR_lower": 3, "HR_upper": 3, "p_value": 5}
+    already = done_slices(results_dir, args.force)
+    if already:
+        print(f"  already in cox.csv, skipped: {sorted(already)}")
     for exposure in args.exposures:
         for outcome, cfg in survival_outcomes(ds, df):
-            per_analyte = Parallel(n_jobs=args.n_jobs)(
-                delayed(models_for_analyte)(df, a, methods, outcome, cfg, unit, exposure,
-                                            args.window_hours, args.encodings, args.subsets)
-                for a in analytes)
+            if (outcome, exposure) in already:
+                continue
+            results = {s: [] for s in args.subsets}      # this slice only
+            if chunked:
+                # one analyte's table at a time out of the per-chunk caches; the fitting
+                # itself is unchanged, and the rows it sees are the same rows.  The read is
+                # serial (it is I/O over the chunk files) and the fits are parallel.
+                per_analyte = []
+                for a in analytes:
+                    table = cached_analyte_table(ds, a, exposure, outcome)
+                    if table is None or len(table) < 10:
+                        continue
+                    per_analyte.append(models_for_analyte(
+                        None, a, methods, outcome, cfg, unit, exposure, args.window_hours,
+                        args.encodings, args.subsets, table=table, shift_hours=shift_hours))
+            else:
+                per_analyte = Parallel(n_jobs=args.n_jobs)(
+                    delayed(models_for_analyte)(df, a, methods, outcome, cfg, unit, exposure,
+                                                args.window_hours, args.encodings, args.subsets,
+                                                shift_hours=shift_hours)
+                    for a in analytes)
             n_rows = 0
             for result in per_analyte:
                 for subset, rows in result.items():
@@ -262,22 +465,26 @@ def run_models(ds, df, methods, analytes, unit, args, results_dir):
                 print(f"  [{exposure}] {outcome}: {n_rows} rows; stays/analyte median "
                       f"{int(binary.n.median())}, events median {int(binary.n_events.median())}; "
                       f"median HR(binary) {median_hr}")
+            elif chunked and outcome in _CACHE_LACKS:
+                print(f"  [{exposure}] {outcome}: no models: the stay-table caches "
+                      f"({COX_CACHE}/) have no columns for this outcome. They were built "
+                      f"before it was defined; rerun with --force to rebuild them.")
             else:
-                print(f"  [{exposure}] {outcome}: no models (no stays with positive follow-up?)")
-
-    decimals = {"HR": 3, "HR_lower": 3, "HR_upper": 3, "p_value": 5}
-    for subset, rows in results.items():
-        if not rows:
-            print(f"  {subset}: nothing to save")
-            continue
-        out = apply_fdr(pd.DataFrame(rows)).round(decimals)
-        out.insert(0, "subset", subset)        # one file, the subset is a column
-        path = os.path.join(results_dir, "cox.csv")
-        if args.dry_run:
-            print(f"  [dry run] {subset}: {len(out)} rows -> {path}\n{out.head(8).to_string()}")
-            continue
-        save_csv(out, path, analytes=ds._analytes, keys=("subset",))
-        print(f"  Saved {len(out)} rows -> {path}  (FDR<0.05: {(out.p_fdr < 0.05).sum()})")
+                d = DROPS.get((exposure, outcome))
+                why = ""
+                if d and d["rows"]:
+                    why = (f"; of {d['rows']} stay rows: {d['nonpositive']} had follow-up "
+                           f"<= 0, {d['nan']} missing duration/event/age/sex, {d['kept']} kept")
+                    if d["nonpositive"] > 0.5 * d["rows"]:
+                        why += ("\n      most follow-up came out <= 0, which usually means the "
+                                "outcome times and the landmark are on different clocks -- "
+                                "the landmark and the outcome times are probably on "
+                                "different clocks -- check the cohort's timestamp_epoch "
+                                "and outcome_ref_date")
+                print(f"  [{exposure}] {outcome}: no models (no stays with positive follow-up, "
+                      f"or fewer than 20 stays per analyte){why}")
+            save_slice(results, ds, args, results_dir, decimals)      # written as it goes
+    refresh_global_fdr(results_dir, args.dry_run)
 
 
 # =============================================================================
@@ -307,6 +514,9 @@ def main():
     p.add_argument("--subsets", nargs="+", default=["all", "pop_normal"])
     p.add_argument("--window_hours", type=float, default=WINDOW_HOURS)
     p.add_argument("--n_jobs", type=int, default=4)
+    p.add_argument("--landmark-shift-hours", dest="landmark_shift_hours", type=float, default=None,
+                   help="hours to rebase the landmark by so it lands on the same clock as the "
+                        "outcome times. Defaults to the cohort's own epochs.")
     p.add_argument("--exposures", nargs="+", default=list(EXPOSURES), choices=EXPOSURES)
     p.add_argument("--encodings", nargs="+", default=list(ENCODINGS), choices=ENCODINGS)
     p.add_argument("--dry_run", action="store_true", help="print, do not write results")
@@ -317,13 +527,30 @@ def main():
     if already_done(args, results_dir, "cox.csv", label="landmark Cox models"):
         return
     unit = getattr(ds, "outcome_time_unit", None) or ds.time_unit or "minutes"
-    df = load_classified(ds, args.window_hours)
-    analytes = sorted(a for a in df["analyte"].unique() if a not in set(EXCLUDE_LABS))
-    methods = [m for m in ds.methods if f"{m}_class" in df.columns]
-    print(f"  {len(df):,} index measurements, {df[stay_col(df)].nunique():,} stays, {len(analytes)} analytes")
+    # A cohort whose lab timestamps and outcome times start from different dates needs the
+    # landmark rebased before the two can be subtracted (see stay_table).
+    ep, ref = getattr(ds, "timestamp_epoch", None), getattr(ds, "outcome_ref_date", None)
+    shift_hours = (pd.Timestamp(ref) - pd.Timestamp(ep)).days * 24.0 if ep and ref else 0.0
+    if args.landmark_shift_hours is not None:
+        shift_hours = args.landmark_shift_hours
+    print(f"  outcome time: unit={unit}, landmark shift={shift_hours / 24:g} days")
+    if ds.name == "chs":            # never one frame: reduce per chunk, then fit per analyte
+        methods = chunk_stay_tables(ds, args, unit, shift_hours)
+        df = None
+        first = datasets.classification_paths(ds._chunk_dirs()[0])[0]
+        analytes = sorted(set(pd.read_parquet(first, columns=["analyte"])["analyte"]
+                              .replace("", "NA").dropna()) - set(EXCLUDE_LABS))
+        if ds._analytes:
+            analytes = [a for a in analytes if a in ds._analytes]
+        print(f"  {len(ds._chunk_dirs())} chunks, {len(analytes)} analytes")
+    else:
+        df = load_classified(ds, args.window_hours)
+        analytes = sorted(a for a in df["analyte"].unique() if a not in set(EXCLUDE_LABS))
+        methods = [m for m in ds.methods if f"{m}_class" in df.columns]
+        print(f"  {len(df):,} index measurements, {df[stay_col(df)].nunique():,} stays, {len(analytes)} analytes")
     print(f"  methods {methods}; outcome clock: {unit}")
 
-    run_models(ds, df, methods, analytes, unit, args, results_dir)
+    run_models(ds, df, methods, analytes, unit, args, results_dir, shift_hours)
 
 
 # ═════════════════════════════════════════════════════════════════════════

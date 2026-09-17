@@ -1,0 +1,7 @@
+method,gamma,coverage_raw,width_rel_raw,coverage_cal,width_rel_cal,analyte
+NORMA,1.15,0.922,0.628,0.951,0.83,median
+PopRI,0.933,1.0,1.0,0.956,0.933,median
+Gaussian_mle,1.81,0.821,0.56,0.951,1.05,median
+Gaussian_eb,1.98,0.82,0.638,0.951,1.17,median
+Gaussian_trunc,2.35,0.743,0.619,0.952,1.4,median
+PerRI,3.86,0.72,0.471,0.95,1.65,median

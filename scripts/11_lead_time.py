@@ -1,23 +1,38 @@
 #!/usr/bin/env python
 """Does a personalised interval see a Pop_RI-abnormal value coming?  Two designs,
-both disease-agnostic (the endpoint is the lab value itself leaving Pop_RI), both
-DIRECTIONAL (a deviation toward the population centre is never a positive;
-lib/ri_metrics.deviates_toward_bound) and both with Cohen's testing-bias control
-(a pair enters only if it is retested inside the horizon / window).  Clinical
-endpoints live in 17_outcomes.
+both disease-agnostic (the endpoint is the lab value itself leaving Pop_RI) and both
+DIRECTIONAL.  Clinical endpoints live in 17_outcomes.
 
-  future_abnormal  Cohen et al. 2021 Fig. 5a/b on every RI method: among index
-                   values inside Pop_RI, relative risk (PPV / prevalence) of a
-                   Pop_RI-abnormal value within --horizon, cutoff per 10-year age
-                   band x sex at matched --sensitivity (their 0.2).  Pop_RI defines
-                   the endpoint, so it is a reference line, not a competitor.
-                   Also the centre bias of every method at the Pop_RI-normal index.
-                   -> 11_future_abnormal.csv (per analyte, analyte="median", age bands),
-                      11_centre_bias.csv (age bands live in 11_future_abnormal.csv)
+  future_abnormal  Cohen et al. 2021 Fig. 5b (Methods, "Abnormal lab classification
+                   models") on every RI method, in hospital time:
+                     pairs     aged 20-90; index = the first measurement after the
+                               baseline, inside Pop_RI; >= --min-normal-frac of the
+                               baseline inside Pop_RI (Cohen: all)
+                     outcome   ONE test, the first --gap..--horizon h after the index
+                               (Cohen: one sampled test 2 y on), so the retest count
+                               does not move the label
+                     endpoints abnormal high and abnormal low, separately; score = the
+                               signed deviation from each method's centre toward that side
+                     matching  normals downsampled to the abnormals' 5-year age x sex mix;
+                               every method scored on the same matched sample
+                     RR        cutoff at --sensitivity (their 0.2) per 10-year age band x
+                               sex, TP/FP re-weighted to the population before downsampling
+                   plus AUROC (DeLong CI) and AUPRC on the matched sample, and the AUROC
+                   within quintiles of position inside Pop_RI (what a method adds beyond
+                   how close the value already is to the bound).  Not transferable from
+                   Cohen: the healthy-patient, medication and lab-hours filters.  Pop_RI
+                   defines the endpoint, so it is a reference line, not a competitor.
+                   Also the centre bias of every method at the index.
+                   -> 11_future_abnormal.csv (per analyte x direction, analyte="median"
+                      with direction "all" / high / low, age band x sex rows),
+                      11_centre_bias.csv
 
   lead_time        how many hours (and tests) BEFORE a value leaves Pop_RI does
-                   each method already flag it, at equal alert burden?  Cohort =
-                   pairs whose first index value is inside Pop_RI, fixed --window;
+                   each method already flag it, at equal alert burden?  A deviation
+                   toward the population centre is never a flag
+                   (lib/ri_metrics.deviates_toward_bound); a pair enters only if
+                   retested in the window.  Cohort = pairs with a Pop_RI-normal
+                   index value, fixed --window;
                    every follow-up measurement scored.  Anchors:
                      native      each method's own rule, z > 1 (NORMA's flags contain
                                  Pop_RI's here, so it is earlier by construction)
@@ -41,8 +56,8 @@ Figures and tables
 Everything here is disease-agnostic: the endpoint is the lab value itself
 leaving Pop_RI.  Clinical-endpoint figures live in 17_outcomes.
   future_abnormal        RR of a future Pop_RI-abnormal value per method, one panel
-                         per cohort (Cohen Fig. 5b pooled)
-  future_abnormal_age_<ds>  the same RR against age, one panel per analyte
+                         per cohort (Cohen Fig. 5b pooled over endpoints)
+  future_abnormal_age_<ds>  the same RR against age, one panel per analyte x endpoint
   lead_time              fraction of eventually-abnormal pairs each method had already
                          flagged h hours before the crossing, one panel per cohort
   lead_time_analyte      median lead (hours) of an early flag per analyte, one panel per
@@ -61,8 +76,11 @@ import numpy as np
 import pandas as pd
 
 from constants import ALL_SPLIT, MEDIAN_ROW
-from datasets import already_done, add_dataset_args, get_dataset, save_csv, EXCLUDE_LABS
+import datasets
+from datasets import already_done, add_dataset_args, find_in, get_dataset, save_csv, EXCLUDE_LABS
 from metrics import cut_at_sensitivity, jitter, matched_sensitivity_flags, strata_of, threshold_at_rate, deviates_toward_bound, method_prefix
+from metrics import delong_auc_cov, signed_z
+from sklearn.metrics import average_precision_score
 
 # Reuse is keyed on these: a step whose files are all present is skipped
 # unless --force (datasets.already_done).
@@ -85,6 +103,70 @@ def time_in_hours(df):
     raise KeyError(f"no usable time column; looked for {TIME_COLUMNS}")
 
 
+# ── per-chunk pair cache ────────────────────────────────────────────────────
+# A chunked cohort cannot hold its classification in one frame, and a run over a
+# SUBSET of chunks should be progress rather than a throwaway.  So the reduction that
+# both steps start from -- one row per (patient, analyte) -- is cached next to each
+# chunk, and the scoring streams it one analyte at a time.  The metric code is the
+# same code the unchunked cohorts run, on the same rows, so the numbers are identical;
+# only the order they are read in changes.
+PAIRS_CACHE = "11_future_pairs"        # a directory: one parquet per analyte
+
+
+def pair_columns(pairs, methods):
+    """What the scoring needs, and nothing else: 80 classification columns per chunk
+    would make the cache bigger than the data it summarises."""
+    keep = ["patient_id", "analyte", "age", "sex", "value", "pop_ri_low", "pop_ri_high",
+            "outcome_class", "outcome_high", "outcome_low", "history_normal_frac"]
+    keep += [f"{m}_zs" for m in methods if f"{m}_zs" in pairs.columns]
+    return pairs[[c for c in keep if c in pairs.columns]]
+
+
+def build_pair_caches(ds, args):
+    """One <chunk>/11_future_pairs.parquet per chunk, computed once.  A chunk that
+    already has one for these settings is skipped, so widening --n_chunks later only
+    costs the new chunks."""
+    import datasets as _ds
+    methods = [m for m in ds.methods if f"{m}_z" in set(ds.classification_columns())]
+    made = reused = 0
+    for chunk_dir in ds._chunk_dirs():
+        if _ds.analyte_cache_ready(chunk_dir, PAIRS_CACHE) and not args.force:
+            reused += 1
+            continue
+        i = int(os.path.basename(chunk_dir).rsplit("_", 1)[-1])
+        sub = _ds.DATASETS[ds.name](chunk=i)
+        sub.norma_alias, sub.run_ids, sub.no_norma = ds.norma_alias, ds.run_ids, ds.no_norma
+        sub.cohen_models, sub.gaussian_models = ds.cohen_models, ds.gaussian_models
+        cls = _ds.read_classification(chunk_dir)
+        if cls is None:
+            continue
+        cls["analyte"] = cls["analyte"].replace("", "NA").fillna("NA")
+        cls = cls[~cls["analyte"].isin(EXCLUDE_LABS)]
+        pairs = future_pairs(cls, sub.load_index_labs(), args.gap, args.horizon, args.min_normal_frac)
+        del cls
+        _ds.write_analyte_cache(pair_columns(pairs, methods), chunk_dir, PAIRS_CACHE)
+        made += 1
+        print(f"    {os.path.basename(chunk_dir)}: {len(pairs):,} pairs cached")
+    print(f"  pair cache: {made} chunk(s) computed, {reused} reused "
+          f"(--force to rebuild; the settings are baked in, so change --gap/--horizon with it)")
+    return methods
+
+
+def iter_analyte_pairs(ds, methods):
+    """(analyte, pairs) over the whole cohort, one analyte at a time out of the caches."""
+    import datasets as _ds
+    dirs = ds._chunk_dirs()
+    analytes = _ds.cached_analytes(dirs, PAIRS_CACHE)
+    if ds._analytes is not None:
+        analytes = [a for a in analytes if a in set(ds._analytes)]
+    for analyte in analytes:
+        # only this analyte's slice of each chunk is read
+        frames = [d for d in (_ds.read_analyte_cache(c, PAIRS_CACHE, analyte) for c in dirs)
+                  if d is not None and len(d)]
+        if frames:
+            yield analyte, pd.concat(frames, ignore_index=True)
+
+
 def load_classified(ds):
     cls = ds.load_classification()
     cls["analyte"] = cls["analyte"].replace("", "NA").fillna("NA")
@@ -98,26 +180,84 @@ def load_classified(ds):
 # =============================================================================
 
 
-def future_pairs(cls, horizon_h):
-    """One row per (patient, analyte): the first Pop_RI-normal measurement, labelled
-    future_abnormal = any later Pop_RI-abnormal measurement within `horizon_h`; kept
-    only if the pair has a follow-up measurement inside the horizon."""
+# Cohen et al. 2021, Methods "Abnormal lab classification models": abnormal high and
+# abnormal low are separate endpoints, patients aged 20-90, normals downsampled to the
+# abnormals' age x sex mix at 5-year resolution, cutoff at 0.2 sensitivity per 10-year
+# age band x sex, RR re-weighted to the population before downsampling.
+ENDPOINTS = {"high": 2, "low": 0}      # endpoint -> PopRI_class of the outcome test
+AGE_RANGE = (20, 90)
+MATCH_AGE_YEARS = 5
+MIN_COVERAGE = 0.9                     # a method scoring fewer of an endpoint's pairs sits it out
+MIN_EVENTS = 20
+
+
+def history_normal_frac(index_labs, bounds):
+    """Fraction of each pair's baseline measurements (the ones every interval was fitted
+    on, one per timestamp as in 04_refs) inside the pair's Pop_RI."""
+    keys = ["patient_id", "analyte"]
+    bl = index_labs.loc[index_labs["split"] == "baseline", keys + ["timestamp", "value"]]
+    bl = bl.drop_duplicates(subset=keys + ["timestamp"]).merge(bounds, on=keys)
+    v = pd.to_numeric(bl["value"], errors="coerce")
+    bl = bl.assign(inside=(v >= bl["pop_ri_low"]) & (v <= bl["pop_ri_high"]))[v.notna()]
+    return bl.groupby(keys, observed=True)["inside"].mean().rename("history_normal_frac")
+
+
+def future_pairs(cls, index_labs, gap_h, horizon_h, min_normal_frac):
+    """One row per (patient, analyte), Cohen's design in hospital time:
+      index    the pair's FIRST measurement after the baseline, kept only if inside
+               Pop_RI (not the first normal value after abnormal ones)
+      history  >= min_normal_frac of the baseline measurements inside Pop_RI (Cohen: all)
+      outcome  ONE test, the first measurement gap_h..horizon_h after the index, labelled
+               outcome_high / outcome_low.  A single test, so how often a patient is
+               retested does not change the label."""
     keys = ["patient_id", "analyte"]
     cls = cls.copy()
     cls["_t"] = time_in_hours(cls)
     cls = cls.dropna(subset=["_t", "PopRI_class"]).sort_values(keys + ["_t"])
-    index = (cls[cls["PopRI_class"] == 1].groupby(keys, observed=True).head(1)
-             .rename(columns={"_t": "t_index"}))
-    if not len(index):
-        return index
+    first = cls.groupby(keys, observed=True).head(1)
+    index = first[first["PopRI_class"] == 1].rename(columns={"_t": "t_index"})
+    age = pd.to_numeric(index["age"], errors="coerce")
+    index = index[age.between(*AGE_RANGE)]
+    steps = [("pairs", len(first)), ("index inside Pop_RI, age 20-90", len(index))]
+
+    bounds = index[keys].assign(pop_ri_low=pd.to_numeric(index["pop_ri_low"], errors="coerce"),
+                                pop_ri_high=pd.to_numeric(index["pop_ri_high"], errors="coerce"))
+    index = index.merge(history_normal_frac(index_labs, bounds), on=keys, how="inner")
+    index = index[index["history_normal_frac"] >= min_normal_frac]
+    steps.append((f">= {min_normal_frac:.0%} of baseline inside Pop_RI", len(index)))
+
     later = cls[keys + ["_t", "PopRI_class"]].merge(index[keys + ["t_index"]], on=keys)
-    later = later[(later["_t"] > later["t_index"]) & (later["_t"] <= later["t_index"] + horizon_h)]
-    n_followup = later.groupby(keys, observed=True).size().rename("n_followup")
-    n_abnormal = later[later["PopRI_class"] != 1].groupby(keys, observed=True).size().rename("n_abn")
-    pairs = index.merge(n_followup, on=keys, how="inner")   # testing-bias control
-    pairs = pairs.merge(n_abnormal, on=keys, how="left")
-    pairs["future_abnormal"] = (pairs["n_abn"].fillna(0) > 0).astype(int)
+    dt = later["_t"] - later["t_index"]
+    later = later[(dt >= gap_h) & (dt <= horizon_h)].sort_values(keys + ["_t"])
+    outcome = (later.groupby(keys, observed=True).head(1)
+               .rename(columns={"_t": "t_outcome", "PopRI_class": "outcome_class"})
+               .drop(columns="t_index"))
+    pairs = index.merge(outcome, on=keys, how="inner")
+    steps.append((f"a test {gap_h:g}-{horizon_h:g} h after the index", len(pairs)))
+    for endpoint, cls_code in ENDPOINTS.items():
+        pairs[f"outcome_{endpoint}"] = (pairs["outcome_class"] == cls_code).astype(int)
+    print("  " + " -> ".join(f"{label}: {n:,}" for label, n in steps))
     return pairs
+
+
+def age_sex_matched(pairs, y, seed=0):
+    """Row positions of Cohen's downsampled sample: inside every 5-year age band x sex the
+    negatives outnumber the positives by the same ratio (the overall one), so age and sex
+    carry no signal.  A stratum short of negatives keeps fewer positives."""
+    y = np.asarray(y)
+    ratio = (y == 0).sum() / max((y == 1).sum(), 1)
+    band = np.floor(pd.to_numeric(pairs["age"], errors="coerce").to_numpy(float) / MATCH_AGE_YEARS)
+    sex = pd.to_numeric(pairs["sex"], errors="coerce").to_numpy(float)
+    rng = np.random.default_rng(seed)
+    keep = []
+    for idx in pd.DataFrame({"band": band, "sex": sex}).groupby(["band", "sex"]).indices.values():
+        pos, neg = idx[y[idx] == 1], idx[y[idx] == 0]
+        n_pos = min(len(pos), int(len(neg) / ratio)) if ratio > 0 else len(pos)
+        if n_pos == 0:
+            continue
+        n_neg = min(len(neg), int(round(n_pos * ratio)))
+        keep += [rng.choice(pos, n_pos, replace=False), rng.choice(neg, n_neg, replace=False)]
+    return np.sort(np.concatenate(keep)) if keep else np.array([], dtype=int)
 
 
 def confusion(flag, y):
@@ -139,41 +279,168 @@ def confusion(flag, y):
     }
 
 
-def relative_risk_rows(pairs, methods, sensitivity):
-    """Cohen Fig. 5b: threshold per age band x sex at `sensitivity`, then RR (PPV /
-    prevalence) pooled per analyte and per stratum.  Returns (pooled, by_age)."""
-    pooled, by_age = [], []
-    for method in methods:
-        for analyte, g in pairs.groupby("analyte", observed=True):
-            z_raw = pd.to_numeric(g[f"{method}_z"], errors="coerce")
-            g = g[np.isfinite(z_raw)]
-            if len(g) < 100 or g["future_abnormal"].nunique() < 2:
+def ranking_metrics(z, y):
+    """Threshold-free discrimination of the deviation score: AUROC (DeLong 95% CI) and
+    AUPRC, the latter also as lift over the future-abnormal rate so analytes with
+    different base rates compare. Wrong-direction deviations (-inf) rank below every
+    eligible value, as they can never be flagged."""
+    z = np.asarray(z, float)
+    y = np.asarray(y, float)
+    ok = ~np.isnan(z)
+    z, y = z[ok], y[ok]
+    if len(np.unique(y)) < 2:
+        return {}
+    finite = np.isfinite(z)
+    floor = (z[finite].min() - 1.0) if finite.any() else 0.0
+    z = np.where(finite, z, floor)
+    auc, cov = delong_auc_cov(z[None, :], y)
+    se = float(np.sqrt(cov[0, 0])) if np.isfinite(cov[0, 0]) else np.nan
+    ap = float(average_precision_score(y, z))
+    base = float(y.mean())
+    return {"auc": float(auc[0]), "auc_lo": float(auc[0] - 1.96 * se), "auc_hi": float(auc[0] + 1.96 * se),
+            "auprc": ap, "auprc_norm": ap / base if base else np.nan}
+
+
+def population_weighted(c, pop_pos, pop_neg):
+    """Cohen's TPnorm and FPnorm: the matched sample's sensitivity and false-positive rate
+    applied to the positives and negatives before downsampling."""
+    if not (c["tp"] + c["fn"]) or not (c["fp"] + c["tn"]):
+        return np.nan, np.nan
+    return c["tp"] * pop_pos / (c["tp"] + c["fn"]), c["fp"] * pop_neg / (c["fp"] + c["tn"])
+
+
+def cohen_rr(tp_norm, fp_norm, pop_pos, pop_neg):
+    """rr = [TPnorm / (TPnorm + FPnorm)] / [pop pos / (pop pos + pop neg)]."""
+    if not (tp_norm + fp_norm) or not pop_pos:
+        return np.nan
+    return (tp_norm / (tp_norm + fp_norm)) / (pop_pos / (pop_pos + pop_neg))
+
+
+RR_BOOT = int(os.environ.get("NORMA_RR_BOOT", "200"))   # 0 turns the RR bootstrap off
+
+
+def _rr_ci(z, y, strata, population, sensitivity, rng, B=None):
+    """Percentile bootstrap CI for the population-reweighted risk ratio.
+
+    Why a bootstrap: rr is PPV / prevalence on counts that have been re-weighted to the
+    population across age x sex strata, so it has no closed-form variance. Resampling
+    patients within each stratum, then re-picking that stratum's threshold at the target
+    sensitivity, puts both the sampling noise and the threshold choice into the interval.
+
+    Returns (lo, hi), or (nan, nan) when too few replicates come back finite.
+    """
+    B = RR_BOOT if B is None else B
+    if not B:
+        return np.nan, np.nan
+    keys = [k for k in strata if len(strata[k])]
+    if not keys:
+        return np.nan, np.nan
+    draws = np.full(B, np.nan)
+    for b in range(B):
+        parts = [rng.choice(strata[k], len(strata[k]), replace=True) for k in keys]
+        order = np.concatenate(parts)
+        zb, yb = z[order], y[order]
+        sb, at = {}, 0
+        for k, part in zip(keys, parts):
+            sb[k] = np.arange(at, at + len(part)); at += len(part)
+        fb, _ = matched_sensitivity_flags(zb, yb, sb, sensitivity)
+        tpn = fpn = pos = neg = 0.0
+        for k in keys:
+            c = confusion(fb[sb[k]], yb[sb[k]])
+            pp, pn = population.get(k, (0, 0))
+            a, d = population_weighted(c, pp, pn)
+            if not np.isfinite(a):
                 continue
-            z0 = jitter(z_raw[np.isfinite(z_raw)].to_numpy(float))
-            y = g["future_abnormal"].to_numpy(int)
-            strata = strata_of(g)
-            # 'toward_bound' is the result (Cohen: abnormal = high OR low per test); 'any'
-            # keeps the non-directional rule for transparency.  A method with a biased
-            # centre gains under 'any' from values far below its centre that later rise,
-            # and loses under 'toward_bound' because those look like reversion.
-            for direction in ("toward_bound", "any"):
-                z = z0
-                if direction == "toward_bound" and method != "PopRI":
-                    z = np.where(deviates_toward_bound(g, method), z0, -np.inf)
-                flag, thresholded = matched_sensitivity_flags(z, y, strata, sensitivity)
-                for (band, sex), idx in strata.items():
-                    if (band, sex) not in thresholded:
-                        continue
-                    idx = np.asarray(idx)
-                    c = confusion(flag[idx], y[idx])
-                    if c["n_events"] >= 5:
-                        by_age.append({"analyte": analyte, "method": method, "direction": direction,
-                                       "age_band": band, "sex": sex,
-                                       "target_sensitivity": sensitivity, **c})
-                pooled.append({"analyte": analyte, "method": method, "direction": direction,
-                               "target_sensitivity": sensitivity, "n_strata": len(strata),
-                               **confusion(flag, y)})
+            tpn, fpn, pos, neg = tpn + a, fpn + d, pos + pp, neg + pn
+        draws[b] = cohen_rr(tpn, fpn, pos, neg)
+    ok = draws[np.isfinite(draws)]
+    if len(ok) < max(20, B // 10):
+        return np.nan, np.nan
+    return float(np.percentile(ok, 2.5)), float(np.percentile(ok, 97.5))
+
+
+def endpoint_rows(pairs, analyte, endpoint, methods, sensitivity):
+    """Cohen Fig. 5b for one analyte x endpoint.  Every method is scored on the SAME
+    age/sex-matched sample: score = the signed deviation from the method's centre toward
+    the endpoint's side (higher = further toward high for 'high'), cutoff at `sensitivity`
+    per 10-year age band x sex, RR re-weighted to the population.  AUROC and AUPRC of the
+    same score on the matched sample, so age and sex cannot drive them.
+    Returns (pooled rows, age band x sex rows)."""
+    sign = 1.0 if endpoint == "high" else -1.0
+    scores = {m: sign * signed_z(pairs, m).to_numpy(float) for m in methods}
+    scored = [m for m in methods if np.isfinite(scores[m]).mean() >= MIN_COVERAGE]
+    if "PopRI" not in scored:
+        return [], []
+    common = np.logical_and.reduce([np.isfinite(scores[m]) for m in scored])
+    g = pairs[common]
+    y_pop = g[f"outcome_{endpoint}"].to_numpy(int)
+    if y_pop.sum() < MIN_EVENTS or (y_pop == 0).sum() < MIN_EVENTS:
+        return [], []
+    population = {key: (int(y_pop[idx].sum()), int(len(idx) - y_pop[idx].sum()))
+                  for key, idx in strata_of(g).items()}
+    keep = age_sex_matched(g, y_pop)
+    if len(keep) < 100:
+        return [], []
+    matched, y = g.iloc[keep], y_pop[keep]
+    strata = strata_of(matched)
+    position = scores["PopRI"][common][keep]
+    base = {"analyte": analyte, "direction": endpoint, "target_sensitivity": sensitivity}
+
+    pooled, by_age = [], []
+    boot_rng = np.random.default_rng(abs(hash((analyte, endpoint))) % (2 ** 32))
+    for method in scored:
+        z = jitter(scores[method][common][keep])
+        flag, thresholded = matched_sensitivity_flags(z, y, strata, sensitivity)
+        tp_norm = fp_norm = pop_pos = pop_neg = 0.0
+        for key, idx in strata.items():
+            c = confusion(flag[idx], y[idx])
+            pp, pn = population.get(key, (0, 0))
+            tpn, fpn = population_weighted(c, pp, pn)
+            if not np.isfinite(tpn):
+                continue
+            tp_norm, fp_norm, pop_pos, pop_neg = tp_norm + tpn, fp_norm + fpn, pop_pos + pp, pop_neg + pn
+            if key in thresholded and c["n_events"] >= 5:
+                lo, hi = _rr_ci(z, y, {key: idx}, population, sensitivity, boot_rng)
+                by_age.append({**base, "method": method, "age_band": key[0], "sex": key[1], **c,
+                               "tp_norm": tpn, "fp_norm": fpn, "pop_pos": pp, "pop_neg": pn,
+                               "prevalence": pp / (pp + pn), "ppv": tpn / (tpn + fpn) if tpn + fpn else np.nan,
+                               "rr": cohen_rr(tpn, fpn, pp, pn), "rr_lo": lo, "rr_hi": hi})
+        c = confusion(flag, y)
+        pooled.append({**base, "method": method, "n_strata": len(strata), **c,
+                       "n_population": len(g), "n_events_population": int(y_pop.sum()),
+                       "prevalence": pop_pos / (pop_pos + pop_neg) if pop_pos + pop_neg else np.nan,
+                       "flag_rate": (tp_norm + fp_norm) / (pop_pos + pop_neg) if pop_pos + pop_neg else np.nan,
+                       "ppv": tp_norm / (tp_norm + fp_norm) if tp_norm + fp_norm else np.nan,
+                       "rr": cohen_rr(tp_norm, fp_norm, pop_pos, pop_neg),
+                       **dict(zip(("rr_lo", "rr_hi"),
+                                  _rr_ci(z, y, strata, population, sensitivity, boot_rng))),
+                       **ranking_metrics(z, y), "auc_within_position": within_position_auc(z, y, position)})
     return pooled, by_age
+
+
+def within_position_auc(z, y, position, n_bands=5):
+    """AUROC inside quintiles of where the index value sits in Pop_RI (toward the
+    endpoint's bound), n-weighted mean.
+
+    A value near a Pop_RI bound is likely to cross it whatever the method, so the plain
+    AUROC partly measures position. Inside a band every value is about equally close to
+    the bound, so what is left is the method's own signal. 0.5 = nothing beyond position."""
+    position = np.asarray(position, float)
+    ok = np.isfinite(position)
+    if ok.sum() < 100:
+        return np.nan
+    bands = pd.qcut(position[ok], n_bands, labels=False, duplicates="drop")
+    zz, yy = np.asarray(z, float)[ok], np.asarray(y, float)[ok]
+    aucs, weights = [], []
+    for b in np.unique(bands):
+        idx = bands == b
+        if idx.sum() < 50 or len(np.unique(yy[idx])) < 2:
+            continue
+        auc = ranking_metrics(zz[idx], yy[idx]).get("auc", np.nan)
+        if np.isfinite(auc):
+            aucs.append(auc)
+            weights.append(idx.sum())
+    return float(np.average(aucs, weights=weights)) if aucs else np.nan
 
 
 def centre_bias_rows(pairs, methods):
@@ -202,35 +469,52 @@ def centre_bias_rows(pairs, methods):
 
 
 def run_future_abnormal(ds, cls, methods, args, results_dir):
-    pairs = future_pairs(cls, args.horizon)
-    if not len(pairs):
-        print("  no (patient, analyte) pairs with a Pop_RI-normal index and follow-up")
-        return
-    print(f"  {len(pairs):,} pairs | future-abnormal rate {pairs['future_abnormal'].mean():.3f} | "
-          f"horizon {args.horizon:g} h")
-    bias = centre_bias_rows(pairs, methods)
-    if bias:
-        save_csv(pd.DataFrame(bias), os.path.join(results_dir, "centre_bias.csv"), analytes=ds._analytes)
+    if cls is None:                       # chunked cohort: stream the per-chunk caches
+        methods = build_pair_caches(ds, args)
+        groups = iter_analyte_pairs(ds, methods)
+        print("  centre_bias.csv is not written for a chunked cohort (it needs every pair "
+              "at once, and no figure reads it)")
+    else:
+        pairs = future_pairs(cls, ds.load_index_labs(), args.gap, args.horizon, args.min_normal_frac)
+        if not len(pairs):
+            print("  no (patient, analyte) pairs pass the design")
+            return
+        print(f"  {len(pairs):,} pairs | outcome high {pairs['outcome_high'].mean():.3f}, "
+              f"low {pairs['outcome_low'].mean():.3f}")
+        bias = centre_bias_rows(pairs, methods)
+        if bias:
+            save_csv(pd.DataFrame(bias), os.path.join(results_dir, "centre_bias.csv"), analytes=ds._analytes)
+        groups = pairs.groupby("analyte", observed=True)
 
-    pooled, by_age = relative_risk_rows(pairs, methods, args.sensitivity)
-    per_analyte = pd.DataFrame(pooled)
-    if not len(per_analyte):
-        print("  no analyte had enough data")
+    pooled, by_age, n_pairs = [], [], 0
+    for analyte, g in groups:
+        n_pairs += len(g)
+        for endpoint in ENDPOINTS:
+            p, a = endpoint_rows(g, analyte, endpoint, methods, args.sensitivity)
+            pooled += p
+            by_age += a
+    if cls is None:
+        print(f"  {n_pairs:,} pairs over {len(ds._chunk_dirs())} chunk(s)")
+    per_endpoint = pd.DataFrame(pooled)
+    if not len(per_endpoint):
+        print("  no endpoint had enough data")
         return
-    # The across-analyte rows use the SAME metric column names as the per-analyte
+    # The across-endpoint rows use the SAME metric column names as the per-endpoint
     # rows (rr, not median_rr) -- `analyte` says which kind of row it is, so one
-    # metric column serves both.
-    summary = per_analyte.groupby(["method", "direction"]).agg(
-        n_analytes=("analyte", "size"), n=("n", "sum"), n_events=("n_events", "sum"),
-        rr=("rr", "median"), ppv=("ppv", "median"),
-        sensitivity=("sensitivity", "median"), specificity=("specificity", "median"),
-        flag_rate=("flag_rate", "median"),
-    ).reset_index()
-    summary["horizon_hours"] = args.horizon
+    # metric column serves both.  direction "all" = median over high and low endpoints.
+    agg = dict(n_endpoints=("analyte", "size"), n=("n", "sum"), n_events=("n_events", "sum"),
+               rr=("rr", "median"), ppv=("ppv", "median"),
+               sensitivity=("sensitivity", "median"), specificity=("specificity", "median"),
+               flag_rate=("flag_rate", "median"),
+               auc=("auc", "median"), auprc=("auprc", "median"), auprc_norm=("auprc_norm", "median"),
+               auc_within_position=("auc_within_position", "median"))
+    summary = pd.concat([per_endpoint.groupby(["method", "direction"]).agg(**agg).reset_index(),
+                         per_endpoint.groupby("method").agg(**agg).reset_index().assign(direction=ALL_SPLIT)],
+                        ignore_index=True)
     summary["target_sensitivity"] = args.sensitivity
     summary["analyte"] = MEDIAN_ROW
     summary = summary.sort_values(["direction", "rr"], ascending=[True, False])
-    parts = [per_analyte, summary]
+    parts = [per_endpoint, summary]
     if by_age:
         parts.append(pd.DataFrame(by_age))       # age_band / sex rows of the same table
     out = pd.concat(parts, ignore_index=True)
@@ -239,8 +523,9 @@ def run_future_abnormal(ds, cls, methods, args, results_dir):
             out[dim] = out[dim].fillna(ALL_SPLIT).replace("", ALL_SPLIT)
         else:
             out[dim] = ALL_SPLIT
+    out = out.assign(gap_hours=args.gap, horizon_hours=args.horizon, min_normal_frac=args.min_normal_frac)
     save_csv(out, os.path.join(results_dir, "future_abnormal.csv"), analytes=ds._analytes)
-    print("\n" + summary.to_string(index=False))
+    print("\n" + summary[summary["direction"] == ALL_SPLIT].to_string(index=False))
 
 
 # =============================================================================
@@ -479,12 +764,120 @@ def score_method(collector, method, measurements, patients, soc_rate, analyte, l
     collector.add(score(np.isfinite(z_toward) & (z_toward > 1.0), "native"), ("native",))
 
 
+# what lead_frames and the scoring read; a chunked cohort loads these columns only
+LEAD_COLUMNS = ["patient_id", "analyte", "timestamp", "t_hours", "value", "age",
+                "PopRI_class", "pop_ri_low", "pop_ri_high"]
+# The reduction lead_frames performs -- each pair's follow-up inside the window -- cached
+# per chunk, because the classification itself is far too large to hold even a few
+# analytes at a time (42 M rows for four analytes on CHS).  The window is baked in, so
+# --force rebuilds when it changes.
+LEAD_CACHE = "11_lead_measurements"
+LEAD_PATIENTS = "11_lead_patients"
+
+
+def _shrink(df):
+    """float64 -> float32: these are lab values and hours, not anything needing 15 digits."""
+    for c in df.columns:
+        if df[c].dtype == "float64":
+            df[c] = df[c].astype("float32")
+    return df
+
+
+def build_lead_caches(ds, methods, args):
+    """<chunk>/11_lead_{measurements,patients}/<analyte>.parquet, computed once."""
+    want = set(LEAD_COLUMNS + [f"{m}_z" for m in methods] + [f"{m}_zs" for m in methods]
+               + [f"{m}_class" for m in methods] + ["pop_side"])
+    made = reused = 0
+    for chunk_dir in ds._chunk_dirs():
+        if datasets.analyte_cache_ready(chunk_dir, LEAD_CACHE) and not args.force:
+            reused += 1
+            continue
+        cls = datasets.read_classification(chunk_dir, usecols=lambda c: c in want)
+        if cls is None:
+            continue
+        cls["analyte"] = cls["analyte"].replace("", "NA").fillna("NA")
+        cls = cls[~cls["analyte"].isin(EXCLUDE_LABS)]
+        meas, pats = [], []
+        for analyte in sorted(cls["analyte"].unique()):
+            m, p = lead_frames(cls, analyte, args.window)
+            if m is None or not len(m):
+                continue
+            meas.append(_shrink(m))
+            pats.append(_shrink(p.assign(analyte=analyte)))
+        del cls
+        if meas:
+            datasets.write_analyte_cache(pd.concat(meas, ignore_index=True), chunk_dir, LEAD_CACHE)
+            datasets.write_analyte_cache(pd.concat(pats, ignore_index=True), chunk_dir, LEAD_PATIENTS)
+        made += 1
+        print(f"    {os.path.basename(chunk_dir)}: lead frames cached")
+    print(f"  lead cache: {made} chunk(s) computed, {reused} reused "
+          f"(--window is baked in; --force rebuilds)")
+
+
+def iter_lead_frames(ds, methods, args):
+    """(analyte, measurements, patients) over the cohort, one analyte at a time."""
+    build_lead_caches(ds, methods, args)
+    dirs = ds._chunk_dirs()
+    analytes = datasets.cached_analytes(dirs, LEAD_CACHE)
+    if ds._analytes:
+        analytes = [a for a in analytes if a in set(ds._analytes)]
+    for analyte in analytes:
+        m = [d for d in (datasets.read_analyte_cache(c, LEAD_CACHE, analyte) for c in dirs)
+             if d is not None and len(d)]
+        p = [d for d in (datasets.read_analyte_cache(c, LEAD_PATIENTS, analyte) for c in dirs)
+             if d is not None and len(d)]
+        if m and p:
+            yield analyte, pd.concat(m, ignore_index=True), pd.concat(p, ignore_index=True)
+
+
+def done_analytes(results_dir, name, force):
+    """Analytes already in `name`, so an interrupted run resumes where it stopped.
+    The step writes per analyte as it goes; --force starts again."""
+    if force:
+        return set()
+    path = datasets.find_in(results_dir, name)
+    if not os.path.exists(path) or not os.path.getsize(path):
+        return set()
+    d = pd.read_csv(path, usecols=lambda c: c == "analyte", keep_default_na=False)
+    return set(d["analyte"].astype(str)) if "analyte" in d.columns else set()
+
+
+def flush_lead(collector, ds, args, results_dir, analytes):
+    """Write what is scored so far, for these analytes, into lead_time.csv."""
+    parts = [pd.DataFrame(collector.rows)]
+    if collector.age_rows:
+        parts.append(pd.DataFrame(collector.age_rows))
+    if collector.sweep_rows:
+        parts.append(pd.DataFrame(collector.sweep_rows))
+    out = pd.concat([p for p in parts if len(p)], ignore_index=True)
+    if not len(out):
+        return
+    out["window_hours"] = args.window
+    for dim in ("age_band", "target_rate"):
+        if dim in out.columns:
+            out[dim] = out[dim].fillna(ALL_SPLIT).replace("", ALL_SPLIT)
+        else:
+            out[dim] = ALL_SPLIT
+    save_csv(out[out["analyte"].isin(analytes)], os.path.join(results_dir, "lead_time.csv"),
+             analytes=list(analytes))
+
+
 def run_lead_time(ds, cls, methods, args, results_dir):
-    analytes = list(ds._analytes) if ds._analytes else sorted(cls["analyte"].dropna().unique())
     label = "pop_abnormal"
     collector = LeadCollector()
-    for analyte in analytes:
-        measurements, patients = lead_frames(cls, analyte, args.window)
+    already = done_analytes(results_dir, "lead_time.csv", args.force)
+    if already:
+        print(f"  already in lead_time.csv, skipped: {', '.join(sorted(already))}")
+    if cls is None:
+        groups = iter_lead_frames(ds, methods, args)
+    else:
+        analytes = list(ds._analytes) if ds._analytes else sorted(cls["analyte"].dropna().unique())
+        groups = ((a, None, None) for a in analytes)
+    for analyte, measurements, patients in groups:
+        if analyte in already:
+            continue
+        if measurements is None:                  # unchunked: reduce here, as before
+            measurements, patients = lead_frames(cls, analyte, args.window)
         if measurements is None or len(measurements) < 500 or patients.event_in_window.sum() < 20:
             continue
         soc_flag = (measurements["PopRI_class"] != 1).to_numpy()
@@ -496,6 +889,7 @@ def run_lead_time(ds, cls, methods, args, results_dir):
         collector.add(soc, ("soc_rate", "native"))
         for method in methods:
             score_method(collector, method, measurements, patients, soc_rate, analyte, label, args.early_sens)
+        flush_lead(collector, ds, args, results_dir, {analyte})    # crash-safe: as it goes
 
     if not collector.rows:
         print("  nothing with enough data")
@@ -542,13 +936,20 @@ def main():
     add_dataset_args(p)
     p.add_argument("--only", nargs="+", choices=STEPS, default=list(STEPS))
     g = p.add_argument_group("future_abnormal")
+    g.add_argument("--gap", type=float, default=24.0,
+                   help="the outcome test is the first one at least this many hours after the "
+                        "index (default 24; Cohen: 2 years on outpatient data)")
     g.add_argument("--horizon", type=float, default=168.0,
-                   help="hours after the index in which a Pop_RI-abnormal value counts as the "
-                        "endpoint (default 168 = 7 days; Cohen used 2-3 years on outpatient data)")
+                   help="... and at most this many hours after it (default 168 = 7 days)")
+    g.add_argument("--min-normal-frac", type=float, default=0.8,
+                   help="fraction of a pair's baseline values that must be inside Pop_RI "
+                        "(Cohen: all; 0.8 as for the Cohen training filter)")
     g.add_argument("--sensitivity", type=float, default=0.2,
                    help="matched sensitivity for the cutoff (Cohen: 0.2)")
     g = p.add_argument_group("lead_time")
     g.add_argument("--window", type=float, default=168.0, help="follow-up hours from the index (default 7 d)")
+    g.add_argument("--analyte_batch", type=int, default=4,
+                   help="chunked cohorts: analytes held in memory per pass (default: %(default)s)")
     g.add_argument("--early-sens", type=float, default=0.05,
                    help="anchor 'early_sens': every method thresholded so it flags this fraction "
                         "of eventually-abnormal pairs BEFORE the crossing")
@@ -563,7 +964,13 @@ def main():
             if not already_done(args, results_dir, *STEP_OUTPUTS[s], label=s)]
     if not todo:
         return
-    cls, methods = load_classified(ds)
+    # A chunked cohort never holds its whole classification: future_abnormal works from
+    # the per-chunk pair caches, lead_time one analyte batch at a time.
+    if ds.name == "chs":
+        methods = [m for m in ds.methods if f"{m}_z" in set(ds.classification_columns())]
+        cls = None
+    else:
+        cls, methods = load_classified(ds)
     print(f"  {len(methods)} methods: {', '.join(methods)}")
     if "future_abnormal" in todo:
         print("=== future_abnormal ===")
@@ -589,14 +996,13 @@ def _direction(df, which="toward_bound"):
     return df[df["direction"].astype(str) == which]
 
 
-def _future_abnormal_frame(ds, direction="toward_bound"):
-    """Pooled RR per method (median across analytes) with the IQR across analytes."""
-    both = _direction(load_result(ds, "future_abnormal.csv"), direction)
+def _future_abnormal_frame(ds):
+    """Pooled RR per method (median across analyte x endpoint) with the IQR across them."""
+    both = pooled_rows(load_result(ds, "future_abnormal.csv"), "age_band", "sex")
     if both is None or len(both) == 0 or "rr" not in both.columns:
         return None
-    both = pooled_rows(both, "age_band", "sex")
     is_med = both["analyte"].astype(str) == MEDIAN_ROW
-    df, pa = both[is_med], both[~is_med]
+    df, pa = _direction(both[is_med], ALL_SPLIT), both[~is_med]
     if not len(df):
         return None
     df = to_numeric(df.copy(), skip=("analyte", "method", "direction")).dropna(subset=["rr"])
@@ -617,10 +1023,8 @@ def _future_abnormal_frame(ds, direction="toward_bound"):
 
 def fig_future_abnormal():
     """Cohen Fig. 5b, pooled: RR of a future Pop_RI-abnormal value per method
-    (median across analytes, bar = IQR across analytes), one panel per cohort,
+    (median across analyte x endpoint, bar = IQR across them), one panel per cohort,
     methods on a shared y axis in a fixed order so the panels read across.
-    Directional flag only (a deviation toward the nearer Pop_RI bound); the
-    any-direction variant was dropped 2026-09-04 as one rule too many.
     Pop_RI is the endpoint, not a candidate. A cohort without results is a pending panel."""
     frames = {ds: _future_abnormal_frame(ds) for ds in VAL_COHORTS}
     frames = {ds: (f if f is not None and len(f) else None) for ds, f in frames.items()}
@@ -663,35 +1067,38 @@ def fig_future_abnormal():
 
 
 def _future_abnormal_age_frame(ds):
-    """Per (analyte, method, age band) RR with a log-scale 95% CI, sexes pooled."""
+    """Per (analyte x endpoint, method, age band) population-weighted RR with a
+    log-scale 95% CI from the matched-sample counts, sexes pooled."""
     df = load_result(ds, "future_abnormal.csv")
-    if df is not None and "age_band" in df.columns:
-        df = df[df["age_band"].astype(str) != ALL_SPLIT]      # the age-band rows
-    df = _direction(df)
-    if df is None or len(df) == 0:
+    if df is None or "age_band" not in df.columns or "tp_norm" not in df.columns:
+        return None
+    df = df[df["age_band"].astype(str) != ALL_SPLIT]      # the age-band rows
+    if len(df) == 0:
         return None
     df = to_numeric(df.copy(), skip=("analyte", "method", "sex", "direction"))
     df["m"] = df["method"].map(collapse_run_id)
     df = df[df["m"].isin([m for m in bm_methods() if m != "PopRI"])]  # Pop_RI is the endpoint
-    agg = df.groupby(["analyte", "m", "age_band"], observed=True)[["tp", "fp", "fn", "tn"]].sum().reset_index()
+    df["analyte"] = df["analyte"].astype(str) + " " + df["direction"].astype(str)
+    cols = ["tp", "fp", "fn", "tn", "tp_norm", "fp_norm", "pop_pos", "pop_neg"]
+    agg = df.groupby(["analyte", "m", "age_band"], observed=True)[cols].sum().reset_index()
     n = agg[["tp", "fp", "fn", "tn"]].sum(axis=1)
-    agg["rr"] = (agg.tp / (agg.tp + agg.fp)) / ((agg.tp + agg.fn) / n)
     with np.errstate(divide="ignore", invalid="ignore"):
+        agg["rr"] = (agg.tp_norm / (agg.tp_norm + agg.fp_norm)) / (agg.pop_pos / (agg.pop_pos + agg.pop_neg))
         agg["se"] = np.sqrt(np.clip(1 / agg.tp - 1 / (agg.tp + agg.fp) + 1 / (agg.tp + agg.fn) - 1 / n, 0, None))
     return agg[(agg.tp >= 20) & np.isfinite(agg.rr)]                   # RR SE ~ 1/sqrt(tp)
 
 
 def fig_future_abnormal_age(ds):
     """Cohen Fig. 5b proper for one cohort: RR of a future Pop_RI-abnormal value
-    AGAINST AGE, one panel per analyte, one line per method, band = 95% CI.
-    Pop_RI is the endpoint, not a series; cells need >= 20 true positives."""
+    AGAINST AGE, one panel per analyte x endpoint (high / low), one line per method,
+    band = 95% CI.  Pop_RI is the endpoint, not a series; cells need >= 20 true positives."""
     agg = _future_abnormal_age_frame(ds)
     if agg is None or not len(agg):
         return {}
     methods = _per_analyte_methods(set(agg["m"]))
     agg = agg[agg["m"].isin(methods)]
     ok = agg.groupby("analyte")["age_band"].nunique() >= 3
-    analytes = [a for a in all_analytes() if ok.get(a, False)]
+    analytes = [f"{a} {e}" for a in all_analytes() for e in ENDPOINTS if ok.get(f"{a} {e}", False)]
     if not analytes or not methods:
         return {}
     nc = 6
@@ -905,10 +1312,10 @@ _FOLDER = "11_lead_time"
 _MAIN = ["PopRI", "PerRI", "Cohen_m4", "NORMA"]
 
 
-def _canon(df):
+def _canon(df, direction="toward_bound"):
     df = df.copy(); df["m"] = df["method"].map(lambda a: a if a == STANDARD_OF_CARE else collapse_run_id(a))
     if "direction" in df.columns:                       # directional rows are the result
-        df = df[df["direction"].astype(str) == "toward_bound"]
+        df = df[df["direction"].astype(str) == direction]
     return df
 
 
@@ -927,12 +1334,13 @@ def table_lead_time():
             continue
         if fa is not None and "analyte" in fa.columns:
             fa = fa[fa["analyte"].astype(str) == MEDIAN_ROW]        # medians over analytes
-        fa = _canon(to_numeric(fa.copy(), skip=("analyte", "method", "direction"))) if fa is not None else None
+        fa = _canon(to_numeric(fa.copy(), skip=("analyte", "method", "direction")), ALL_SPLIT) if fa is not None else None
         lt = _canon(to_numeric(lt.copy(), skip=("analyte", "method", "outcome", "anchor"))) if lt is not None else None
         for m in _MAIN:
             r = {"Cohort": DATASET_DISPLAY.get(ds, ds), "Method": _label(m)}
-            rr = fa[fa["m"] == m]["rr"] if fa is not None else pd.Series(dtype=float)
-            r['RR future abnormal'] = f"{rr.iloc[0]:.2f}" if len(rr) else "---"
+            fm = fa[fa["m"] == m] if fa is not None else pd.DataFrame()
+            r['RR future abnormal'] = f"{fm['rr'].iloc[0]:.2f}" if len(fm) else "---"
+            r['AUROC future abnormal'] = f"{fm['auc'].iloc[0]:.2f}" if len(fm) and "auc" in fm else "---"
             for anchor, tag in (("native", "own"), ("soc_rate", "matched")):
                 d = lt[(lt["m"] == m) & (lt["anchor"].astype(str) == anchor)] if lt is not None else None
                 if m == "PopRI" or d is None or not len(d):

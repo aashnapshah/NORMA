@@ -48,7 +48,8 @@ import pandas as pd
 from lifelines import KaplanMeierFitter
 from lifelines.statistics import logrank_test
 
-from datasets import already_done, add_dataset_args, get_dataset, save_csv, EXCLUDE_LABS
+from datasets import (already_done, add_dataset_args, get_dataset, save_csv, EXCLUDE_LABS,
+                      NORMA_RUN_ID)
 from constants import MATCHED_SENSITIVITY
 from metrics import hours, jitter, matched_sensitivity_flags, strata_of, threshold_at_rate
 
@@ -73,6 +74,99 @@ def incidence_cohort(cls, outcome_cfg, analyte, age_range, unit):
     return patients, observations
 
 
+# ── per-chunk cohorts (chunked cohorts) ────────────────────────────────────
+# Both steps need one row per patient at their first Pop_RI-normal measurement, plus
+# what the standard of care would read at each landmark.  Both are chunk-local, so each
+# chunk is reduced once and cached beside it; the landmarks are baked into the cache,
+# which --force rebuilds.
+COHORT_CACHE = "17_cohort"             # a directory: one parquet per analyte
+
+
+def soc_column(landmark):
+    return f"soc__{landmark:g}"
+
+
+def chunk_cohorts(ds, args, unit, landmarks):
+    """<chunk>/17_cohort.parquet: per (analyte, patient) the index row, every outcome's
+    event and times, and the standard-of-care flag at each landmark."""
+    import datasets as _ds
+    methods = [m for m in ds.methods if f"{m}_z" in set(ds.classification_columns())]
+    made = reused = 0
+    for chunk_dir in ds._chunk_dirs():
+        if _ds.analyte_cache_ready(chunk_dir, COHORT_CACHE) and not args.force:
+            reused += 1
+            continue
+        i = int(os.path.basename(chunk_dir).rsplit("_", 1)[-1])
+        sub_ds = _ds.DATASETS[ds.name](chunk=i)
+        for attr in ("norma_alias", "run_ids", "no_norma", "cohen_models", "gaussian_models"):
+            setattr(sub_ds, attr, getattr(ds, attr))
+        cls = _ds.read_classification(chunk_dir)
+        if cls is None:
+            continue
+        cls["analyte"] = cls["analyte"].replace("", "NA").fillna("NA")
+        cls = cls[~cls["analyte"].isin(EXCLUDE_LABS)]
+        outcomes = [o for o in ds.primary_outcomes if ds.outcomes[o].get("survival", True)]
+        if any(ds.outcomes[o]["event_col"] not in cls.columns for o in outcomes):
+            cls = sub_ds.attach_outcomes(cls)
+        frames = []
+        for analyte in sorted(cls["analyte"].unique()):
+            base = None
+            for outcome in outcomes:
+                patients, observations = incidence_cohort(cls, ds.outcomes[outcome], analyte,
+                                                          (0, 200), unit)
+                if not len(patients):
+                    continue
+                cols = ["patient_id", "age", "sex", "t0"] + [f"{m}_z" for m in methods
+                                                             if f"{m}_z" in patients.columns]
+                t = patients[cols].copy()
+                t[f"event__{outcome}"] = patients["event"].to_numpy()
+                t[f"t_event__{outcome}"] = patients["t_event"].to_numpy()
+                t[f"t_censor__{outcome}"] = patients["t_censor"].to_numpy()
+                if base is None:
+                    for landmark in landmarks:      # what Pop_RI says at each landmark
+                        flag = soc_flag_at(patients.assign(start=patients["t0"] + landmark),
+                                           observations)
+                        t[soc_column(landmark)] = flag
+                    base = t
+                else:
+                    base = base.merge(t[["patient_id", f"event__{outcome}", f"t_event__{outcome}",
+                                         f"t_censor__{outcome}"]], on="patient_id", how="outer")
+            if base is not None and len(base):
+                frames.append(base.assign(analyte=analyte))
+        del cls
+        if frames:
+            _ds.write_analyte_cache(pd.concat(frames, ignore_index=True), chunk_dir, COHORT_CACHE)
+        made += 1
+        print(f"    {os.path.basename(chunk_dir)}: cohort cached")
+    print(f"  cohort cache: {made} chunk(s) computed, {reused} reused")
+    return methods
+
+
+def cached_analytes(ds):
+    """Analytes present in the per-chunk cohort caches."""
+    import datasets as _ds
+    return [a for a in _ds.cached_analytes(ds._chunk_dirs(), COHORT_CACHE)
+            if a not in set(EXCLUDE_LABS)]
+
+
+def cached_cohort(ds, analyte, outcome):
+    """One analyte's cohort for this outcome, pooled over the chunks."""
+    import datasets as _ds
+    frames = []
+    for chunk_dir in ds._chunk_dirs():       # only this analyte's slice of each chunk
+        d = _ds.read_analyte_cache(chunk_dir, COHORT_CACHE, analyte)
+        if d is not None and len(d):
+            frames.append(d)
+    if not frames:
+        return None
+    t = pd.concat(frames, ignore_index=True)
+    ren = {f"{c}__{outcome}": c for c in ("event", "t_event", "t_censor")}
+    if not set(ren) <= set(t.columns):
+        return None
+    t = t.rename(columns=ren)
+    return t.dropna(subset=["event", "age", "sex", "t0"])
+
+
 def soc_flag_at(patients, observations):
     """Standard of care: Pop_RI class of each patient's latest value at or before its
     follow-up start.  A patient with no value yet is NOT flagged (NaN != 1 is True)."""
@@ -88,8 +182,14 @@ def incidence_rows(patients, flag, method, analyte, outcome, horizons):
     """Cumulative incidence at each horizon for flagged vs unflagged, plus the log-rank
     test between the two curves; None when either arm is too small."""
     d = patients.assign(flag=flag)
+    # cast before the arithmetic: a parquet cohort can carry these as object, and
+    # lifelines then coerces them itself with a warning per fit -- the sums above would
+    # already have been done on objects by then
+    for c in ("event", "t_event", "t_censor", "start"):
+        if c in d.columns and d[c].dtype == object:
+            d[c] = pd.to_numeric(d[c], errors="coerce")
     end = np.where(d["event"] == 1, d["t_event"], d["t_censor"])
-    d = d.assign(duration=end - d["start"])
+    d = d.assign(duration=pd.to_numeric(end, errors="coerce") - d["start"])
     d = d[d["duration"] > 0]
     flagged, unflagged = d[d["flag"]], d[~d["flag"]]
     if len(flagged) < 20 or len(unflagged) < 20:
@@ -117,9 +217,111 @@ def incidence_rows(patients, flag, method, analyte, outcome, horizons):
     return row
 
 
+# ── progression: Cohen et al. 2021 Fig. 5e (glucose -> T2D) and 5f (creatinine -> CKD)
+# Their design: among people who are currently normal, split by what the model predicts
+# for two years' time, and follow disease incidence from that point.  The comparison is
+# against what the VALUE ITSELF says two years later -- the "observed" arms -- because
+# the claim is identification earlier than waiting for the test to cross the line.
+#
+# Arms here, per analyte x method:
+#   predicted_severe    flagged, and further than --severe_z from the method's centre
+#   predicted_abnormal  flagged, but not severe
+#   predicted_normal    not flagged
+#   observed_abnormal   Pop_RI-abnormal at the landmark (the standard of care then)
+#   observed_normal     Pop_RI-normal at the landmark
+# The predicted arms are read at the INDEX measurement, the observed arms at the
+# landmark, so the two differ by exactly the waiting time the analysis is about.
+PROGRESSION = {"t2d": ["GLU", "A1C"], "ckd": ["CRE"]}       # Cohen's pairs
+PROGRESSION_AGE = {"t2d": (50, 60), "ckd": (60, 70)}        # their bands
+DEFAULT_AGE_RANGE = (0, 200)                                # --age_range's default: no band
+YEAR_H = 8766.0                                             # hours in a year
+
+
+def progression_arms(cohort, observations, method, severe_z, soc=None):
+    """{arm: boolean mask} over the cohort, the five arms of Cohen Fig. 5e."""
+    z = pd.to_numeric(cohort[f"{method}_z"], errors="coerce").to_numpy(float)
+    flagged = np.isfinite(z) & (z > 1.0)          # outside the method's own interval
+    severe = flagged & (z > severe_z)
+    if soc is None:
+        soc = soc_flag_at(cohort, observations)   # Pop_RI at the landmark, no look-ahead
+    return {
+        "predicted_severe": severe,
+        "predicted_abnormal": flagged & ~severe,
+        "predicted_normal": np.isfinite(z) & ~flagged,
+        "observed_abnormal": soc,
+        "observed_normal": ~soc,
+    }
+
+
+def progression_rows(cohort, arms, method, analyte, outcome, horizons, min_arm=20):
+    """Cumulative incidence per arm at each horizon -- the curves of Fig. 5e."""
+    end = np.where(cohort["event"] == 1, cohort["t_event"], cohort["t_censor"])
+    duration = end - cohort["start"].to_numpy(float)
+    event = cohort["event"].to_numpy(float)
+    rows = []
+    for arm, mask in arms.items():
+        keep = mask & (duration > 0)
+        if keep.sum() < min_arm:
+            continue
+        km = KaplanMeierFitter().fit(duration[keep], event[keep])
+        row = {"analyte": analyte, "outcome": outcome, "method": method, "arm": arm,
+               "n": int(keep.sum()), "n_events": int(event[keep].sum())}
+        for h in horizons:
+            try:
+                row[f"inc_{h:g}h"] = float(1.0 - km.predict(h))
+            except Exception:
+                row[f"inc_{h:g}h"] = np.nan
+        rows.append(row)
+    return rows
+
+
+def run_progression(ds, cls, methods, args, results_dir, outcome, unit):
+    cfg = ds.outcomes[outcome]
+    analytes = [a for a in PROGRESSION.get(outcome, []) if not ds._analytes or a in ds._analytes]
+    if not analytes:
+        print(f"  {outcome}: no analyte pairing (Cohen used {PROGRESSION.get(outcome, [])})")
+        return []
+    # their band unless one was asked for
+    age_range = (tuple(args.age_range) if tuple(args.age_range) != DEFAULT_AGE_RANGE
+                 else PROGRESSION_AGE.get(outcome, DEFAULT_AGE_RANGE))
+    landmark = args.progression_landmark
+    rows = []
+    for analyte in analytes:
+        if cls is None:                           # chunked: out of the per-chunk caches
+            patients = cached_cohort(ds, analyte, outcome)
+            observations = None
+            if patients is None:
+                continue
+            patients = patients[(pd.to_numeric(patients["age"], errors="coerce") >= age_range[0])
+                                & (pd.to_numeric(patients["age"], errors="coerce") < age_range[1])]
+        else:
+            patients, observations = incidence_cohort(cls, cfg, analyte, age_range, unit)
+        if len(patients) < 100:
+            print(f"  {analyte}: {len(patients)} patients in the age band, too few")
+            continue
+        cohort = patients.assign(start=patients["t0"] + landmark)
+        prevalent = (cohort["event"] == 1) & (cohort["t_event"] <= cohort["start"])
+        cohort = cohort[~prevalent & (cohort["t_censor"] > cohort["start"])]
+        if len(cohort) < 100:
+            continue
+        print(f"  {analyte} age {age_range[0]}-{age_range[1]}, landmark {landmark:g}h: "
+              f"n={len(cohort):,}, incident {int(cohort['event'].sum()):,}, "
+              f"{int(prevalent.sum()):,} prevalent dropped")
+        soc = cohort[soc_column(landmark)].to_numpy(bool) if observations is None else None
+        for method in methods:
+            arms = progression_arms(cohort, observations, method, args.severe_z, soc)
+            rows += progression_rows(cohort, arms, method, analyte, outcome, args.horizons)
+    for r in rows:
+        r.update(landmark_hours=landmark, severe_z=args.severe_z,
+                 age_lo=age_range[0], age_hi=age_range[1])
+    return rows
+
+
 def run_incidence(ds, cls, methods, args, results_dir, outcome, unit):
     cfg = ds.outcomes[outcome]
-    analytes = list(ds._analytes) if ds._analytes else sorted(cls["analyte"].dropna().unique())
+    analytes = (list(ds._analytes) if ds._analytes
+                else sorted(cls["analyte"].dropna().unique()) if cls is not None
+                else cached_analytes(ds))
     rows = []
 
     def add(row, landmark, anchor):
@@ -127,7 +329,15 @@ def run_incidence(ds, cls, methods, args, results_dir, outcome, unit):
             rows.append({**row, "landmark_hours": landmark, "anchor": anchor})
 
     for analyte in analytes:
-        patients, observations = incidence_cohort(cls, cfg, analyte, args.age_range, unit)
+        if cls is None:                           # chunked: out of the per-chunk caches
+            patients = cached_cohort(ds, analyte, outcome)
+            observations = None
+            if patients is None:
+                continue
+            age = pd.to_numeric(patients["age"], errors="coerce")
+            patients = patients[(age >= args.age_range[0]) & (age < args.age_range[1])]
+        else:
+            patients, observations = incidence_cohort(cls, cfg, analyte, args.age_range, unit)
         if len(patients) < 100 or patients["event"].nunique() < 2:
             continue
         for landmark in args.landmarks:
@@ -141,7 +351,8 @@ def run_incidence(ds, cls, methods, args, results_dir, outcome, unit):
             print(f"  {analyte} landmark={landmark:g}h: n={len(cohort):,} incident events="
                   f"{int(cohort['event'].sum()):,} ({cohort['event'].mean():.3f}) | "
                   f"{int(prevalent.sum()):,} prevalent dropped")
-            soc = soc_flag_at(cohort, observations)
+            soc = (cohort[soc_column(landmark)].to_numpy(bool) if observations is None
+                   else soc_flag_at(cohort, observations))
             soc_rate = float(soc.mean())
             strata = strata_of(cohort)
             y = cohort["event"].to_numpy(float)
@@ -186,32 +397,63 @@ def main():
                         "one pass (0 = at the index measurement; Cohen's Fig. 5e used 2 years)")
     p.add_argument("--horizons", type=float, nargs="*", default=[24.0, 72.0, 168.0, 720.0],
                    help="hours at which to report cumulative incidence")
-    p.add_argument("--age_range", type=float, nargs=2, default=[0, 200], metavar=("LO", "HI"),
+    p.add_argument("--age_range", type=float, nargs=2, default=list(DEFAULT_AGE_RANGE),
+                   metavar=("LO", "HI"),
                    help="restrict the cohort (Cohen used a single 10-year band)")
+    g = p.add_argument_group("progression (Cohen Fig. 5e/f)")
+    g.add_argument("--progression", action="store_true",
+                   help="disease progression by predicted vs observed status: glucose/A1C -> T2D "
+                        "(ages 50-60) and creatinine -> CKD (60-70), as Cohen Fig. 5e/f")
+    g.add_argument("--progression_landmark", type=float, default=2 * YEAR_H,
+                   help="hours between the prediction and the start of follow-up (default: 2 years)")
+    g.add_argument("--severe_z", type=float, default=2.0,
+                   help="deviation above which a flag counts as the severe arm (their FG > 110)")
     args = p.parse_args()
 
     ds = get_dataset(args)
     results_dir = ds.setup_output()
-    if already_done(args, results_dir, "incidence.csv", label="incidence"):
+    prog = []
+    out_file = "progression.csv" if args.progression else "incidence.csv"
+    if already_done(args, results_dir, out_file, label=out_file.split(".")[0]):
         return
-    cls = ds.load_classification()
-    cls["analyte"] = cls["analyte"].replace("", "NA").fillna("NA")
-    cls = cls[~cls["analyte"].isin(EXCLUDE_LABS)]
-    methods = [m for m in ds.methods if f"{m}_z" in cls.columns]
-    print(f"  {len(methods)} methods: {', '.join(methods)}")
     unit = getattr(ds, "outcome_time_unit", None) or getattr(ds, "time_unit", None) or "minutes"
+    landmarks = ([args.progression_landmark] if args.progression else list(args.landmarks))
+    if ds.name == "chs":            # never one frame: reduce per chunk, then pool per analyte
+        cls = None
+        methods = chunk_cohorts(ds, args, unit, landmarks)
+    else:
+        cls = ds.load_classification()
+        cls["analyte"] = cls["analyte"].replace("", "NA").fillna("NA")
+        cls = cls[~cls["analyte"].isin(EXCLUDE_LABS)]
+        methods = [m for m in ds.methods if f"{m}_z" in cls.columns]
+    print(f"  {len(methods)} methods: {', '.join(methods)}")
 
     outcomes = args.outcomes
     if outcomes is None:
         outcomes = [o for o in ds.primary_outcomes if o in ds.outcomes]
-    if any(ds.outcomes[o]["event_col"] not in cls.columns for o in outcomes):
+    if cls is not None and any(ds.outcomes[o]["event_col"] not in cls.columns for o in outcomes):
         cls = ds.attach_outcomes(cls)
     for outcome in outcomes:
         if not ds.outcomes[outcome].get("survival", True):
             print(f"=== {outcome}: skipped, its label is defined by the follow-up time itself ===")
             continue
         print(f"=== {outcome} ===")
-        run_incidence(ds, cls, methods, args, results_dir, outcome, unit)
+        if args.progression:
+            prog += run_progression(ds, cls, methods, args, results_dir, outcome, unit)
+        else:
+            run_incidence(ds, cls, methods, args, results_dir, outcome, unit)
+    if args.progression:
+        if not prog:
+            print("  nothing with enough data")
+            return
+        save_csv(pd.DataFrame(prog), os.path.join(results_dir, "progression.csv"),
+                 analytes=ds._analytes, keys=("outcome",))
+        last = f"inc_{args.horizons[-1]:g}h"
+        shown = pd.DataFrame(prog)
+        shown = shown[shown["method"].isin(["PopRI", "NORMA", f"NORMA_{NORMA_RUN_ID}"])]
+        if len(shown):
+            print("\n" + shown.pivot_table(index=["analyte", "arm"], columns="method",
+                                           values=last).round(4).to_string())
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -459,6 +701,74 @@ FIGURES = [
     FigSpec("17_outcomes", "incidence", fig_incidence, False, (), None),
     FigSpec("17_outcomes", "incidence_norma", ablation_variant(fig_incidence), False, (), None),
     FigSpec("17_outcomes", "earliness", fig_earliness, False, (), None),
+]
+
+# ══════════════════════════════════════════════════════════════════════════
+# Tables — 17_outcomes: one table per cohort x outcome, the numbers behind
+# fig_incidence (RR per analyte at the index measurement, matched sensitivity).
+# ══════════════════════════════════════════════════════════════════════════
+
+from figlib import RI_LABELS, _BM_SUPP
+
+
+def _count(row, col):
+    return int(row[col]) if col in row and pd.notna(row[col]) else "---"
+
+
+def _rr_cell(rr, p):
+    """RR at the reported horizon, with the log-rank p that goes with it."""
+    if pd.isna(rr) or not np.isfinite(rr):
+        return "---"
+    return f"{rr:.2f} ({fmt_pval(p)})"
+
+
+def table_incidence(ds):
+    written = []
+    for outcome in OUTCOMES.get(ds, []):
+        df, key = _incidence_frame(ds, outcome)
+        if df is None:
+            continue
+        if "landmark_hours" in df.columns:      # the table is the landmark-0 figure
+            df = df[df["landmark_hours"].fillna(0) == 0]
+        df = df[df["analyte"].astype(str) != "median"]
+        if not len(df):
+            continue
+        methods = [m for m in _BM_SUPP if m in set(df["m"])]
+        if not methods:
+            continue
+        horizon = key.replace("rr_", "").replace("h", "")
+
+        rows = []
+        for analyte in all_analytes():
+            cell = df[df["analyte"] == analyte]
+            row = {"Analyte": analyte, "N": "---"}
+            if len(cell):
+                row["N"] = _count(cell.iloc[0], "n")
+            for method in methods:
+                match = cell[cell["m"] == method]
+                row[f"{method} RR"] = "---"
+                if len(match) == 1:
+                    r = match.iloc[0]
+                    row[f"{method} RR"] = _rr_cell(r[key], r["logrank_p"])
+            rows.append(row)
+
+        header = ("Analyte & N"
+                  + "".join(f" & {RI_LABELS.get(m, m)} RR ($p$)" for m in methods))
+        body = [" & ".join([r["Analyte"], str(r["N"])] + [r[f"{m} RR"] for m in methods]) + r" \\"
+                for r in rows]
+        lines = _table("lr" + "r" * len(methods), [header + r" \\"], body)
+        lines.insert(2, r"\caption{Risk ratio of " + tex_escape(_outcome_label(outcome))
+                     + f" at {horizon} h for flagged vs unflagged patients, each method at a "
+                     + r"matched sensitivity; $p$ is the log-rank test.}")
+        name = f"incidence_{ds}_{outcome}"
+        save_table("17_outcomes", name, lines, pd.DataFrame(rows), landscape=True)
+        written.append(name)
+    return written
+
+
+TABLES = [
+    TableSpec("17_outcomes", "incidence", table_incidence, True, ("incidence.csv",),
+              lambda ds: [f"incidence_{ds}_{o}" for o in OUTCOMES.get(ds, [])]),
 ]
 
 

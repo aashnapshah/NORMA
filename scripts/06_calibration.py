@@ -60,8 +60,12 @@ import bootstrap  # noqa: F401
 import argparse
 import os
 
+import hashlib
+
 import numpy as np
 import pandas as pd
+
+import datasets
 
 from constants import MEDIAN_ROW
 from datasets import already_done, EXCLUDE_LABS, add_dataset_args, get_dataset, save_csv
@@ -104,6 +108,37 @@ def load_bounds(ds, methods, state=None, all_rows=False):
     return df
 
 
+def bound_batches(ds, methods, args, state=None, all_rows=False, skip=()):
+    """(label, frame) over the cohort: one frame for an unchunked cohort, a few analytes
+    at a time for a chunked one.  Every metric here is computed per analyte, so the
+    batching cannot change a number -- it only changes how much is held at once."""
+    if ds.name != "chs":
+        yield "all", load_bounds(ds, methods, state=state, all_rows=all_rows)
+        return
+    first = datasets.classification_paths(ds._chunk_dirs()[0])[0]
+    analytes = (list(ds._analytes) if ds._analytes else
+                sorted(set(pd.read_parquet(first, columns=["analyte"])["analyte"]
+                           .replace("", "NA").dropna()) - set(EXCLUDE_LABS)))
+    analytes = [a for a in analytes if a not in set(skip)]
+    keep = ds._analytes
+    for i in range(0, len(analytes), args.analyte_batch):
+        batch = analytes[i:i + args.analyte_batch]
+        print(f"  {', '.join(batch)}  ({i + 1}-{i + len(batch)} of {len(analytes)})")
+        ds._analytes = batch                      # filters per chunk, before the concat
+        try:
+            yield ",".join(batch), load_bounds(ds, methods, state=state, all_rows=all_rows)
+        finally:
+            ds._analytes = keep
+
+
+def calibration_split(patient_ids, seed):
+    """Half the patients, chosen by a hash of the id rather than a draw over whoever is
+    in memory: a patient lands in the same half however the analytes are batched."""
+    ids = pd.Series(patient_ids).astype(str) + f"|{seed}"
+    h = ids.map(lambda v: int(hashlib.md5(v.encode()).hexdigest()[:8], 16))
+    return (h % 2 == 0).to_numpy()
+
+
 def _methods_with_bounds(ds):
     """Methods whose interval columns the classification file carries: the
     covariate-ablation arms exist in ref_intervals long before 07_classify is rerun."""
@@ -134,22 +169,48 @@ def per_row_metrics(df, method):
                          "width_rel": width_rel, "inside_pop": inside_pop}, index=df.index)
 
 
+def done_analytes(results_dir, name, force):
+    """Analytes already in `name`: this step writes per batch, so a rerun resumes."""
+    if force:
+        return set()
+    path = datasets.find_in(results_dir, name)
+    if not os.path.exists(path) or not os.path.getsize(path):
+        return set()
+    d = pd.read_csv(path, usecols=lambda c: c == "analyte", keep_default_na=False)
+    return set(d["analyte"].astype(str)) - {MEDIAN_ROW} if "analyte" in d.columns else set()
+
+
 def run_coverage(ds, args, results_dir):
     methods = _methods_with_bounds(ds)
-    df = load_bounds(ds, methods, all_rows=args.all_rows)
     rows = []
-    for method in methods:
-        m = per_row_metrics(df, method).dropna(subset=["covered"])
-        m["analyte"], m["state"] = df.loc[m.index, "analyte"], df.loc[m.index, "state"]
-        for state, part in list(m.groupby("state")) + [("all", m)]:
-            g = part.groupby("analyte")
-            out = pd.DataFrame({"n": g.size(), "coverage95": g["covered"].mean(),
-                                "width_rel": g["width_rel"].median(),
-                                "inside_pop": g["inside_pop"].median()}).reset_index()
-            out = out[out["n"] >= MIN_N]
-            out.insert(0, "state", state)
-            out.insert(0, "method", method)
-            rows.append(out)
+    already = done_analytes(results_dir, "calibration.csv", args.force)
+    if already:
+        print(f"  already in calibration.csv, skipped: {len(already)} analyte(s)")
+    for _, df in bound_batches(ds, methods, args, all_rows=args.all_rows, skip=already):
+        if df is None or not len(df):
+            continue
+        batch_rows = []
+        for method in methods:
+            m = per_row_metrics(df, method).dropna(subset=["covered"])
+            m["analyte"], m["state"] = df.loc[m.index, "analyte"], df.loc[m.index, "state"]
+            for state, part in list(m.groupby("state")) + [("all", m)]:
+                g = part.groupby("analyte")
+                out = pd.DataFrame({"n": g.size(), "coverage95": g["covered"].mean(),
+                                    "width_rel": g["width_rel"].median(),
+                                    "inside_pop": g["inside_pop"].median()}).reset_index()
+                out = out[out["n"] >= MIN_N]
+                out.insert(0, "state", state)
+                out.insert(0, "method", method)
+                rows.append(out)
+                batch_rows.append(out)
+        if batch_rows:                             # written as it goes, not at the end
+            part = pd.concat(batch_rows, ignore_index=True)
+            save_csv(part.round({m: 4 for m in ("coverage95", "width_rel", "inside_pop")}),
+                     os.path.join(results_dir, "calibration.csv"),
+                     analytes=sorted(part["analyte"].unique()))
+    if not rows:
+        print("  nothing with enough data")
+        return
     metrics = ["coverage95", "width_rel", "inside_pop"]
     detail = pd.concat(rows, ignore_index=True)
     detail[metrics] = detail[metrics].round(4)
@@ -188,13 +249,26 @@ def conformal_gamma(scores, level):
 
 def run_conformal(ds, args, results_dir):
     methods = _methods_with_bounds(ds)
-    df = load_bounds(ds, methods, state=1 if args.state == "normal" else None)
+    rows = []
+    already = done_analytes(results_dir, "conformal.csv", args.force)
+    if already:
+        print(f"  already in conformal.csv, skipped: {len(already)} analyte(s)")
+    for _, df in bound_batches(ds, methods, args, state=1 if args.state == "normal" else None,
+                               skip=already):
+        if df is None or not len(df):
+            continue
+        batch = conformal_rows(df, methods, args)
+        rows += batch
+        if batch:                                  # written as it goes, not at the end
+            save_csv(pd.DataFrame(batch).round(4), os.path.join(results_dir, "conformal.csv"),
+                     analytes=sorted({r["analyte"] for r in batch}))
+    detail = pd.DataFrame(rows)
+    return _save_conformal(detail, ds, args, results_dir)
 
+
+def conformal_rows(df, methods, args):
     # patient-level split: a patient's rows are all in calibration or all in evaluation
-    pids = np.sort(df["patient_id"].unique())
-    rng = np.random.RandomState(args.seed)
-    cal_pids = set(rng.choice(pids, size=len(pids) // 2, replace=False))
-    is_cal = df["patient_id"].isin(cal_pids).to_numpy()
+    is_cal = calibration_split(df["patient_id"].to_numpy(), args.seed)
     print(f"  calibration {is_cal.sum():,} rows / evaluation {(~is_cal).sum():,} rows")
 
     pop_w = (df["pop_ri_high"] - df["pop_ri_low"]).to_numpy(float)
@@ -226,7 +300,10 @@ def run_conformal(ds, args, results_dir):
                          "gamma": gamma, "coverage_raw": raw_cov, "width_rel_raw": raw_w,
                          "coverage_cal": cal_cov, "width_rel_cal": cal_w})
 
-    detail = pd.DataFrame(rows)
+    return rows
+
+
+def _save_conformal(detail, ds, args, results_dir):
     if detail.empty:
         print("  no analyte had enough rows; nothing written")
         return
@@ -259,6 +336,8 @@ def main():
     g = p.add_argument_group("conformal")
     g.add_argument("--level", type=float, default=0.95, help="target coverage")
     g.add_argument("--seed", type=int, default=42)
+    p.add_argument("--analyte_batch", type=int, default=4,
+                   help="chunked cohorts: analytes held in memory per pass (default: %(default)s)")
     g.add_argument("--state", default="normal", choices=["normal", "all"],
                    help="which realised Pop_RI state to calibrate on")
     args = p.parse_args()

@@ -7,6 +7,22 @@
     python jobs/run_clalit.py --only 13_cox 14_patient
     python jobs/run_clalit.py --n_chunks 5 --dry_run  # print the commands
     python jobs/run_clalit.py --no_norma              # baselines only, no model
+    python jobs/run_clalit.py --reuse_refs --n_chunks 2   # no NORMA / Cohen reruns, 2-chunk test
+
+--reuse_refs runs everything below the reference intervals on the intervals the chunks
+already hold: no raw reprocessing or re-split (01_process, 02_index_labs), no NORMA inference (04_norma), no Cohen
+fitting (04_baselines gets an empty --cohen_models, so only the Gaussian arms it lacks are
+fitted).  Before the first stage it prints which methods each chunk carries.  Every
+downstream stage then gets --drop_arms for the arms some chunk has no rows for, and, when
+the chunks carry an older NORMA run instead of datasets.NORMA_RUN_ID, --norma_alias so
+those rows are scored as "NORMA"; the run actually used is written to
+results/processed/<cohort>/NORMA_RUN.txt, so it travels out with the figure data.  The
+per-chunk caches an earlier pipeline version left (classification, eval / prevalence
+counts, mortality extract) are renamed to <file>.bak-reuse once, so they are rebuilt from
+the intervals rather than reused; rename them back to undo.  --norma_run RUN picks the
+NORMA run by hand.  Put old NORMA intervals back first with jobs/import_old_norma.py.
+With --n_chunks N (fewer than all) results go to results/raw/chs_Nchunks/
+and results/processed/chs_Nchunks/, never over a full run's.
 
 --no_norma runs the whole pipeline with the NORMA arms dropped: the 04_norma stage
 disappears, every stage below it gets --no_norma (which empties dataset.run_ids, so
@@ -84,6 +100,33 @@ BUNDLE = [
 ]
 
 
+# What each stage needs finished before it can start.  Everything below 07 reads the
+# classification and writes its own result file, so those stages are independent of each
+# other and can run at the same time (--jobs).  The per-chunk caches they build are
+# per stage, so parallel runs do not collide.
+DEPENDS = {
+    "02_index_labs": ["01_process"],
+    "03_cohort": ["02_index_labs"],
+    "04_norma": ["02_index_labs"],
+    "04_baselines": ["02_index_labs"],
+    "07_classify": ["04_baselines"],
+    "06_calibration": ["07_classify"],
+    "05_forecasting": ["04_baselines"],
+    "08_variability": ["07_classify"],
+    "09_age_ri": ["07_classify"],
+    "10_mortality": ["07_classify"],
+    "11_lead_time": ["07_classify"],
+    "12_eval": ["07_classify"],
+    "13_cox": ["07_classify"],
+    "14_patient": ["07_classify"],
+    "16_benchmark": ["07_classify"],
+    "11_lead": ["07_classify"],
+    "17_outcomes": ["07_classify"],
+}
+# export copies out whatever is written, so it waits for every other stage in the plan
+DEPENDS["export"] = [s for s in DEPENDS if s != "export"]
+
+
 # ────────────────────────────────────────────────────────────── stages
 
 def stages(args):
@@ -92,7 +135,10 @@ def stages(args):
     # every stage from 04 down shares add_dataset_args, so it takes --no_norma;
     # 02_index_labs and 03_cohort_summary have their own parsers and never look at a
     # method, so they run unchanged either way.
-    dsn = ds + (["--no_norma"] if args.no_norma else [])
+    # --force reaches every stage below 04 through the shared dataset parser, so one flag
+    # rebuilds the classification, the per-chunk count caches and every result file.
+    dsn = (ds + (["--no_norma"] if args.no_norma else [])
+           + (["--force"] if args.force else []))   # --reuse_refs flags are added at run time
     nc = ["--n_chunks", str(args.n_chunks)] if args.n_chunks else []
     an = ["--analytes", args.analytes] if args.analytes else []
 
@@ -109,9 +155,11 @@ def stages(args):
          per_chunk(args, "04_refs.py", ["--only", "norma", "--device", args.device], norma_done)),
         ("04_baselines", "PopRI / PerRI / Cohen m2-m4 / Gaussian mle-trunc-eb (per chunk)",
          per_chunk(args, "04_refs.py", ["--only", "baselines"]
-                   + (["--no_norma"] if args.no_norma else []), baselines_done)),
+                   + (["--no_norma"] if args.no_norma else [])
+                   + (["--cohen_models"] if args.reuse_refs else []),      # empty: fit no Cohen model
+                   reuse_baselines_done if args.reuse_refs else baselines_done)),
         ("07_classify", "classify every index measurement per method (+ exposure markers), prevalence",
-         [["07_classify.py"] + dsn + nc + an + (["--force"] if args.force else [])]),
+         [["07_classify.py"] + dsn + nc + an]),
         ("06_calibration", "coverage / width of every method, conformal widths (reads classification)",
          [["06_calibration.py"] + dsn + nc + an]),
         ("05_forecasting", "NORMA vs Last / Mean / ARIMA and the interval centres",
@@ -125,8 +173,7 @@ def stages(args):
         ("11_lead_time", "future Pop_RI abnormality from a Pop_RI-normal index (Cohen Fig. 5a/b)",
          [["11_lead_time.py", "--only", "future_abnormal"] + dsn + nc + an]),
         ("12_eval", "PPV / sensitivity / specificity, AUROC and the matched-rate deviation score per analyte, method, outcome",
-         [["12_eval.py", "--only", "metrics", "auroc", "deviation"] + dsn + nc + an
-          + (["--force"] if args.force else [])]),
+         [["12_eval.py", "--only", "metrics", "auroc", "deviation"] + dsn + nc + an]),
         ("13_cox", "landmark Cox per (outcome, analyte, method), one row per patient",
          [["13_cox.py"] + dsn + nc + an]),
         ("14_patient", "patient-level multi-analyte survival models and NRI (refit + swap)",
@@ -139,18 +186,31 @@ def stages(args):
          [["17_outcomes.py"] + dsn + nc + an]),
         ("export", "figure data: results/processed/chs/ (the folder to copy out; "
                    "also refreshed after every stage above)",
-         [["export.py", "--dataset", "chs", "--txt"]]),
+         [["export.py", "--dataset", output_sub(args), "--txt"]]),
     ]
     if args.no_norma:
         stage_list = [s for s in stage_list if s[0] != "04_norma"]
+    if args.reuse_refs:
+        # the chunks already hold index_labs, and NORMA is what is on disk
+        stage_list = [s for s in stage_list if s[0] not in ("01_process", "02_index_labs", "04_norma")]
     return stage_list
+
+
+def output_sub(args):
+    """results/{raw,processed}/<this>/ -- chs, chs_<N>chunks, or sandbox."""
+    sys.path.insert(0, os.path.join(SCRIPTS_DIR, "lib"))
+    import datasets
+    return datasets.CHSDataset(n_chunks=args.n_chunks).output_sub()
 
 
 def per_chunk(args, script, extra, done_fn):
     """One invocation per chunk, skipping the chunks that already have output."""
     cmds = []
+    # --reuse_refs means the intervals on disk are the input, so --force (which is about
+    # recomputing everything DOWNSTREAM of them) must not send them through again.
+    redo = args.force and not args.reuse_refs
     for i, chunk_dir in chunk_dirs(args.n_chunks):
-        if not args.force and done_fn(chunk_dir):
+        if not redo and done_fn(chunk_dir):
             continue
         cmds.append([script, "--dataset", "chs", "--chunk", str(i)] + extra
                     + (["--analytes", args.analytes] if args.analytes else []))
@@ -159,6 +219,24 @@ def per_chunk(args, script, extra, done_fn):
 
 def norma_done(chunk_dir):
     return os.path.exists(os.path.join(chunk_dir, "norma_predictions.parquet"))
+
+
+def chunk_methods(chunk_dir):
+    """{method: patient-analyte pairs} over both ref_intervals files of a chunk."""
+    import pandas as pd
+    out = {}
+    for name in ("ref_intervals.parquet", "ref_intervals_norma.parquet"):
+        p = os.path.join(chunk_dir, name)
+        if os.path.exists(p):
+            r = pd.read_parquet(p, columns=["patient_id", "analyte", "method"]).drop_duplicates()
+            for m, n in r["method"].value_counts().items():
+                out[m] = out.get(m, 0) + int(n)
+    return out
+
+
+def reuse_baselines_done(chunk_dir):
+    # --reuse_refs never fits Cohen, so a chunk is done once core + Gaussian are there
+    return {m for m in REFS_METHODS if not m.startswith("cohen_")} <= set(chunk_methods(chunk_dir))
 
 
 def baselines_done(chunk_dir):
@@ -204,6 +282,86 @@ def count_chunks(raw=False):
         sys.path.pop(0)
 
 
+# ────────────────────────────────────────────────────────────── --reuse_refs
+
+# per-chunk files an earlier pipeline version cached from the old intervals
+STALE_CHUNK_FILES = ["classification.parquet", "classification_norma.parquet", "classification.csv",
+                     "eval_counts.parquet", "prevalence_counts.parquet", "mortality_extract.parquet"]
+ARM_PREFIXES = ("cohen_", "gaussian_", "norma_")
+
+
+def inventory(n_chunks=None):
+    """Print which methods (patient-analyte pairs) each chunk holds; return {chunk: methods}."""
+    import pandas as pd
+    per = {os.path.basename(d): chunk_methods(d) for _, d in chunk_dirs(n_chunks)}
+    table = pd.DataFrame(per).T.fillna(0).astype(int)
+    extra = pd.DataFrame({os.path.basename(d): {
+        "norma_predictions": int(norma_done(d)),
+        "index_labs": int(os.path.exists(os.path.join(d, "index_labs.parquet"))),
+        "diagnosis": int(os.path.exists(os.path.join(d, "diagnosis.parquet")))}
+        for _, d in chunk_dirs(n_chunks)}).T
+    print("\n  ref_intervals pairs per method (both files), and inputs present (1 = yes):")
+    print("    " + table.join(extra).to_string().replace("\n", "\n    "))
+    return per
+
+
+def reuse_flags(args):
+    """--drop_arms / --norma_alias for the downstream stages, from what is on disk now."""
+    sys.path.insert(0, os.path.join(SCRIPTS_DIR, "lib"))
+    import datasets
+    per = {os.path.basename(d): set(chunk_methods(d)) for _, d in chunk_dirs(args.n_chunks)}
+    everywhere = set.intersection(*per.values()) if per else set()
+    base = datasets.BaseDataset
+    expected = ([f"cohen_{m}" for m in base.cohen_models]
+                + [f"gaussian_{m}" for m in base.gaussian_models])
+    drop = [m for m in expected if m not in everywhere]
+    flags, main = [], f"norma_{datasets.NORMA_RUN_ID}"
+    runs = sorted(m[len("norma_"):] for m in everywhere if m.startswith("norma_"))
+    if args.norma_run:
+        run = args.norma_run
+        if f"norma_{run}" not in everywhere:
+            sys.exit(f"--norma_run {run}: not every chunk has norma_{run} rows (found {runs})")
+    elif main in everywhere:
+        run = datasets.NORMA_RUN_ID
+    else:
+        run = runs[0] if runs else None
+        if len(runs) > 1:
+            print(f"  NOTE: several NORMA runs in every chunk {runs}; using {run} (--norma_run to pick)")
+    if run is None:
+        drop.append(main)
+    elif run != datasets.NORMA_RUN_ID:
+        flags += ["--norma_alias", run]
+    partial = sorted({m for ms in per.values() for m in ms if m.startswith(ARM_PREFIXES)} - everywhere)
+    if partial:
+        print(f"  NOTE: in some chunks only, left out: {partial}")
+    if drop:
+        flags += ["--drop_arms", ",".join(drop)]
+    print(f"  NORMA run scored as NORMA: {run or 'none (no NORMA rows in every chunk)'}")
+    print(f"  arms left out (no rows): {', '.join(drop) or 'none'}")
+    return flags, run
+
+
+def set_aside_stale_caches(n_chunks=None):
+    """Rename an earlier version's per-chunk caches to <file>.bak-reuse, once per file."""
+    moved = 0
+    for _, d in chunk_dirs(n_chunks):
+        for name in STALE_CHUNK_FILES:
+            p = os.path.join(d, name)
+            if os.path.exists(p) and not os.path.exists(p + ".bak-reuse"):
+                os.replace(p, p + ".bak-reuse")
+                moved += 1
+    if moved:
+        print(f"  set aside {moved} cached per-chunk file(s) as *.bak-reuse (rebuilt from the intervals)")
+
+
+def write_norma_note(args, run):
+    d = os.path.join(VAL_DIR, "results", "processed", output_sub(args))
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "NORMA_RUN.txt"), "w") as f:
+        f.write(f"NORMA rows scored as NORMA on this cohort: norma_{run}\n" if run
+                else "No NORMA rows on this cohort; NORMA not scored.\n")
+
+
 def backup_server_refs(n_chunks=None):
     """Keep the 01_process ref_intervals (server Bayes/setpoint) before 04_refs
     overwrites pop/per — once per chunk, never overwriting an existing backup."""
@@ -231,7 +389,7 @@ def preflight(args):
     # has to succeed for the stage to run at all.
     for mod in (["numpy", "pandas", "pyarrow", "scipy", "sklearn", "joblib", "tqdm",
                  "lifelines", "statsmodels", "sksurv", "matplotlib"]
-                + ([] if args.no_norma else ["torch"])):
+                + ([] if args.no_norma or args.reuse_refs else ["torch"])):
         try:
             __import__(mod)
         except ImportError:
@@ -241,8 +399,9 @@ def preflight(args):
 
     sys.path.insert(0, os.path.join(SCRIPTS_DIR, "lib"))
     import datasets
-    if args.no_norma:
-        print("  NORMA         not used (--no_norma), no checkpoint needed")
+    if args.no_norma or args.reuse_refs:
+        print(f"  NORMA         not run ({'--no_norma' if args.no_norma else '--reuse_refs'}), "
+              f"no checkpoint needed")
     else:
         run_id, ckpt = datasets.NORMA_RUN_ID, datasets.NORMA_CHECKPOINT
         weights = os.path.join(datasets.MODEL_LOG_DIR, run_id, f"checkpoint_{ckpt}.pth")
@@ -250,9 +409,12 @@ def preflight(args):
               f"{weights if os.path.exists(weights) else 'NOT FOUND at ' + weights}")
         ok &= os.path.exists(weights)
 
-    cohen = datasets.artifact("cohen_dev_models.pkl")
-    print(f"  Cohen models  {cohen if os.path.exists(cohen) else 'NOT FOUND at ' + cohen}")
-    ok &= os.path.exists(cohen)
+    if args.reuse_refs:
+        print("  Cohen models  not fitted (--reuse_refs), none needed")
+    else:
+        cohen = datasets.artifact("cohen_dev_models.pkl")
+        print(f"  Cohen models  {cohen if os.path.exists(cohen) else 'NOT FOUND at ' + cohen}")
+        ok &= os.path.exists(cohen)
 
     root = data_root()
     n_out, n_raw = len(chunk_dirs()), count_chunks(raw=True)
@@ -260,7 +422,10 @@ def preflight(args):
           + (f" (source has {n_raw})" if n_raw and not n_out else ""))
     if n_out:
         done_b = sum(baselines_done(d) for _, d in chunk_dirs())
-        if args.no_norma:
+        if args.reuse_refs:
+            done_r = sum(reuse_baselines_done(d) for _, d in chunk_dirs(args.n_chunks))
+            print(f"  04_refs done  pop/per/Gaussian in {done_r}/{len(chunk_dirs(args.n_chunks))} selected chunks")
+        elif args.no_norma:
             print(f"  04_refs done  baselines {done_b}/{n_out} chunks")
         else:
             done_n = sum(norma_done(d) for _, d in chunk_dirs())
@@ -296,6 +461,75 @@ def pack_bundle(out_dir):
 
 
 # ────────────────────────────────────────────────────────────── driver
+
+def run_parallel(plan, args, extra_for):
+    """Run the plan with up to --jobs stages at once, in dependency order.
+
+    A stage starts when every stage it depends on that is ALSO in this plan has
+    finished; a dependency already done in an earlier run is not in the plan and so does
+    not hold anything up.  Each stage keeps its own log, and its output is printed when
+    it finishes rather than interleaved with the others'.
+    """
+    todo = {sid: (desc, cmds) for sid, desc, cmds in plan}
+    pending = dict(todo)
+    running = {}          # sid -> (Popen, log path, [remaining commands], started)
+    done, failed = set(), []
+
+    def ready(sid):
+        return all(dep not in pending and dep not in running
+                   for dep in DEPENDS.get(sid, []) if dep in todo)
+
+    def start(sid):
+        desc, cmds = pending.pop(sid)
+        cmds = [c + extra_for(sid) for c in cmds]
+        if not cmds:
+            print(f"### {sid} — nothing outstanding")
+            done.add(sid)
+            return
+        print(f"### {sid} — {desc}  [started]")
+        log_path = os.path.join(LOG_DIR, f"{sid}.log")
+        os.makedirs(LOG_DIR, exist_ok=True)
+        log = open(log_path, "w")
+        proc = subprocess.Popen([sys.executable] + cmds[0], cwd=SCRIPTS_DIR,
+                                stdout=log, stderr=subprocess.STDOUT)
+        running[sid] = (proc, log, cmds[1:], time.time(), log_path)
+
+    while pending or running:
+        for sid in [s for s in pending if ready(s)]:
+            if len(running) >= args.jobs:
+                break
+            start(sid)
+        if not running:
+            if pending:                     # everything left waits on something that failed
+                print(f"  not run (a dependency failed): {', '.join(sorted(pending))}")
+            break
+        time.sleep(2)
+        for sid, (proc, log, rest, t0, log_path) in list(running.items()):
+            if proc.poll() is None:
+                continue
+            log.close()
+            if proc.returncode == 0 and rest:      # a multi-command stage: next command
+                log = open(log_path, "a")
+                nxt = subprocess.Popen([sys.executable] + rest[0], cwd=SCRIPTS_DIR,
+                                       stdout=log, stderr=subprocess.STDOUT)
+                running[sid] = (nxt, log, rest[1:], t0, log_path)
+                continue
+            running.pop(sid)
+            mins = (time.time() - t0) / 60
+            if proc.returncode == 0:
+                done.add(sid)
+                print(f"### {sid} — done in {mins:.1f} min   ({log_path})")
+            else:
+                failed.append(sid)
+                print(f"### {sid} — FAILED ({proc.returncode}) after {mins:.1f} min   "
+                      f"see {log_path}")
+                if not args.keep_going:
+                    for other, (p, l, _, _, _) in running.items():
+                        p.terminate()
+                        l.close()
+                    return failed
+    return failed
+
 
 def load_state():
     if os.path.exists(STATE_FILE):
@@ -347,12 +581,23 @@ def main():
     p.add_argument("--no_norma", action="store_true",
                    help="baselines only: drop the 04_norma stage and every NORMA arm "
                         "downstream (no model weights needed)")
+    p.add_argument("--reuse_refs", action="store_true",
+                   help="use the intervals the chunks already hold: no 01_process, no NORMA "
+                        "inference, no Cohen fitting; missing arms are left out downstream")
+    p.add_argument("--norma_run", help="--reuse_refs: the NORMA run to score as NORMA "
+                                       "(default: the main run if present, else the one on disk)")
     p.add_argument("--workers", type=int, default=4, help="processes for 05_forecasting")
     p.add_argument("--force", action="store_true",
-                   help="recompute finished chunks and re-derive cached per-chunk results")
+                   help="redo everything: rebuild the classification, the per-chunk caches "
+                        "and every result, ignoring what is already written.  With "
+                        "--reuse_refs the reference intervals themselves are still reused")
     p.add_argument("--resume", action="store_true",
                    help="skip whole stages recorded complete in logs/clalit/progress.json")
     p.add_argument("--keep_going", action="store_true", help="carry on after a failing stage")
+    p.add_argument("--jobs", type=int, default=1,
+                   help="stages to run at once (default 1).  Everything below 07_classify is "
+                        "independent, so --jobs 3-4 is the useful range; each still writes its "
+                        "own log in logs/clalit/")
     p.add_argument("--dry_run", action="store_true", help="print the commands, run nothing")
     args = p.parse_args()
 
@@ -386,14 +631,42 @@ def main():
     print(f"\nCHS pipeline: {len(plan)} stage(s) — {', '.join(s[0] for s in plan)}")
     if any(s[0].startswith("04_") for s in plan) and not args.dry_run:
         backup_server_refs(args.n_chunks)
+    if args.reuse_refs:
+        inventory(args.n_chunks)
+    # stages that build their own parser (no --drop_arms / --norma_alias)
+    own_parser = ("01_process", "02_index_labs", "03_cohort", "04_norma", "04_baselines", "export")
+    extra = None
 
     t_start = time.time()
     failed = []
+    if args.jobs > 1 and not args.dry_run:
+        def extra_for(sid):
+            if args.reuse_refs and sid not in own_parser:
+                nonlocal_extra = reuse_flags(args)[0]
+                return nonlocal_extra
+            return []
+        failed = run_parallel(plan, args, extra_for) or []
+        print(f"\n{'=' * 72}")
+        print(f"  CHS pipeline finished in {(time.time() - t_start) / 60:.0f} min "
+              f"({args.jobs} stages at a time)")
+        if failed:
+            print(f"  failed: {', '.join(failed)}")
+        print(f"  next: copy results/processed/{output_sub(args)}/ out")
+        print(f"{'=' * 72}")
+        return
     for sid, desc, cmds in plan:
         print(f"\n\n### {sid} — {desc}")
         if not cmds:
             print("  nothing outstanding (every chunk already has its output)")
             continue
+        if args.reuse_refs and sid not in own_parser and extra is None:
+            # after 04_baselines, so the Gaussian arms it just fitted count as present
+            extra, norma_run = reuse_flags(args)
+            if not args.dry_run:
+                set_aside_stale_caches(args.n_chunks)
+                write_norma_note(args, norma_run)
+        if args.reuse_refs and sid not in own_parser:
+            cmds = [c + extra for c in cmds]
         for n, cmd in enumerate(cmds):
             tag = f"{sid}_{n}" if len(cmds) > 1 else sid
             if sid.startswith("04_"):
@@ -411,14 +684,14 @@ def main():
         if sid != "export" and not args.dry_run:
             # keep results/processed/chs/ current, so a partial run can already be copied out
             stage = os.path.basename(cmds[0][0]).replace(".py", "")
-            run(["export.py", "--dataset", "chs", "--quiet"],
+            run(["export.py", "--dataset", output_sub(args), "--quiet"],
                 os.path.join(LOG_DIR, "export.log"))
 
     print(f"\n{'=' * 72}")
     print(f"  CHS pipeline finished in {(time.time() - t_start) / 60:.0f} min")
     if failed:
         print(f"  failed: {', '.join(failed)}")
-    print("  next: copy results/processed/chs/ out; make_figures.py --dataset chs draws it")
+    print(f"  next: copy results/processed/{output_sub(args)}/ out; make_figures.py --dataset chs draws it")
     print(f"{'=' * 72}")
 
 

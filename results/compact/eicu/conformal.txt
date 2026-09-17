@@ -1,0 +1,15 @@
+eicu  conformal
+                gamma  coverage_raw  width_rel_raw  coverage_cal  width_rel_cal
+method                                                                         
+Gaussian_eb      1.16         0.913          0.759         0.950          0.914
+NORMA            1.15         0.914          0.767         0.951          0.934
+NORMA            1.17         0.910          0.786         0.950          0.946
+NORMA            1.12         0.928          0.804         0.951          0.955
+NORMA            1.35         0.875          0.703         0.951          0.955
+PopRI            1.00         1.000          1.000         1.000          1.000
+Cohen_m3         1.56         0.829          0.788         0.950          1.150
+Cohen_m4         1.60         0.772          0.716         0.950          1.160
+Cohen_m2         1.56         0.832          0.814         0.951          1.160
+Gaussian_mle     1.57         0.864          0.733         0.951          1.260
+PerRI            4.40         0.700          0.707         0.951          2.970
+Gaussian_trunc   2.88         0.672          0.908         0.951          3.220

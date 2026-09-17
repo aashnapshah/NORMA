@@ -1,0 +1,7 @@
+method,gamma,coverage_raw,width_rel_raw,coverage_cal,width_rel_cal
+NORMA,1.150,0.922,0.628,0.951,0.830
+PopRI,0.933,1.000,1.000,0.956,0.933
+Gaussian_mle,1.810,0.821,0.560,0.951,1.050
+Gaussian_eb,1.980,0.820,0.638,0.951,1.170
+Gaussian_trunc,2.350,0.743,0.619,0.952,1.400
+PerRI,3.860,0.720,0.471,0.950,1.650

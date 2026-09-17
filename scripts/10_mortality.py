@@ -10,7 +10,16 @@ import numpy as np
 
 from constants import BASELINE_Z
 import datasets
-from datasets import add_dataset_args, get_dataset, save_csv
+from datasets import (add_dataset_args, cached_chunk_frames, get_dataset,
+                      read_classification, save_csv)
+
+# A chunked cohort cannot hold its classification in one frame (CHS: ~2 M index rows
+# per chunk x 250 chunks), so the per-method deviation curve is accumulated as a
+# HISTOGRAM of each method's z per chunk and the deciles are cut from the combined
+# counts.  Bin width is the only approximation: a decile boundary lands inside a bin,
+# and that whole bin goes to the lower decile.
+Z_BIN = 0.02          # z units per histogram bin
+Z_MAX = 20.0          # everything above lands in the last bin
 
 
 
@@ -111,6 +120,125 @@ def _wilson(mort, event_col):
     mort['ci_hi'] = (center + halfwidth) * 100
     mort['mortality_pct'] = mort['mortality_rate'] * 100
     return mort
+
+
+def z_histogram(cls, event_col, methods, exclude_analytes=None):
+    """One chunk -> (method, analyte, zbin) counts: rows, events, summed z.
+
+    Everything the decile curve needs, in a frame small enough to cache per chunk and
+    add up across a cohort that does not fit in memory.
+    """
+    exclude = exclude_analytes or set()
+    cls = cls.copy()
+    cls["analyte"] = cls["analyte"].replace("", "NA").fillna("NA")
+    cls = cls[~cls["analyte"].isin(exclude)]
+    event = pd.to_numeric(cls[event_col], errors="coerce")
+    frames = []
+    for method in methods:
+        zcol = f"{method}_z"
+        if zcol not in cls.columns:
+            continue
+        z = pd.to_numeric(cls[zcol], errors="coerce")
+        ok = np.isfinite(z) & event.notna()
+        if not ok.any():
+            continue
+        zb = np.minimum(np.floor(z[ok] / Z_BIN), int(Z_MAX / Z_BIN)).astype(int)
+        g = pd.DataFrame({"analyte": cls.loc[ok, "analyte"].to_numpy(), "zbin": zb.to_numpy(),
+                          "z": z[ok].to_numpy(), "event": event[ok].to_numpy()})
+        g = g.groupby(["analyte", "zbin"], sort=False).agg(
+            n=("event", "size"), n_event=("event", "sum")).reset_index()
+        g.insert(0, "method", method)
+        frames.append(g)
+    if not frames:
+        return None
+    return pd.concat(frames, ignore_index=True)
+
+
+def _split_into_deciles(g, n_bins=10):
+    """Bins (sorted by z) -> one row per decile: n, events, median z.
+
+    A decile boundary lands inside a bin, so that bin's rows are split across the two
+    deciles in proportion, and its events with them -- otherwise a dense bin can shift
+    a decile's size by several percent.  Within a bin z is taken at its midpoint, which
+    is where the Z_BIN/2 uncertainty in z_median comes from.
+    """
+    zbin = g["zbin"].to_numpy(float)
+    n = g["n"].to_numpy(float)
+    ev = g["n_event"].to_numpy(float)
+    total = n.sum()
+    edges = [k * total / n_bins for k in range(1, n_bins)] + [total]
+
+    out, cum, i, carry = [], 0.0, 0, 0.0
+    for edge in edges:
+        d_n = d_ev = 0.0
+        parts = []                                  # (z centre, rows) for the median
+        while i < len(n) and cum + (n[i] - carry) <= edge + 1e-9:
+            take = n[i] - carry
+            frac = take / n[i] if n[i] else 0.0
+            d_n += take; d_ev += ev[i] * frac
+            parts.append(((zbin[i] + 0.5) * Z_BIN, take))
+            cum += take; i += 1; carry = 0.0
+        if i < len(n) and cum < edge - 1e-9:        # the bin straddling this boundary
+            take = edge - cum
+            frac = take / n[i] if n[i] else 0.0
+            d_n += take; d_ev += ev[i] * frac
+            parts.append(((zbin[i] + 0.5) * Z_BIN, take))
+            carry += take; cum = edge
+        if d_n <= 0:
+            continue
+        half, run, z_med = d_n / 2.0, 0.0, parts[-1][0] if parts else np.nan
+        for z, cnt in parts:                        # weighted median over the decile
+            run += cnt
+            if run >= half:
+                z_med = z
+                break
+        out.append({"n": d_n, "n_event": d_ev, "z_median": z_med})
+    return pd.DataFrame(out)
+
+
+def deviation_mortality_from_bins(bins, event_col, n_bins=10, min_rows=20):
+    """The combined histograms -> the same curve compute_deviation_mortality_by_method
+    returns, with the deciles cut from the pooled counts."""
+    bins = bins.groupby(["method", "analyte", "zbin"], as_index=False)[["n", "n_event"]].sum()
+    rows = []
+    for (method, analyte), g in bins.groupby(["method", "analyte"], sort=True):
+        g = g.sort_values("zbin")
+        if float(g["n"].sum()) < min_rows:
+            continue
+        d = _split_into_deciles(g, n_bins)
+        if not len(d):
+            continue
+        d.insert(0, "decile", np.arange(1, len(d) + 1))
+        d["mortality_rate"] = d["n_event"] / d["n"]
+        d = _wilson(d, event_col)
+        d["n"] = d["n"].round().astype(int)
+        d["analyte"], d["method"] = analyte, method
+        rows.append(d[["method", "analyte", "decile", "z_median",
+                       "mortality_pct", "ci_lo", "ci_hi", "n"]])
+    if not rows:
+        return pd.DataFrame(columns=["method", "analyte", "decile", "z_median",
+                                     "mortality_pct", "ci_lo", "ci_hi", "n"])
+    return pd.concat(rows, ignore_index=True)
+
+
+def chunked_deviation_by_method(ds, args, event_col, methods, exclude):
+    """CHS: one chunk at a time, cached as mortality_zbins.parquet next to each chunk."""
+    def compute(chunk_dir):
+        cls = read_classification(chunk_dir)
+        if cls is None:
+            return None
+        if event_col not in cls.columns:
+            i = int(os.path.basename(chunk_dir).rsplit("_", 1)[-1])
+            cls = datasets.DATASETS["chs"](chunk=i).attach_outcomes(cls)   # that chunk's diagnosis only
+        if event_col not in cls.columns:
+            return None
+        return z_histogram(cls, event_col, methods, exclude)
+
+    frames = [f for f in cached_chunk_frames(ds, "mortality_zbins.parquet", compute,
+                                             force=args.force) if f is not None and len(f)]
+    if not frames:
+        return None
+    return deviation_mortality_from_bins(pd.concat(frames, ignore_index=True), event_col)
 
 
 def compute_deviation_mortality_by_method(cls, event_col, methods, n_bins=10, exclude_analytes=None):
@@ -281,6 +409,17 @@ def main():
     # 3. Deviation mortality per METHOD (each method's own z), so the RI methods and
     #    the NORMA ablation arms can be compared on the same curve.
     print("\n  Computing per-method deviation mortality...")
+    if args.dataset == "chs":
+        # the whole classification does not fit in memory here; see chunked_deviation_by_method
+        methods = [m for m in ds.methods]
+        bym = chunked_deviation_by_method(ds, args, event_col, methods, exclude)
+        if bym is None:
+            print("  No classification.parquet; skipping per-method deviation mortality")
+        else:
+            bym = bym.round({"z_median": 2, "mortality_pct": 1, "ci_lo": 1, "ci_hi": 1})
+            save_csv(bym, dev_path, analytes=ds._analytes, keys=("method",))
+            print(f"  Saved {len(bym)} per-method rows to {dev_path}")
+        return
     try:
         cls = ds.load_classification()
     except FileNotFoundError:

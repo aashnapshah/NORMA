@@ -1,34 +1,47 @@
 \begin{table}[ht]
 \centering
-\footnotesize
-\begin{tabular}{lll p{3.2cm} p{2.8cm} p{2.9cm} ll cccc}
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{ll p{3.0cm} p{3.2cm} p{2.6cm} l p{1.9cm} rr}
 \toprule
-Arm & Group & Head & Loss & Features & Attention & Split & Status & Forecast & Calib. dev & Calib. cohorts & Sensitivity \\
+Arm & Head & Loss & Features & Attention & Split & Status & $R^2$ & Width / Pop$_{RI}$ \\
 \midrule
-q\_age\_set & covariate & quantile & QuantileLoss & age at draw, care setting & self masked, cross bidirectional & sequence & trained & yes & yes & yes & yes \\
-334f7e21 & covariate & quantile & QuantileLoss & none beyond sex and analyte & self masked, cross bidirectional & sequence & trained & yes & -- & yes & -- \\
-q\_age & covariate & quantile & QuantileLoss & age at draw & self masked, cross bidirectional & sequence & trained & yes & yes & yes & yes \\
-q\_set & covariate & quantile & QuantileLoss & care setting & self masked, cross bidirectional & sequence & trained & yes & yes & yes & yes \\
-q\_co & covariate & quantile & QuantileLoss & same-draw analytes, history & self masked, cross bidirectional & sequence & trained & yes & yes & yes & yes \\
-q\_age\_co & covariate & quantile & QuantileLoss & age at draw, same-draw analytes, history & self masked, cross bidirectional & sequence & trained & yes & yes & -- & -- \\
-q\_set\_co & covariate & quantile & QuantileLoss & care setting, same-draw analytes, history & self masked, cross bidirectional & sequence & trained & yes & yes & -- & -- \\
-q\_age\_set\_co & covariate & quantile & QuantileLoss & age at draw, care setting, same-draw analytes, history & self masked, cross bidirectional & sequence & trained & yes & yes & yes & -- \\
-q\_co\_q & covariate & quantile & QuantileLoss & same-draw analytes, history and query & self masked, cross bidirectional & sequence & trained & yes & yes & -- & -- \\
+\multicolumn{9}{l}{\emph{covariate}} \\
+q\_age\_set & quantile & QuantileLoss & sex, age, setting & cross bidirectional & sequence & trained & 0.718 ± 0.037 & 0.787 ± 0.122 \\
+334f7e21 & quantile & QuantileLoss & sex & cross bidirectional & sequence & trained & 0.717 ± 0.037 & -- \\
+q\_age & quantile & QuantileLoss & sex, age & cross bidirectional & sequence & trained & 0.717 ± 0.037 & 0.682 ± 0.083 \\
+q\_set & quantile & QuantileLoss & sex, setting & cross bidirectional & sequence & trained & 0.719 ± 0.037 & 0.675 ± 0.082 \\
+q\_co & quantile & QuantileLoss & sex, co-analytes & cross bidirectional & sequence & trained & 0.717 ± 0.037 & 0.627 ± 0.082 \\
+q\_age\_co & quantile & QuantileLoss & sex, age, co-analytes & cross bidirectional & sequence & trained & 0.717 ± 0.037 & 0.621 ± 0.080 \\
+q\_set\_co & quantile & QuantileLoss & sex, setting, co-analytes & cross bidirectional & sequence & trained & 0.718 ± 0.037 & 0.612 ± 0.076 \\
+q\_age\_set\_co & quantile & QuantileLoss & sex, age, setting, co-analytes & cross bidirectional & sequence & trained & 0.719 ± 0.037 & 0.628 ± 0.081 \\
+q\_co\_q & quantile & QuantileLoss & sex, co-analytes + query & cross bidirectional & sequence & trained & 0.718 ± 0.037 & 0.703 ± 0.095 \\
 \midrule
-p\_base & patient split & quantile & QuantileLoss & none beyond sex and analyte & self masked, cross bidirectional & patient & trained & yes & yes & -- & -- \\
-p\_co & patient split & quantile & QuantileLoss & same-draw analytes, history & self masked, cross bidirectional & patient & trained & yes & yes & -- & -- \\
-p\_causal & patient split & quantile & QuantileLoss & none beyond sex and analyte & causal: self and cross masked & patient & trained & yes & yes & -- & -- \\
-p\_full & patient split & quantile & QuantileLoss & all analytes, every past draw & causal: self and cross masked; $\leq$ 128 draw tokens & patient & trained & yes & yes & -- & -- \\
+\multicolumn{9}{l}{\emph{patient split}} \\
+p\_base & quantile & QuantileLoss & sex & cross bidirectional & patient & trained & 0.718 ± 0.038 & 0.774 ± 0.113 \\
+p\_co & quantile & QuantileLoss & sex, co-analytes & cross bidirectional & patient & trained & 0.718 ± 0.038 & 0.670 ± 0.081 \\
+p\_causal & quantile & QuantileLoss & sex & fully causal & patient & trained & 0.717 ± 0.038 & 0.710 ± 0.083 \\
+p\_full & quantile & QuantileLoss & sex, all past draws & fully causal, $\leq$ 128 tokens & patient & trained & 0.715 ± 0.038 & 0.650 ± 0.079 \\
 \midrule
-pa\_k5 & prior-anchored & quantile & QuantilePriorLoss (anchor, k=5) & age at draw, care setting & self masked, cross bidirectional & sequence & started, no checkpoint & -- & -- & -- & -- \\
-pa\_k20 & prior-anchored & quantile & QuantilePriorLoss (anchor, k=20) & age at draw, care setting & self masked, cross bidirectional & sequence & partial, epoch 0 & -- & -- & -- & -- \\
-pa\_tau & prior-anchored & quantile & QuantilePriorLoss (anchor, k=5, tau=365d) & age at draw, care setting & self masked, cross bidirectional & sequence & partial, epoch 0 & -- & -- & -- & -- \\
-pf\_k5 & prior-anchored & quantile & QuantilePriorLoss (floor, k=5) & age at draw, care setting & self masked, cross bidirectional & sequence & partial, epoch 0 & -- & -- & -- & -- \\
-pg\_k5 & prior-anchored & gate & QuantilePriorLoss (gate, k=5) & age at draw, care setting & self masked, cross bidirectional & sequence & started, no checkpoint & -- & -- & -- & -- \\
-pn\_k5 & prior-anchored & nig & StudentTNLLLoss (nu0=5) & age at draw, care setting & self masked, cross bidirectional & sequence & partial, epoch 0 & -- & -- & -- & -- \\
-gk\_k5 & prior-anchored & gaussian & NORMALoss (k=5, lambda=0.1, weighted by n) & age at draw, care setting & self masked, cross bidirectional & sequence & partial, epoch 0 & -- & -- & -- & -- \\
+\multicolumn{9}{l}{\emph{prior-anchored, multivariate}} \\
+m\_pa\_k5 & quantile & QuantilePriorLoss (anchor, k=5) & sex, all past draws & fully causal, $\leq$ 128 tokens & patient & not trained & -- & -- \\
+m\_pa\_k20 & quantile & QuantilePriorLoss (anchor, k=20) & sex, all past draws & fully causal, $\leq$ 128 tokens & patient & not trained & -- & -- \\
+m\_pa\_tau & quantile & QuantilePriorLoss (anchor, k=5, tau=365d) & sex, all past draws & fully causal, $\leq$ 128 tokens & patient & not trained & -- & -- \\
+m\_pf\_k5 & quantile & QuantilePriorLoss (floor, k=5) & sex, all past draws & fully causal, $\leq$ 128 tokens & patient & not trained & -- & -- \\
+m\_pg\_k5 & gate & QuantilePriorLoss (gate, k=5) & sex, all past draws & fully causal, $\leq$ 128 tokens & patient & not trained & -- & -- \\
+m\_pn\_k5 & nig & StudentTNLLLoss (nu0=5) & sex, all past draws & fully causal, $\leq$ 128 tokens & patient & not trained & -- & -- \\
+m\_gk\_k5 & gaussian & NORMALoss (k=5, lambda=0.1, weighted by n) & sex, all past draws & fully causal, $\leq$ 128 tokens & patient & not trained & -- & -- \\
+\midrule
+\multicolumn{9}{l}{\emph{prior-anchored}} \\
+pa\_k5 & quantile & QuantilePriorLoss (anchor, k=5) & sex, age, setting & cross bidirectional & sequence & started, no checkpoint & -- & -- \\
+pa\_k20 & quantile & QuantilePriorLoss (anchor, k=20) & sex, age, setting & cross bidirectional & sequence & partial, epoch 0 & -- & -- \\
+pa\_tau & quantile & QuantilePriorLoss (anchor, k=5, tau=365d) & sex, age, setting & cross bidirectional & sequence & partial, epoch 0 & -- & -- \\
+pf\_k5 & quantile & QuantilePriorLoss (floor, k=5) & sex, age, setting & cross bidirectional & sequence & partial, epoch 0 & -- & -- \\
+pg\_k5 & gate & QuantilePriorLoss (gate, k=5) & sex, age, setting & cross bidirectional & sequence & started, no checkpoint & -- & -- \\
+pn\_k5 & nig & StudentTNLLLoss (nu0=5) & sex, age, setting & cross bidirectional & sequence & partial, epoch 24 & -- & -- \\
+gk\_k5 & gaussian & NORMALoss (k=5, lambda=0.1, weighted by n) & sex, age, setting & cross bidirectional & sequence & trained & 0.702 ± 0.038 & 0.969 ± 0.108 \\
 \bottomrule
 \end{tabular}
-\caption{Every NORMA arm trained since the covariate ablation began. All are NORMA2 at $d_{\mathrm{model}}=64$, 4 heads, 8 layers and 3 states, trained on EHRSHOT and MIMIC-IV together. \emph{Attention}: the decoder layers are called with memory equal to target, so the causal mask applies to self-attention only, leaving the cross-attention block bidirectional over history, unless \texttt{--causal\_memory} masks both.}
+\caption{Every NORMA arm trained since the covariate ablation began. All are NORMA2 at $d_{\mathrm{model}}=64$, 4 heads, 8 layers and 3 states, trained on EHRSHOT and MIMIC-IV together. Every arm conditions on the analyte identity and on age at the first draw; \emph{Features} lists the per-draw covariates each arm uses, sex included. $R^2$ is the test $R^2$ on the development split and \emph{Width / Pop$_{RI}$} the mean 95\% interval width divided by the population reference interval width on normal-state queries; both are means over analytes weighted by the number of targets, pooled over EHRSHOT and MIMIC-IV, $\pm$ half a 95\% bootstrap interval over analytes (2{,}000 resamples). They are comparable within a split group and only indicative across them, since the patient-split arms are scored on different rows. A width below 1 is narrower than the population interval. \emph{Attention}: the decoder layers are called with memory equal to target, so the causal mask applies to self-attention only, leaving the cross-attention block bidirectional over history, unless \texttt{--causal\_memory} masks both.}
 \label{tab:05_norma_arms}
 \end{table}
