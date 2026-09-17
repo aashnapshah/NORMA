@@ -1,54 +1,12 @@
 #!/usr/bin/env python
 """Reference intervals for every method, from each pair's baseline measurements.
 
-Two steps, each owning one file under results/raw/<cohort>/ (lib/datasets.py), so
-they can run in either order, separately, or at the same time:
-  baselines -> 04_ref_intervals.parquet     norma -> 04_ref_intervals_norma.parquet
-
-  norma      NORMA queried once per patient-analyte pair, at the ACTUAL time of
-             the first index measurement (lib/metrics.py), with the query
-             token at each of the three states.  The normal-state interval
-             [q025, q975] and centre (q50) become the NORMA reference interval
-             (method norma_<run_id>); the per-state quantiles and the oracle /
-             normal / marginal / marginal_freq point forecasts are stored for
-             05_forecasting in results/raw/<cohort>/04_norma_predictions.parquet.
-  baselines  PopRI (published interval), PerRI (GMM setpoint +/- 2 SD of the
-             baseline), Cohen et al. 2021 (cohen_m2/m3/m4, dev-trained,
-             model/baselines/cohen.py) and the PopRI-normal-history Gaussian fits
-             (gaussian_mle/trunc/eb, model/baselines/gaussian.py; the EB prior is
-             the population interval itself, --gaussian_prior popri).
-
-Pairs need >= 5 unique baseline times and an index measurement (both steps).
-
---state_conditional is a model diagnostic rather than a cohort step (Referee 1.4):
-for every analyte, synthetic Pop_RI-centred histories are queried at s = low /
-normal / high and the pairwise overlap of the three predictive distributions is
-reported -> results/raw/dev/04_state_conditional[_<run_id>].csv (fig_state_conditional).
-
 Usage:
     python 04_refs.py --dataset eicu                       # norma + baselines
     python 04_refs.py --dataset inspire --only norma --device cuda
     python 04_refs.py --dataset chs --chunk 3 --only baselines
     python 04_refs.py --dataset mimiciv --max_patients 40000   # same subset for both steps
     python 04_refs.py --state_conditional [--runs q_age_set 334f7e21]
-
-Figures and tables
-------------------
-Reference-interval figures: what the NORMA interval itself does.
-
-    state_conditional.pdf   how NORMA's predictive distribution p(x | H, s) moves
-                            with the queried state s (04_refs.py --state_conditional, R1-4).
-                            Top: the three state-conditional densities with the
-                            Pop_RI bounds, one small panel per analyte, grouped
-                            by clinical panel. Bottom: pairwise overlap
-                            coefficient of those densities, every analyte
-                            (1 identical, 0 disjoint).
-                            One file per NORMA version with a results CSV:
-                            state_conditional.pdf for the published run,
-                            state_conditional_<run_id>.pdf for the covariate-
-                            ablation arms (04_refs.py --state_conditional --runs ...).
-
-The calibration of every RI method on the cohorts lives in 06_calibration/.
 """
 import bootstrap
 
@@ -91,9 +49,7 @@ def _model_module(name):
     return _import(f"_norma_{name}", os.path.join(MODEL_DIR, f"{name}.py"))
 
 
-# =============================================================================
 # norma
-# =============================================================================
 
 def load_norma(run_id, checkpoint="latest", device="cpu"):
     sys.path.insert(0, MODEL_DIR)            # utils.py does `from model import ...`
@@ -178,10 +134,7 @@ def _batch_tensors(recs, idx, cov, panel, normalize):
 def norma_all_states(model, hp, is_quantile, recs, batch_size=1024, device="cpu", panel=None):
     """Run the model with the query token at every state.  Returns (dict of arrays
     keyed 'mu_{q}', 'log_var_{q}' [, 'q*_{q}'] aligned with recs, nstates).
-
-    Covariate arms (NORMA2 use_age_t / use_setting / use_coanalytes) get their
-    extra inputs from the rec fields build_pairs(covariates=...) adds; `panel` is
-    the (n_draws, K) co-analyte table build_pairs returns alongside the recs."""
+    """
     import torch
     nstates = getattr(hp, "nstates", 3)
     normalize = bool(getattr(hp, "normalize", False))
@@ -375,9 +328,7 @@ def run_norma(ds, args):
     _print_mae_by_state(out, runs)
 
 
-# =============================================================================
 # baselines
-# =============================================================================
 
 def _eligible_pair_keys(index_labs):
     """(eligible pairs, n_times, enough) -- the pairs a reference interval can
@@ -452,8 +403,7 @@ def compute_reference_intervals(index_labs, gmm_n_std=2):
     values = baseline.groupby(keys)["value"].apply(lambda s: s.dropna().to_numpy())
     items = [(pair, values.get((pair["patient_id"], pair["analyte"]), np.array([])))
              for pair in agg.to_dict("records")]
-    # GMM fits in loky processes, 2,000 pairs per task.  inner_max_num_threads=1: the fits
-    # are on ~10 values, and without it every worker opens its own BLAS pool.
+    # GMM fits in loky processes, 2,000 pairs per task.
     task = 2_000
     tasks = [items[i:i + task] for i in range(0, len(items), task)]
     n_jobs = min(os.cpu_count() or 1, 16)
@@ -467,21 +417,7 @@ def compute_reference_intervals(index_labs, gmm_n_std=2):
 
 
 def _run_tasks(tasks, gmm_n_std, n_jobs, verbose=0):
-    """Fan the GMM tasks out over loky processes, across joblib versions.
-
-    `inner_max_num_threads` and `return_as` only reach Parallel through
-    **backend_args, which joblib gained in 1.3; older builds (the one inside
-    Clalit) raise TypeError on both.  parallel_backend has taken
-    inner_max_num_threads since 0.14, so routing it there keeps the one BLAS
-    thread per worker that matters here -- the fits are on ~10 values, and
-    without it every worker opens its own pool.
-
-    Progress is printed per group of tasks rather than left to joblib's own
-    verbose lines: pre-1.3 joblib hands back one list at the end, so a caller
-    iterating the result learns nothing until everything is done.  The loky
-    pool lives across groups (parallel_backend holds it), so the only cost is
-    workers idling at a group boundary, and the tasks are equal-sized.
-    """
+    """Fan the GMM tasks out over loky processes, across joblib versions."""
     from joblib import Parallel, delayed, parallel_backend
 
     total = sum(len(t) for t in tasks)
@@ -515,13 +451,7 @@ def _run_tasks(tasks, gmm_n_std, n_jobs, verbose=0):
 
 
 def _missing_pairs(index_labs, ref_df, expected=()):
-    """Eligible (patient, analyte) pairs without a `pop` row in ref_df.
-
-    Only eligible pairs count: a pair with no index measurement, or with fewer
-    than MIN_BASELINE_TIMES baseline times, has no reference interval by design
-    and would otherwise be reported as missing on every run and re-offered to
-    _fill_missing, which drops it again.
-    """
+    """Eligible (patient, analyte) pairs without a `pop` row in ref_df."""
     keys = ["patient_id", "analyte"]
     all_pairs = index_labs[keys].drop_duplicates()
     keep, _, _ = _eligible_pair_keys(index_labs)
@@ -547,8 +477,8 @@ def _missing_pairs(index_labs, ref_df, expected=()):
     print(f"    index_labs:         {len(all_pairs):8,}  "
           f"(eligible {len(split_pairs):,}: ≥{MIN_BASELINE_TIMES} baseline times + an index)")
     print(f"    ref_intervals:      {len(ref_all):8,}  (with a pop row {len(ref_pairs):,})")
-    # Two missing counts, because the default only works on the intersection:
-    # the one that matters is inside it, the wing is what --fill_missing would add.
+    # Two missing counts, because the default only works on the intersection: the one that
+    # matters is inside it, the wing is what --fill_missing would add.
     focus_missing = len(missing.merge(both, on=keys))
     print(f"    Missing on the intersection (no pop row): {focus_missing:,}")
     if len(missing) - focus_missing:
@@ -557,14 +487,8 @@ def _missing_pairs(index_labs, ref_df, expected=()):
     if ref_only:
         print(f"    NOTE: {ref_only:,} ref pairs are not in this split — the two files were "
               f"built from different cohorts; delete ref_intervals.parquet to rebuild cleanly")
-    # The table is about the intersection: pairs that are in ref_intervals AND in
-    # this split AND eligible.  Pairs on either wing of the Venn are a cohort
-    # question, reported above; the table answers a different one -- which methods
-    # are short on the pairs actually being worked on.
-    # The intersection is defined the same way run_baselines defines it: pairs
-    # that carry a core method.  Keying it on "any method" instead would pull in
-    # pairs that only have norma_* rows (a 01_process chunk has those), and they
-    # would show as missing base/pop/per without being pairs this run works on.
+    # The table is about the intersection: pairs that are in ref_intervals AND in this split AND
+    # eligible.
     core = ref_df.loc[ref_df["method"].isin(CORE_METHODS), keys].drop_duplicates()
     focus = core.merge(all_pairs, on=keys).merge(split_pairs, on=keys)
     non_core = len(both) - len(core.merge(all_pairs, on=keys))
@@ -577,22 +501,7 @@ def _missing_pairs(index_labs, ref_df, expected=()):
 
 
 def _coverage_table(split_pairs, ref_df, expected=()):
-    """Pairs without a row, per analyte per method.
-
-    Scoped to the pairs in both files: `split_pairs` here is the intersection, not
-    the whole split, so a pair with no reference intervals at all does not appear
-    as every method missing and drown out the methods that are genuinely short.
-
-    Columns come from `expected` -- the methods this run is meant to produce --
-    not from what the file happens to contain, so a method with no rows at all
-    shows as fully missing instead of vanishing from the table.  Anything extra
-    in the file is appended, which is how a legacy 01_process chunk reveals its
-    NORMA rows: read_ref_intervals selects the baselines half by filename and
-    does not filter by method, so they arrive here labelled as baselines.
-
-    base / pop / per are written together by _pair_rows, so those three move as
-    one; a nonzero in only one of them means a bad write, not outstanding work.
-    """
+    """Pairs without a row, per analyte per method."""
     n_split = split_pairs.groupby("analyte").size()
     have = (ref_df.drop_duplicates(["patient_id", "analyte", "method"])
                   .groupby(["analyte", "method"]).size().unstack(fill_value=0))
@@ -644,9 +553,9 @@ def _fill_missing(ref_df, index_labs, missing, gmm_n_std):
 
 def run_baselines(ds, args):
     os.makedirs(ds.data_dir, exist_ok=True)
-    # Both paths up front: with --chunk these are the chunk directory, without it
-    # the cohort-level results dir, and reading one while writing the other is
-    # the failure that looks like the stage recomputing everything each run.
+    # Both paths up front: with --chunk these are the chunk directory, without it the cohort-
+    # level results dir, and reading one while writing the other is the failure that looks like
+    # the stage...
     base_p = ref_paths(ds)[0]
     print(f"  index_labs from: {ds.data_dir}")
     print(f"  ref_intervals:   {base_p}"
@@ -667,11 +576,7 @@ def run_baselines(ds, args):
         if args.fill_missing and len(missing):
             ref_df = _fill_missing(ref_df, index_labs, missing, args.gmm_n_std)
         else:
-            # Default: work only on pairs that already have an interval.  No new
-            # base/pop/per, and the augmentations see the same restricted set, so a
-            # run can only add methods to the cohort that is already there -- it
-            # cannot quietly grow it because index_labs was recut.  --fill_missing
-            # computes the rest.
+            # Default: work only on pairs that already have an interval.
             keys = ["patient_id", "analyte"]
             have = ref_df.loc[ref_df["method"].isin(CORE_METHODS), keys].drop_duplicates()
             before = len(index_labs[keys].drop_duplicates())
@@ -697,9 +602,7 @@ def run_baselines(ds, args):
     write_ref_intervals(ds, ref_df, "baselines")
 
 
-# =============================================================================
 # --state_conditional  (Referee 1.4)
-# =============================================================================
 
 SC_NOISE_FRAC = 0.10   # sd of the synthetic history noise, as a fraction of the Pop_RI width
 SC_N_DRAWS = 25        # histories averaged per analyte
@@ -804,9 +707,7 @@ def run_state_conditional(args):
         print(f"Wrote {out} ({len(df)} analytes)")
 
 
-# =============================================================================
 # main
-# =============================================================================
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -900,14 +801,7 @@ def _chs_chunk_indices(n_chunks=None):
 
 
 def run_chs_chunks(args):
-    """CHS without --chunk: run the steps once per chunk, writing into each chunk_i/.
-
-    Both steps are per-pair and the whole cohort does not fit in memory, so the
-    unit of work is a chunk -- and chunk_i/ is where every CHS reader looks for
-    ref_intervals and norma_predictions.  Scoping the dataset to the first N
-    chunks instead would hold them all at once and write one cohort-level file
-    that CHSDataset.load_ref_intervals never reads.
-    """
+    """CHS without --chunk: run the steps once per chunk, writing into each chunk_i/."""
     chunks = _chs_chunk_indices(args.n_chunks)
     print(f"CHS: {len(chunks)} chunk(s), steps {list(args.only)}")
     for n, i in enumerate(chunks, 1):
@@ -924,9 +818,9 @@ def main():
         run_state_conditional(args)
         return
     if args.dataset == "chs" and args.chunk is None:
-        # --n_chunks alone used to mean "one cohort out of the first N chunks",
-        # which writes where no CHS reader looks; it now means the same as
-        # looping --chunk, which is what every CHS run actually wants.
+        # --n_chunks alone used to mean "one cohort out of the first N chunks", which writes
+        # where no CHS reader looks; it now means the same as looping --chunk, which is what
+        # every CHS run actually wants.
         if getattr(args, "no_norma", False) and "norma" in args.only:
             raise SystemExit("--no_norma leaves the norma step nothing to do; "
                              "run 04_refs.py --only baselines")
@@ -938,9 +832,7 @@ def main():
     _run_steps(ds, args)
 
 
-# ═════════════════════════════════════════════════════════════════════════
 # Figures and tables
-# ═════════════════════════════════════════════════════════════════════════
 
 import os
 
@@ -950,10 +842,8 @@ from datasets import dev_results_dir, result_path
 STATE_ORDER = models.STATE_ORDER       # lib/models.py, via figlib
 STATE_COLORS = models.STATE_COLORS
 
-# NORMA versions with a results/state_conditional[_<run>].csv; the file suffix is
-# the training run id (None = published run, see 04_refs.py --state_conditional). Named
-# differently from 05_forecasting's NORMA_VERSIONS, which maps run ids to labels
-# and colours — these are filename suffixes, not display identities.
+# NORMA versions with a results/state_conditional[_<run>].csv; the file suffix is the training
+# run id (None = published run, see 04_refs.py --state_conditional).
 NORMA_RUN_SUFFIXES = [None] + list(ABLATION_RUN_IDS) + ["q_age_set_co"]
 
 
@@ -991,10 +881,8 @@ def _density_panel(ax, lab, r):
         ax.fill_between(xs, ys, color=STATE_COLORS[st], alpha=0.15)
     for bnd in (r.ref_low, r.ref_high):
         ax.axvline(bnd, color=DARK, ls=(0, (3, 2)), lw=0.5)
-    # x range = what is actually drawn (densities out to 3.5 sd, where they are
-    # 0.2% of peak) together with the Pop_RI bounds, so the bounds always stay in
-    # frame. A fixed multiple of the Pop_RI width instead leaves LDL (Pop_RI 0-130)
-    # two thirds empty and cuts DBIL's high-state tail.
+    # x range = what is actually drawn (densities out to 3.5 sd, where they are 0.2% of peak)
+    # together with the Pop_RI bounds, so the bounds always stay in frame.
     xlo = min([r.ref_low] + [mu - 3.5 * sd for _, mu, sd in states])
     xhi = max([r.ref_high] + [mu + 3.5 * sd for _, mu, sd in states])
     pad = 0.06 * (xhi - xlo)
@@ -1025,8 +913,8 @@ def _state_conditional_fig(df):
     the pairwise overlap of those three densities, every analyte (bottom)."""
     analytes = analyte_panel_order(set(df.index))
     ncol = 5; nrow = int(np.ceil(len(analytes) / ncol))
-    # Heights in inches; h_gap is a spacer row so the grid-to-strip gap is exactly
-    # that (an hspace here scales with the average row height, i.e. > 1 inch).
+    # Heights in inches; h_gap is a spacer row so the grid-to-strip gap is exactly that (an
+    # hspace here scales with the average row height, i.e. > 1 inch.
     h_top, h_grid, h_gap, h_strip, h_bot = 0.62, 1.15 * nrow, 0.4, 1.9, 0.35
     H = h_top + h_grid + h_gap + h_strip + h_bot
     fig = plt.figure(figsize=(7.2, H))

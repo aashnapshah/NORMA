@@ -1,26 +1,4 @@
-"""State-conditional population prior for the prior-aware NORMA heads and losses.
-
-For every (analyte code, queried state, sex) the prior is a distribution over the
-next value that knows nothing about the patient:
-
-    normal   N(midpoint, (width / 3.92)^2) of the sex-specific population
-             reference interval (Pop_RI = central 95%), i.e. the interval the
-             model should fall back to when the history is uninformative
-    low/high the empirical distribution of dev-cohort values queried in that
-             state (per sex where >= MIN_N values, else pooled; else a Gaussian
-             one Pop_RI-sd beyond the bound)
-
-plus, per analyte, rho = within-person variance / total variance of the dev
-cohort (the individuality ratio): the share of population spread the
-conjugate NIG head treats as measurement-to-measurement noise. 1 - rho is the
-between-person share the setpoint prior carries.
-
-build_prior_table returns tensors indexed [code, state, sex] (sex 0 = M, 1 = F):
-    q    (C, S, 2, 5)   quantiles at NORMA2.QUANTILES
-    mu   (C, S, 2)      mean
-    var  (C, S, 2)      variance
-    rho  (C,)
-"""
+"""State-conditional population prior for the prior-aware NORMA heads and losses."""
 import numpy as np
 import torch
 from scipy.stats import norm

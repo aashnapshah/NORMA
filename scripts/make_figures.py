@@ -1,15 +1,13 @@
 #!/usr/bin/env python
 """Build every validation figure as an individual PDF: results/figures/<tag>/<nn>_<name>.pdf.
 
+Usage:
     python make_figures.py                       # all figures, all cohorts -> results/figures/all/
     python make_figures.py --only 12_eval cox    # by stage or figure base name
     python make_figures.py --dataset chs         # one cohort only -> results/figures/chs/ (pooled figures get that row alone)
     python make_figures.py --dataset eicu --from processed   # prove results/processed/eicu/ alone can draw everything
     python make_figures.py --check               # list missing result inputs per cohort; no plotting
     python make_figures.py --list                # show the registry
-
-Cohorts whose results are missing get placeholder PDFs with the final filenames
-(see OUTPUT_LAYOUT.md).
 """
 
 import bootstrap  # noqa: F401
@@ -35,8 +33,6 @@ if not FIGURES:
         "registry variable, or a folder excluded by discover.SKIP). Failing rather "
         "than reporting success having built nothing."
     )
-
-
 
 
 def _call(fn, *args):

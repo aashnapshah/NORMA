@@ -2,41 +2,9 @@
 """Cohen et al. 2021 Fig. 5c-f on every reference-interval method: Kaplan-Meier
 cumulative incidence of a clinical endpoint for flagged vs unflagged patients.
 
-Cohort     one row per patient: the first Pop_RI-normal value of the analyte (the
-           index), every method's deviation score there, and the time to the
-           endpoint or censoring.  Prevalent cases (event or censoring at or before
-           the landmark) are excluded by time, as 13_cox does.  Only time-to-event
-           outcomes; a label defined by the follow-up time itself (prolonged stay)
-           stays a binary outcome in 12_eval.
-Flags      every method at Cohen's matched sensitivity (--sensitivity, cutoff per
-           10-year age band x sex) and at the standard of care's alert rate.  The
-           flags are NOT directional: for a clinical endpoint a deviation either way
-           is a risk signal (the lab-value endpoints of 11_lead_time are directional).
-Standard   the latest value AVAILABLE AT the landmark read against Pop_RI (no
-of care    look-ahead).  It cannot flag at landmark 0, where the index value is its
-           latest value and normal by construction.
-Landmarks  --landmarks reproduces their Fig. 5e earliness design: risk is assessed
-           at the index measurement but follow-up starts `landmark` hours later, so a
-           model flag at t0 is compared against the standard of care as it would
-           read at t0 + landmark.
-Output     results/raw/<cohort>/17_incidence.csv: per outcome x analyte x method x landmark
-           x anchor, cumulative incidence in both arms at every --horizons, their
-           ratio, and the log-rank p-value.
-
 Usage:
     python 17_outcomes.py --dataset eicu
     python 17_outcomes.py --dataset eicu --outcomes mortality --landmarks 0 24
-
-Figures and tables
-------------------
-Every figure is one file for all cohorts: rows = eICU / INSPIRE / CHS (VAL_COHORTS),
-columns = that cohort's outcomes; a cohort whose results are missing renders as a
-pending row.
-  incidence        RR of the endpoint for flagged vs unflagged patients at the index
-                   measurement, every method at a matched sensitivity
-  incidence_norma  the same with the NORMA covariate arms instead of the RI methods
-  earliness        the same RR as follow-up starts later and later after the index
-                   test, every method at the standard of care's alert rate
 """
 import bootstrap  # noqa: F401
 
@@ -74,11 +42,9 @@ def incidence_cohort(cls, outcome_cfg, analyte, age_range, unit):
     return patients, observations
 
 
-# ── per-chunk cohorts (chunked cohorts) ────────────────────────────────────
-# Both steps need one row per patient at their first Pop_RI-normal measurement, plus
-# what the standard of care would read at each landmark.  Both are chunk-local, so each
-# chunk is reduced once and cached beside it; the landmarks are baked into the cache,
-# which --force rebuilds.
+# ── per-chunk cohorts (chunked cohorts) ──────────────────────────────────── Both steps need one
+# row per patient at their first Pop_RI-normal measurement, plus what the standard of care would
+# read...
 COHORT_CACHE = "17_cohort"             # a directory: one parquet per analyte
 
 
@@ -182,9 +148,9 @@ def incidence_rows(patients, flag, method, analyte, outcome, horizons):
     """Cumulative incidence at each horizon for flagged vs unflagged, plus the log-rank
     test between the two curves; None when either arm is too small."""
     d = patients.assign(flag=flag)
-    # cast before the arithmetic: a parquet cohort can carry these as object, and
-    # lifelines then coerces them itself with a warning per fit -- the sums above would
-    # already have been done on objects by then
+    # cast before the arithmetic: a parquet cohort can carry these as object, and lifelines then
+    # coerces them itself with a warning per fit -- the sums above would already have been done
+    # on objects by then
     for c in ("event", "t_event", "t_censor", "start"):
         if c in d.columns and d[c].dtype == object:
             d[c] = pd.to_numeric(d[c], errors="coerce")
@@ -217,20 +183,7 @@ def incidence_rows(patients, flag, method, analyte, outcome, horizons):
     return row
 
 
-# ── progression: Cohen et al. 2021 Fig. 5e (glucose -> T2D) and 5f (creatinine -> CKD)
-# Their design: among people who are currently normal, split by what the model predicts
-# for two years' time, and follow disease incidence from that point.  The comparison is
-# against what the VALUE ITSELF says two years later -- the "observed" arms -- because
-# the claim is identification earlier than waiting for the test to cross the line.
-#
-# Arms here, per analyte x method:
-#   predicted_severe    flagged, and further than --severe_z from the method's centre
-#   predicted_abnormal  flagged, but not severe
-#   predicted_normal    not flagged
-#   observed_abnormal   Pop_RI-abnormal at the landmark (the standard of care then)
-#   observed_normal     Pop_RI-normal at the landmark
-# The predicted arms are read at the INDEX measurement, the observed arms at the
-# landmark, so the two differ by exactly the waiting time the analysis is about.
+# ── progression: Cohen et al.
 PROGRESSION = {"t2d": ["GLU", "A1C"], "ckd": ["CRE"]}       # Cohen's pairs
 PROGRESSION_AGE = {"t2d": (50, 60), "ckd": (60, 70)}        # their bands
 DEFAULT_AGE_RANGE = (0, 200)                                # --age_range's default: no band
@@ -342,8 +295,8 @@ def run_incidence(ds, cls, methods, args, results_dir, outcome, unit):
             continue
         for landmark in args.landmarks:
             cohort = patients.assign(start=patients["t0"] + landmark)
-            # prevalent / uninformative: the event already happened, or follow-up ended,
-            # at or before the landmark
+            # prevalent / uninformative: the event already happened, or follow-up ended, at or
+            # before the landmark
             prevalent = (cohort["event"] == 1) & (cohort["t_event"] <= cohort["start"])
             cohort = cohort[~prevalent & (cohort["t_censor"] > cohort["start"])]
             if len(cohort) < 100 or cohort["event"].nunique() < 2:
@@ -456,9 +409,7 @@ def main():
                                            values=last).round(4).to_string())
 
 
-# ═════════════════════════════════════════════════════════════════════════
 # Figures and tables
-# ═════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 from models import collapse_run_id
@@ -466,9 +417,7 @@ from models import collapse_run_id
 COHORTS = VAL_COHORTS         # eicu, inspire, chs: one row each
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # shared
-# ─────────────────────────────────────────────────────────────────────────────
 def _incidence_frame(ds, outcome, anchor="sensitivity"):
     """anchor='sensitivity' is Cohen's protocol (every model at 25% sensitivity);
     anchor='soc_rate' puts every model at the standard of care's own alert rate,
@@ -487,10 +436,9 @@ def _incidence_frame(ds, outcome, anchor="sensitivity"):
     if not rr:
         return None, None
     df = to_numeric(df.copy())
-    # The LONGEST horizon that is actually reachable, not simply the last column:
-    # follow-up does not extend to every horizon for every outcome (INSPIRE
-    # mortality has rr_720h entirely NaN), and taking rr[-1] blindly made the
-    # whole outcome disappear from the figure with no warning.
+    # The LONGEST horizon that is actually reachable, not simply the last column: follow-up does
+    # not extend to every horizon for every outcome (INSPIRE mortality has rr_720h entirely NaN),
+    # and taking...
     usable = [c for c in rr if df[c].notna().sum() >= 5]
     if not usable:
         return None, None
@@ -542,9 +490,7 @@ def _grid(panels, row_height):
     return fig, axes, H
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # incidence: rows = cohorts, columns = outcomes, RR bars per method at landmark 0
-# ─────────────────────────────────────────────────────────────────────────────
 def _incidence_panels(ds):
     """[(outcome, med)] with med = median RR and log-rank p per method at landmark 0."""
     panels = []
@@ -621,9 +567,7 @@ def fig_incidence():
     return {None: fig}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # earliness: rows = cohorts, columns = outcomes, RR vs follow-up start (Cohen Fig. 5e)
-# ─────────────────────────────────────────────────────────────────────────────
 def _earliness_panels(ds):
     """[(outcome, med)] with med = median RR per method and landmark (> 0 hours)."""
     panels = []
@@ -631,8 +575,8 @@ def _earliness_panels(ds):
         df, key = _incidence_frame(ds, outcome, anchor="soc_rate")
         if df is None or "landmark_hours" not in df.columns:
             continue
-        # at landmark 0 the standard of care has (almost) no alerts, so matching its rate
-        # is degenerate; the sweep starts at the first positive landmark
+        # at landmark 0 the standard of care has (almost) no alerts, so matching its rate is
+        # degenerate; the sweep starts at the first positive landmark
         df = df.dropna(subset=["landmark_hours"])
         df = df[df["landmark_hours"] > 0]
         if df["landmark_hours"].nunique() < 2:
@@ -703,10 +647,8 @@ FIGURES = [
     FigSpec("17_outcomes", "earliness", fig_earliness, False, (), None),
 ]
 
-# ══════════════════════════════════════════════════════════════════════════
-# Tables — 17_outcomes: one table per cohort x outcome, the numbers behind
-# fig_incidence (RR per analyte at the index measurement, matched sensitivity).
-# ══════════════════════════════════════════════════════════════════════════
+# Tables — 17_outcomes: one table per cohort x outcome, the numbers behind fig_incidence (RR per
+# analyte at the index measurement, matched sensitivity).
 
 from figlib import RI_LABELS, _BM_SUPP
 

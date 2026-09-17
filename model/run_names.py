@@ -1,20 +1,6 @@
-"""One place for what each NORMA training run is called.
+"""One place for what each NORMA training run is called."""
 
-Training runs are named by their id (model/logs/<run_id>); everything that
-shows a run to a reader -- validation figures and tables (validation/lib/models.py),
-the dev-set ablation summary (compare_ablation.py), evaluate.py -- takes its label
-from here, so an arm is called the same thing everywhere.
-
-The convention: "NORMA | <covariates the run uses>" in legends and
-"NORMA (<covariates>)" in tables -- sex listed for every run, then the per-draw
-covariates it adds (age at each draw, care setting, same-draw analytes).
-Whichever run is the main model (validation/lib/config.NORMA_RUN_ID) is shown as
-NORMA_RI in the main figures and as "NORMA (<covariates>) -- main" beside the arms.
-"""
-
-# What each run uses, as a reader would list it. Every run also carries age at
-# the first draw and the analyte code on its context token (stated once in
-# SHORT_KEY rather than repeated in every label).
+# What each run uses, as a reader would list it.
 RUN_COVARIATES = {
     "334f7e21": "sex",
     "q_age": "sex, age",
@@ -33,19 +19,13 @@ RUN_COVARIATES = {
     "pg_k5": "sex, age, setting; learned gate k=5",
     "pn_k5": "sex, age, setting; conjugate NIG head",
     "gk_k5": "sex, age, setting; Gaussian KL-aligned k=5",
-    # patient-level split arms (run_patient_split.sh, R3 comment 11). Same
-    # COMMON as the covariate ablation minus --use_age_t/--use_setting, plus
-    # --split_by patient, so their reference point is p_base and not 334f7e21.
+    # patient-level split arms (run_patient_split.sh, R3 comment 11).
     "p_base": "sex; patient split",
     "p_co": "sex, analytes; patient split",
     "p_causal": "sex, causal mask; patient split",
     "p_full": "sex, every past draw, causal mask; patient split",
-    # prior-anchored on the multivariate arm (run_prior_ablation.sh): p_full's
-    # inputs and split with each prior-anchored loss, so the only thing varying
-    # against p_full is the loss. These are the arms the prior question is
-    # actually about -- a width floor matters most where the model has the most
-    # context to be overconfident from -- so they lead the prior group and the
-    # sex/age/setting variants follow.
+    # prior-anchored on the multivariate arm (run_prior_ablation.sh): p_full's inputs and split
+    # with each prior-anchored loss, so the only thing varying against p_full is the loss.
     "m_pa_k5":  "sex, age, every past draw, causal mask; patient split; prior anchor k=5",
     "m_pa_k20": "sex, age, every past draw, causal mask; patient split; prior anchor k=20",
     "m_pa_tau": "sex, age, every past draw, causal mask; patient split; prior anchor k=5, tau=365d",
@@ -66,20 +46,13 @@ SHORT_KEY = ("every run also uses age at the first draw and the analyte code; "
 RUN_ORDER = ["334f7e21", "q_age", "q_set", "q_co", "q_age_set", "q_age_co", "q_set_co",
              "q_age_set_co", "q_co_q"]
 
-# prior-anchored arms (run_prior_ablation.sh): a different loss or output head on
-# fixed inputs. Two input families: MULTI_PRIOR_ORDER puts each loss on p_full's
-# multivariate patient-split inputs, PRIOR_ORDER on the main model's
-# sex/age/setting inputs. The multivariate family is listed first because it is
-# the one the question is about; the names differ only by the m_ prefix so the
-# two are read as a pair.
+# prior-anchored arms (run_prior_ablation.sh): a different loss or output head on fixed inputs.
 MULTI_PRIOR_ORDER = ["m_pa_k5", "m_pa_k20", "m_pa_tau", "m_pf_k5", "m_pg_k5",
                      "m_pn_k5", "m_gk_k5"]
 PRIOR_ORDER = ["pa_k5", "pa_k20", "pa_tau", "pf_k5", "pg_k5", "pn_k5", "gk_k5"]
 
-# Every arm trained since the covariate ablation began, in reading order, with the
-# group each belongs to. One list, so a figure that wants to show what was tried
-# (rather than only what finished) does not grow its own copy -- the mistake
-# figlib's ABLATION registry comment already warns about.
+# Every arm trained since the covariate ablation began, in reading order, with the group each
+# belongs to.
 ARM_GROUP = ({r: "covariate" for r in RUN_ORDER}
              | {r: "patient split" for r in PATIENT_SPLIT_ORDER}
              | {r: "prior-anchored, multivariate" for r in MULTI_PRIOR_ORDER}
@@ -89,20 +62,7 @@ PRIOR_GROUPS = set(MULTI_PRIOR_ORDER) | set(PRIOR_ORDER)
 
 
 def arm_short(run_id):
-    """Legend label for an arm.
-
-    Within a prior-anchored family every arm carries the same inputs and differs
-    only in the loss, so the shared prefix is dropped -- rows repeating
-    "sex, age, setting" say nothing, and "NORMA | prior anchor k=5" says what the
-    arm is. The loss is the last semicolon-separated segment in both families.
-
-    The multivariate family keeps a ", full panel" marker rather than dropping
-    its prefix outright: m_pa_k5 and pa_k5 are the same loss on different inputs,
-    so bare loss names would give two different arms the same label on any figure
-    that shows both. Every other group keeps its covariates, including the
-    patient-split arms, whose semicolon separates the covariates from the split
-    marker rather than a shared prefix.
-    """
+    """Legend label for an arm."""
     cov = RUN_COVARIATES.get(run_id)
     if cov is None:
         return f"NORMA_{run_id}"
@@ -112,7 +72,6 @@ def arm_short(run_id):
     return f"NORMA | {cov}"
 
 # Legend form: "NORMA | sex, age, setting". Same words, no key needed.
-
 
 def arm_label(run_id, short=False):
     """Legend: 'NORMA | sex, age, setting'; table: 'NORMA (sex, age, setting)'.

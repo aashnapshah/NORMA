@@ -1,16 +1,4 @@
-"""Dataset adapters, paths and pipeline constants for the validation pipeline.
-
-One module (2026-09-08; was config.py + discover.py + datasets.py + chunks.py + refs_io.py):
-  paths and run constants          SCRIPTS_DIR ... NORMA_RUN_ID, EXCLUDE_LABS, PANELS
-  the pipeline stages              analysis_dirs(), load_registries()
-  where a stage writes             analysis_name(), output_dirs(), data_dir(), results_dir()
-  the cohort adapters              DATASETS = {eicu, chs, inspire, ehrshot, mimiciv}
-  CHS per-chunk caching            cached_chunk_frames(), read_chunk_classification()
-  classification I/O               read_classification(), write_classification() -- two files
-  ref_intervals I/O                read_ref_intervals(), upsert_ref_rows(), ... -- two files
-Dataset-specific configuration (outcomes, exclude_labs, diseases, primary_outcomes)
-lives on the adapter classes.
-"""
+"""Dataset adapters, paths and pipeline constants for the validation pipeline."""
 import glob
 import importlib.util
 import os
@@ -22,24 +10,9 @@ import pandas as pd
 
 import constants       # the constants the analysis and the figures share
 
-# ============================================================
 # Paths and run constants
-# ============================================================
 
-# Layout (2026-09-08).  Code: scripts/<nn>_<stage>.py -- one script per pipeline
-# stage, holding that stage's analysis and its figures and tables -- driven by
-# scripts/make_figures.py and scripts/make_tables.py.  Results are keyed by kind
-# first, then cohort:
-#   data/<cohort>/                       inputs + heavy intermediates (<stage>/ subfolders)
-#   results/raw/<cohort>/                every CSV the stages write (flat: one
-#                                        folder per cohort, filenames are unique)
-#   results/processed/<cohort>/           the slice the figures and tables read (scripts/export.py)
-#   results/figures/<tag>/<nn>_<name>.pdf        tag = cohort key, or "all"
-#   results/tables/<tag>/{tex,csv,pdf}/<nn>_<name>.<ext>
-# Fitted things are not results: NORMA checkpoints live in model/logs/<run_id>/
-# and the dev-fitted baseline pickles in model/logs/baselines/ (BASELINE_DIR),
-# which is also what the Clalit bundle carries in (jobs/run_clalit.py --pack_bundle).
-# so the Clalit round trip is: scripts/ in, results/processed/chs/ out.
+# Layout (2026-09-08).
 SCRIPTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # norma/scripts
 BASE_DIR = os.path.dirname(SCRIPTS_DIR)                                     # norma
 VAL_DIR = BASE_DIR
@@ -57,8 +30,6 @@ MODEL_LOG_DIR = os.path.join(BASE_DIR, "model", "logs")     # NORMA checkpoints,
 BASELINE_DIR = os.path.join(MODEL_LOG_DIR, "baselines")     # dev-fitted Cohen / Gaussian pickles
 
 # cohort key -> folder under data/, for the keys whose folder is not the key itself.
-# INSPIRE's baseline/index split fraction is part of its data path, not its key.
-# Everything reaches these through data_dir(key) -- no module hardcodes a folder name.
 DATA_SUBDIR = {"inspire": os.path.join("inspire", "25-75"),
                "chs": "clalit", "sandbox": os.path.join("clalit", "sandbox")}
 DEV_KEY = "dev"          # the "cohort" of cohort-free outputs (synthetic histories, dev split)
@@ -90,38 +61,17 @@ def artifact(name):
     """A dev-fitted baseline (cohen_dev_models.pkl, gaussian_eb_prior_dev.pkl) in
     model/logs/baselines/, here and inside Clalit -- the bundle mirrors these paths."""
     return os.path.join(BASELINE_DIR, name)
-# Main model: NORMA2, QuantileLoss, with age at draw + care setting as
-# per-measurement covariates (model/logs/q_age_set). Chosen 2026-09-03 over
-# q_age_set_co (all three covariates): the co-analyte channel costs ~0.08 RR on
-# the future-abnormality analysis and loses 77/100 eICU AUROC cells, age and
-# setting are neutral-to-helpful, and setting answers R1.1/R1.2. 334f7e21 (no
-# covariates) stays in the pipeline as the "None" arm. CHS still carries
-# 334f7e21 until the Clalit bundle is rebuilt with this run; HF weights / app
-# likewise.
+# Main model: NORMA2, QuantileLoss, with age at draw + care setting as per-measurement covariates
+# (model/logs/q_age_set).
 NORMA_RUN_ID = "q_age_set"
-# Covariate-ablation arms (model/run_covariate_ablation.sh) carried through the
-# pipeline alongside NORMA_RUN_ID: ref_intervals methods norma_<arm>, downstream
-# tables/figures via dataset.run_ids. Every arm is labelled by the covariates it
-# contains (lib/models.RUN_COVARIATES). q_age_co, q_set_co and q_co_q are
-# appended once trained and pushed through 04_refs.py (norma step).
-# Shown as an additive ladder: sex -> +age -> +setting (main) -> +analytes.
-# q_set and q_co (setting-only, analytes-only) were left out on 2026-09-03 as
-# "extra stuff for not that much new info", and added back on 2026-09-10 so the
-# ablation figures show the whole ladder. Both already have norma_<arm> rows in
-# every cohort's ref_intervals, so only 07_classify onward needs re-running.
-# q_age_co, q_set_co and q_co_q are NOT here: they have no ref_intervals rows
-# yet, which needs 04_refs.py --only norma per cohort first.
-# The four patient-split arms are here so the cohort-level figures can carry
-# them: their split changes the dev test set, not the external cohorts, where
-# every method is scored on the same rows regardless of how it was trained.
-# Only the paired dev forecasting figure has to keep them apart.
+# Covariate-ablation arms (model/run_covariate_ablation.sh) carried through the pipeline
+# alongside NORMA_RUN_ID: ref_intervals methods norma_<arm>, downstream tables/figures via
+# dataset.run_ids.
 NORMA_ABLATION_RUN_IDS = ["334f7e21", "q_age", "q_set", "q_co", "q_age_co", "q_set_co",
                           "q_age_set_co", "q_co_q",
                           "p_base", "p_co", "p_causal", "p_full"]
-# Which weights of NORMA_RUN_ID every script loads (04_refs.py (norma step),
-# 16_benchmark, predict_states). "latest" (epoch 39) is what produced the
-# published dev-set predictions_combined.csv and all leak-free variant files;
-# "best" (epoch 40) would require regenerating those. Flip here, nowhere else.
+# Which weights of NORMA_RUN_ID every script loads (04_refs.py (norma step), 16_benchmark,
+# predict_states).
 NORMA_CHECKPOINT = "latest"
 EXCLUDE_LABS = list(constants.EXCLUDE_LABS)  # lib/constants.py owns the exclusions
 
@@ -137,9 +87,7 @@ PANELS = {
 CODE_TO_PANEL = {code: panel for panel, codes in PANELS.items() for code in codes}
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Pipeline stages
-# ═══════════════════════════════════════════════════════════════════════════
 
 _STAGE = re.compile(r"^\d\d_\w+")
 
@@ -165,11 +113,7 @@ def load_module(path, name):
 
 
 def load_registries(attr):
-    """Concatenate `attr` ("FIGURES" or "TABLES") from every stage script that defines it.
-
-    A stage script holds its own figure and table definitions, so the registry is
-    assembled by importing scripts/<stage>.py -- the same file that computed the
-    results it draws."""
+    """Concatenate `attr` ("FIGURES" or "TABLES") from every stage script that defines it."""
     out = []
     for d in analysis_dirs():
         path = os.path.join(SCRIPTS_DIR, f"{d}.py")
@@ -180,18 +124,11 @@ def load_registries(attr):
     return out
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Where a stage writes
-# ═══════════════════════════════════════════════════════════════════════════
 
 def analysis_name():
     """Stage of the script that is running, e.g. "12_eval" for scripts/12_eval.py
     or "01_process" for scripts/process/eicu.py.
-
-    results/ is flat, so this is what stage_file() turns into the <nn>_ prefix on
-    every file the stage writes.  Returns None when there is no owning stage — an
-    interactive session, or a script under lib/ jobs/ process/ — and those outputs
-    are then written unprefixed.
     """
     import __main__
     path = getattr(__main__, "__file__", None)
@@ -221,14 +158,7 @@ def stage_num(analysis=None):
 
 
 def stage_file(name, analysis=None):
-    """<nn>_<name>: the file a stage writes, tagged with its pipeline stage.
-
-    results/ is flat, so the prefix is what says which stage produced a file --
-    12_eval.csv, 13_cox.csv, 17_incidence.csv -- and it keeps a name that repeats
-    across stages apart without inventing a per-stage synonym for it.  Names that
-    already carry a prefix pass through unchanged; so does anything written
-    outside a stage (analysis_name() is None there).
-    """
+    """<nn>_<name>: the file a stage writes, tagged with its pipeline stage."""
     n = stage_num(analysis)
     base = os.path.basename(name)
     return f"{n}_{base}" if n and not re.match(r"^\d\d_", base) else base
@@ -240,12 +170,7 @@ def result_path(results_dir, name, analysis=None):
 
 
 def find_in(directory, filename):
-    """`filename` inside `directory`, resolving the stage prefix the writer added.
-
-    Callers know the bare name ("state_conditional.csv"); the file is
-    "04_state_conditional.csv".  Returns the unprefixed path when nothing matches,
-    so an `os.path.exists` check on the result still behaves.
-    """
+    """`filename` inside `directory`, resolving the stage prefix the writer added."""
     path = os.path.join(directory, filename)
     if os.path.exists(path):
         return path
@@ -259,13 +184,7 @@ def _under_results(directory):
 
 
 def stage_path(directory, name, analysis):
-    """Where `name` lives in `directory`, honouring the <nn>_ stage prefix.
-
-    An existing file wins whichever form it is in (find_in resolves both), so a
-    CHS chunk dir under data/ keeps its bare names and a fresh results/ file gets
-    the prefix.  `analysis` names the OWNING stage, which is not always the
-    running one -- 07_classify reads 04_refs' ref_intervals.
-    """
+    """Where `name` lives in `directory`, honouring the <nn>_ stage prefix."""
     existing = find_in(directory, name)
     if os.path.exists(existing):
         return existing
@@ -288,9 +207,7 @@ def output_dirs(sub):
 ROOTDIR = REPO_DIR
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Cohort adapters
-# ═══════════════════════════════════════════════════════════════════════════
 
 def _natural_sort_key(path):
     """Sort paths numerically so chunk_2 comes before chunk_10."""
@@ -304,7 +221,6 @@ def fix_analyte(df):
     return df
 
 
-
 RI_NUM_COLS = ["ri_mean", "ri_std", "ri_low", "ri_high", "age", "n_bl", "t_span"]
 
 
@@ -314,7 +230,6 @@ def _coerce_ri(df):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
     return df
-
 
 
 # ── Base Dataset ─────────────────────────────────────────────
@@ -327,8 +242,8 @@ class BaseDataset(ABC):
     exclude_labs = []
     run_ids = []
     primary_norma_run = None  # first run_id used as canonical "NORMA"
-    # --no_norma: the cohort is scored on the baseline methods alone, as if the
-    # model had never been run (datasets.get_dataset empties run_ids as well).
+    # --no_norma: the cohort is scored on the baseline methods alone, as if the model had never
+    # been run (datasets.get_dataset empties run_ids as well).
     no_norma = False
 
     # Outcomes: {name: {"event_col", "time_col", "censor_col", "exclude_col"}}
@@ -356,9 +271,8 @@ class BaseDataset(ABC):
     gaussian_models = ["mle", "trunc", "eb"]
 
     norma_alias = None
-    # A cohort the current model was never run on scores the NORMA run it does have as
-    # NORMA, instead of reporting no NORMA at all.  Only where that is the situation:
-    # eICU and INSPIRE carry the configured runs, so nothing is ever renamed there.
+    # A cohort the current model was never run on scores the NORMA run it does have as NORMA,
+    # instead of reporting no NORMA at all.
     auto_norma_alias = False
 
     def _resolve_alias(self, df):
@@ -401,8 +315,8 @@ class BaseDataset(ABC):
 
     def _filter_methods(self, df):
         """Keep only base/pop/per, Cohen/Gaussian benchmarks, and configured NORMA run IDs."""
-        # --no_norma leaves run_ids empty on purpose, and that has to still filter:
-        # otherwise a leftover ref_intervals_norma.parquet would come back in.
+        # --no_norma leaves run_ids empty on purpose, and that has to still filter: otherwise a
+        # leftover ref_intervals_norma.parquet would come back in.
         df = self._alias_norma(df)
         if "method" in df.columns and (self.run_ids or self.no_norma):
             keep = ({'base', 'pop', 'per'}
@@ -514,9 +428,9 @@ class BaseDataset(ABC):
 class EICUDataset(BaseDataset):
 
     name = "eicu"
-    # index_labs.timestamp is days re-anchored per series (process/eicu.py via
-    # _standardize); the raw eICU offset columns (labresultoffset, unitdischargeoffset,
-    # ...) and days_from_admit keep the ICU-admission-relative clock.
+    # index_labs.timestamp is days re-anchored per series (process/eicu.py via _standardize); the
+    # raw eICU offset columns (labresultoffset, unitdischargeoffset, ...) and days_from_admit
+    # keep the...
     time_unit = "days"
     outcome_time_unit = "minutes"
     exclude_labs = EXCLUDE_LABS
@@ -553,11 +467,9 @@ class EICUDataset(BaseDataset):
             "time_col": "unitdischargeoffset",
             "censor_col": "unitdischargeoffset",
             "exclude_col": None,
-            # Not a time-to-event outcome: the event IS "this duration exceeded 7 days",
-            # so the label is a deterministic function of the follow-up time and the
-            # two are nearly disjoint (eICU CRE: median 21.6 h for non-events, 82.2 h
-            # for events). Harrell's C then rests on almost no comparable pairs.
-            # Survival code must skip it; it stays a binary outcome for 12_eval.
+            # Not a time-to-event outcome: the event IS "this duration exceeded 7 days", so the
+            # label is a deterministic function of the follow-up time and the two are nearly
+            # disjoint (eICU CRE: median 21.6 h...
             "survival": False,
         },
         "pop_abnormal": {
@@ -761,18 +673,15 @@ class CHSDataset(BaseDataset):
     name = "chs"
     time_unit = "days"
     exclude_labs = []
-    # the model is not rerun inside Clalit, so the chunks hold whichever NORMA run was
-    # applied there; it is scored as NORMA (see BaseDataset._resolve_alias)
+    # the model is not rerun inside Clalit, so the chunks hold whichever NORMA run was applied
+    # there; it is scored as NORMA (see BaseDataset._resolve_alias)
     auto_norma_alias = True
-    # An index measurement has to come AFTER the baseline history that predicts it and
-    # sets its interval.  02_index_labs applies this when it cuts the split; it is
-    # applied again on every read because a chunk can hold an index_labs.parquet from
-    # an older split (renamed in beside split_df.pkl), and such a file classifies and
-    # forecasts measurements the baseline period has already seen.  0 = keep everything.
+    # An index measurement has to come AFTER the baseline history that predicts it and sets its
+    # interval.
     index_gap_days = 30
     _gap_said = False
-    # main run only: the covariate-ablation arms would need their four extra
-    # checkpoints carried into Clalit and four more CPU passes (decided 2026-09-01)
+    # main run only: the covariate-ablation arms would need their four extra checkpoints carried
+    # into Clalit and four more CPU passes (decided 2026-09-01)
     run_ids = [NORMA_RUN_ID]
     primary_norma_run = NORMA_RUN_ID
 
@@ -806,11 +715,9 @@ class CHSDataset(BaseDataset):
     primary_outcomes = ["mortality", "t2d", "ckd", "anemia_unspecified"]
     mortality_outcome = "mortality"
     eval_windows = [365, 1095, 1825, 3650]  # days: 1yr, 3yr, 5yr, 10yr
-    # Two different clocks, and they have to be reconciled before any time-to-event maths:
-    #   lab `timestamp`  days from 2005-01-01  (index period opens at 2015-01-01 = day 3652)
-    #   *_days outcomes  days from 2015-01-01  (see attach_outcomes)
-    # Subtracting one from the other raw puts every patient ~3652 days in the past, which
-    # is what silently emptied every Cox stay table.
+    # Two different clocks, and they have to be reconciled before any time-to-event maths: lab
+    # `timestamp`  days from 2005-01-01  (index period opens at 2015-01-01 = day 3652) *_days
+    # outcomes  days from...
     timestamp_epoch = "2005-01-01"
     outcome_ref_date = "2015-01-01"
 
@@ -837,9 +744,9 @@ class CHSDataset(BaseDataset):
             self.data_root = chs_root
         else:
             self.data_root = sandbox
-        # --chunk i scopes the whole cohort to one chunk directory, so the heavy
-        # per-pair stages (04_refs) hold one chunk in memory and write straight
-        # into chunk_i/ where every CHS reader already looks.
+        # --chunk i scopes the whole cohort to one chunk directory, so the heavy per-pair stages
+        # (04_refs) hold one chunk in memory and write straight into chunk_i/ where every CHS
+        # reader already looks.
         self.chunk = chunk
         self.data_dir = (os.path.join(self.data_root, f"chunk_{chunk}")
                          if chunk is not None else self.data_root)
@@ -898,11 +805,7 @@ class CHSDataset(BaseDataset):
     def _standardize(self, df):
         """Encode sex as int, drop index rows the baseline period does not precede, and
         convert datetime timestamps to days.
-
-        In that order: the time origin is the first measurement that survives, so every
-        stage reading the same chunk agrees on it.  The drop is here rather than in each
-        stage because every CHS path -- load_index_labs, iter_chunks, 10_mortality's
-        direct read -- comes through this method."""
+        """
         if "gender" in df.columns and "sex" not in df.columns:
             df["sex"] = (df["gender"] == "F").astype(int)
         df = drop_early_index(df, self.index_gap_days, report=not self._gap_said)
@@ -935,10 +838,9 @@ class CHSDataset(BaseDataset):
         for i, d in enumerate(dirs):
             p = find_in(d, filename)
             if os.path.exists(p):
-                # the analyte filter runs per chunk -- --analytes HGB on 250 chunks must
-                # not cost the memory of every analyte first -- but `postprocess` stays on
-                # the concatenation: _standardize dates times from the FIRST measurement
-                # of what it is given, and per chunk that would be a different origin each
+                # the analyte filter runs per chunk -- --analytes HGB on 250 chunks must not cost
+                # the memory of every analyte first -- but `postprocess` stays on the
+                # concatenation: _standardize dates times from the...
                 frames.append(self._filter_analytes(fix_analyte(pd.read_parquet(p, columns=cols))))
             if (i + 1) % 50 == 0 or i == len(dirs) - 1:
                 print(f"    {i + 1}/{len(dirs)} {label} loaded")
@@ -985,9 +887,9 @@ class CHSDataset(BaseDataset):
         for i, d in enumerate(dirs):
             part = read_classification(d, usecols)
             if part is not None:
-                # filter each chunk as it is read, not the concatenation: --analytes HGB
-                # on 250 chunks otherwise materialises every analyte first and only then
-                # throws 29 of 30 away, which is where the memory goes
+                # filter each chunk as it is read, not the concatenation: --analytes HGB on 250
+                # chunks otherwise materialises every analyte first and only then throws 29 of 30
+                # away, which is where the memory goes
                 frames.append(self._filter_norma(self._filter_analytes(fix_analyte(part))))
             if (i + 1) % 50 == 0 or i == len(dirs) - 1:
                 print(f"    {i + 1}/{len(dirs)} classification loaded")
@@ -1083,9 +985,8 @@ class CHSDataset(BaseDataset):
                     diagnosis[outcome_name] - ref_date
                 ).dt.days
 
-        # A frame classified by an older run may already carry some of these columns
-        # (e.g. has_t2d but not has_anemia_unspecified). Replace them all, so a merge
-        # never leaves _x/_y duplicates and every outcome comes from this diagnosis table.
+        # A frame classified by an older run may already carry some of these columns; replace them
+        # all, so a merge never leaves _x/_y duplicates.
         stale = [c for c in diagnosis.columns if c != "patient_id" and c in df.columns]
         return df.drop(columns=stale).merge(diagnosis, on="patient_id", how="left")
 
@@ -1195,8 +1096,6 @@ class INSPIREDataset(BaseDataset):
         if "sex" in df.columns and df["sex"].dtype == object:
             df["sex"] = (df["sex"] == "F").astype(int)
         # Convert minutes → days, then re-anchor to 0 per patient-analyte.
-        # Guard: only convert if we just renamed from chart_time (raw minutes),
-        # not when loading already-standardized parquets.
         if needs_time_convert and "timestamp" in df.columns:
             df["timestamp"] = df["timestamp"] / (60 * 24)
             if "patient_id" in df.columns and "analyte" in df.columns:
@@ -1280,11 +1179,9 @@ class INSPIREDataset(BaseDataset):
         return df
 
 
-# ── Development cohorts (EHRSHOT, MIMIC-IV test split) ───────────
-# NORMA's held-out test patients, run through the same baseline/index pipeline
-# as the validation cohorts so every cohort is evaluated with the same models
-# (process/dev_cohort.py --source {mimiciv,ehrshot} build processed.parquet).  No outcomes: forecasting +
-# reference intervals only.
+# ── Development cohorts (EHRSHOT, MIMIC-IV test split) ─────────── NORMA's held-out test
+# patients, run through the same baseline/index pipeline as the validation cohorts so every
+# cohort is...
 
 class DevDataset(BaseDataset):
 
@@ -1344,15 +1241,7 @@ DATASETS = {
 
 
 def save_csv(df, path, analytes=None, keys=None):
-    """Save to CSV, replacing only the rows this run recomputed.
-
-    Two things scope a run: the `analytes` filter, and `keys` -- the factor
-    columns of a consolidated file (one file per analysis with a level column,
-    rather than one file per level: "outcome" for incidence.csv, "split" for
-    cohort.csv).  Rows of the existing file that match the incoming values on
-    those columns are dropped and the rest kept, so `--outcomes mortality` or
-    `--analytes HGB` updates its slice instead of wiping the file.
-    """
+    """Save to CSV, replacing only the rows this run recomputed."""
     path = os.path.join(os.path.dirname(path), stage_file(path))
     drop_on = (["analyte"] if analytes and "analyte" in df.columns else []) \
               + [k for k in (keys or ()) if k in df.columns]
@@ -1390,20 +1279,7 @@ def add_dataset_args(parser, required=True):
 
 
 def already_done(args, results_dir, *names, label=None):
-    """True when every one of `names` is already written and --force was not passed.
-
-    Reuse is the DEFAULT: a rerun that only exists to carry the pipeline forward
-    should not refit what it already fitted (13_cox re-estimating every landmark
-    Cox, 14_patient_level re-training the multi-analyte models) just to write the
-    same numbers back.  --force is the one escape hatch, the same bargain
-    07_classify has always had.
-
-    Call this at the TOP of a step, before it loads anything -- a guard placed
-    after the 1.5 GB classification has been read saves almost nothing.
-
-    The corollary of reuse-by-default: a stage whose upstream input changed keeps
-    its stale output until someone passes --force.
-    """
+    """True when every one of `names` is already written and --force was not passed."""
     if getattr(args, "force", False):
         return False
     missing = [n for n in names if not os.path.exists(find_in(results_dir, n))]
@@ -1456,15 +1332,11 @@ def disable_norma(ds):
     return ds
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Per-chunk result caching for the chunked cohort (CHS)
-# ═══════════════════════════════════════════════════════════════════════════
 
-# A stage that aggregates counts over the classification table cannot hold every
-# chunk at once, so it computes one small frame per chunk and caches it next to
-# the chunk (`chunk_dir/<cache_file>`).  A rerun reads the caches; `--analytes`
-# recomputes only those analytes and patches them into the cache; `--force`
-# recomputes everything.
+# A stage that aggregates counts over the classification table cannot hold every chunk at once,
+# so it computes one small frame per chunk and caches it next to the chunk
+# (`chunk_dir/<cache_file>`).
 
 def read_chunk_classification(chunk_dir):
     """The chunk's classification table (both halves, or the older single csv), or None."""
@@ -1478,12 +1350,7 @@ def read_chunk_classification(chunk_dir):
 
 
 def cached_chunk_frames(ds, cache_file, compute, force=False):
-    """Yield one result frame per chunk.
-
-    compute(chunk_dir) -> DataFrame with an `analyte` column (or None when the chunk
-    has no classification).  Frames come from the cache when it exists, except for
-    the analytes in ds._analytes, which are recomputed and written back.
-    """
+    """Yield one result frame per chunk."""
     import time
     analytes = ds._analytes
     dirs = ds._chunk_dirs()
@@ -1514,17 +1381,9 @@ def cached_chunk_frames(ds, cache_file, compute, force=False):
         yield fresh
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # classification.parquet I/O — two files, aligned row for row
-# ═══════════════════════════════════════════════════════════════════════════
 
-# 07_classify writes the baseline half and the NORMA half as separate files
-# (2026-09-08).  Adding or retraining a NORMA arm then rewrites ~0.4 GB instead of
-# the whole 1.5 GB frame -- that growth (766 MB -> 1.5 GB on eICU) is what the
-# covariate ablation cost.  The halves are ALIGNED BY POSITION, never joined:
-# (patient_id, analyte, timestamp) is not unique (27,833 duplicate triples on
-# eICU), so a merge would fan out.  The NORMA half repeats those three columns
-# only so a read can assert the halves still line up.
+# 07_classify writes the baseline half and the NORMA half as separate files (2026-09-08).
 CLASSIFICATION_FILE = "classification.parquet"
 CLASSIFICATION_NORMA_FILE = "classification_norma.parquet"
 CLASSIFICATION_KEYS = ["patient_id", "analyte", "timestamp"]
@@ -1626,15 +1485,10 @@ def classification_column_names(directory):
     return names
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # ref_intervals.{csv,parquet} I/O (04_refs norma + baselines steps)
-# ═══════════════════════════════════════════════════════════════════════════
 
 # Two files per cohort (2026-09-08): ref_intervals.parquet holds the baselines
-# (base/pop/per/cohen_*/gaussian_*) and ref_intervals_norma.parquet the norma_<run_id>
-# arms.  Each 04_refs step owns one file and never reads or rewrites the other, so
-# the norma step and the baselines step can now run at the same time on one cohort --
-# with a single file the last writer won, and the two could only be run in sequence.
+# (base/pop/per/cohen_*/gaussian_*) and ref_intervals_norma.parquet the norma_<run_id> arms.
 
 REF_FILE = "ref_intervals.parquet"
 REF_NORMA_FILE = "ref_intervals_norma.parquet"
@@ -1667,23 +1521,12 @@ def drop_early_index(df, min_gap_days, report=False):
     return df[~too_soon].reset_index(drop=True)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Per-chunk caches, split by analyte
-# ═══════════════════════════════════════════════════════════════════════════
 
 # A chunked cohort's stages reduce each chunk once and then work one ANALYTE at a time.
-# Held in one file per chunk, that means reading every chunk's whole cache once per
-# analyte -- thirty passes over the same bytes, which over a network share is most of the
-# runtime.  One file per analyte inside a per-chunk directory makes a read touch only the
-# slice it needs.  Plain files, no hive layout: the reader is pd.read_parquet on a path.
 
 def progress(done, total, t0, label="", extra=""):
-    """One line per chunk: where the loop is, and how long the rest should take.
-
-    A stage over 250 chunks otherwise prints nothing for an hour, and there is no way to
-    tell a slow chunk from a stuck one.  The estimate is the mean of what has run, which
-    is close enough to be useful and is marked as an estimate.
-    """
+    """One line per chunk: where the loop is, and how long the rest should take."""
     import time
     elapsed = time.time() - t0
     rate = elapsed / max(done, 1)
@@ -1819,9 +1662,8 @@ def write_ref_intervals(ds, ref_df, half=None, directory=None):
         ref_df["sex"] = _sex_as_int(ref_df["sex"])
     is_norma = ref_df["method"].map(is_norma_method)
     if half == "baselines" and is_norma.any():
-        # A pre-2026-09-08 chunk keeps its NORMA rows inside ref_intervals.parquet, so
-        # they arrive here with the baselines half; writing that half alone would
-        # delete them.  Move them into the NORMA file first (runs the file lacks only).
+        # A pre-2026-09-08 chunk keeps its NORMA rows inside ref_intervals.parquet, so they
+        # arrive here with the baselines half; writing that half alone would delete them.
         _move_legacy_norma_rows(norma_p, ref_df[is_norma])
     for name, path, part in (("norma", norma_p, ref_df[is_norma]),
                              ("baselines", base_p, ref_df[~is_norma])):

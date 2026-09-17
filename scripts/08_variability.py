@@ -1,13 +1,5 @@
 #!/usr/bin/env python
-"""Compute intra/inter-individual CV and index of individuality per analyte.
-
-Figures and tables
-------------------
-  variability   four rows sharing the analyte axis: one row per cohort (eICU, INSPIRE,
-                CHS) with the inter- and intra-individual CV side by side per analyte,
-                then the individuality index (intra / inter) with one dot per cohort.
-                A cohort without results is a pending row and a pending legend entry.
-"""
+"""Compute intra/inter-individual CV and index of individuality per analyte."""
 import bootstrap  # noqa: F401
 
 import argparse
@@ -121,9 +113,7 @@ def main():
     print(f"  Saved {len(var_df)} analytes to {out_path}")
 
 
-# ═════════════════════════════════════════════════════════════════════════
 # Figures and tables
-# ═════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 from models import lighten
@@ -235,16 +225,12 @@ FIGURES = [
 ]
 
 
-# ══════════════════════════════════════════════════════════════════════════
 # Tables — 08_variability: table_* definitions and registry slice.
-# ══════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 
-# save_table()'s first argument is the folder the table is written into,
-# so it must match this directory name. Keeping the literal here (rather
-# than only in the TableSpec) is what drifted during the restructure.  # noqa: F401,F403
-
+# save_table()'s first argument is the folder the table is written into, so it must match this
+# directory name.
 
 def table_variability():
     data = {ds: _load_variability(ds) for ds in DATASETS}

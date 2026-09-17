@@ -13,14 +13,11 @@ import datasets
 from datasets import (add_dataset_args, cached_chunk_frames, get_dataset,
                       read_classification, save_csv)
 
-# A chunked cohort cannot hold its classification in one frame (CHS: ~2 M index rows
-# per chunk x 250 chunks), so the per-method deviation curve is accumulated as a
-# HISTOGRAM of each method's z per chunk and the deciles are cut from the combined
-# counts.  Bin width is the only approximation: a decile boundary lands inside a bin,
-# and that whole bin goes to the lower decile.
+# A chunked cohort cannot hold its classification in one frame (CHS: ~2 M index rows per chunk x
+# 250 chunks), so the per-method deviation curve is accumulated as a HISTOGRAM of each method's z
+# per...
 Z_BIN = 0.02          # z units per histogram bin
 Z_MAX = 20.0          # everything above lands in the last bin
-
 
 
 def compute_quintile_mortality(df, analyte_col, value_col, event_col, exclude_analytes=None):
@@ -123,11 +120,7 @@ def _wilson(mort, event_col):
 
 
 def z_histogram(cls, event_col, methods, exclude_analytes=None):
-    """One chunk -> (method, analyte, zbin) counts: rows, events, summed z.
-
-    Everything the decile curve needs, in a frame small enough to cache per chunk and
-    add up across a cohort that does not fit in memory.
-    """
+    """One chunk -> (method, analyte, zbin) counts: rows, events, summed z."""
     exclude = exclude_analytes or set()
     cls = cls.copy()
     cls["analyte"] = cls["analyte"].replace("", "NA").fillna("NA")
@@ -155,13 +148,7 @@ def z_histogram(cls, event_col, methods, exclude_analytes=None):
 
 
 def _split_into_deciles(g, n_bins=10):
-    """Bins (sorted by z) -> one row per decile: n, events, median z.
-
-    A decile boundary lands inside a bin, so that bin's rows are split across the two
-    deciles in proportion, and its events with them -- otherwise a dense bin can shift
-    a decile's size by several percent.  Within a bin z is taken at its midpoint, which
-    is where the Z_BIN/2 uncertainty in z_median comes from.
-    """
+    """Bins (sorted by z) -> one row per decile: n, events, median z."""
     zbin = g["zbin"].to_numpy(float)
     n = g["n"].to_numpy(float)
     ev = g["n_event"].to_numpy(float)
@@ -242,18 +229,7 @@ def chunked_deviation_by_method(ds, args, event_col, methods, exclude):
 
 
 def compute_deviation_mortality_by_method(cls, event_col, methods, n_bins=10, exclude_analytes=None):
-    """Deviation-mortality curve binned on EACH method's own deviation score.
-
-    compute_deviation_mortality() bins on |value - baseline_mean| / baseline_std,
-    which comes from the `base` rows and is therefore identical for every method —
-    so it cannot compare methods at all.  07_classify.py already stores `<method>_z`,
-    the distance from that method's own interval centre in units of its own
-    half-width (z = 1 is exactly that method's flag boundary), which is the
-    per-method analogue.  Binning on it lets the reference-interval methods and the
-    NORMA covariate-ablation arms be compared on the same curve.
-
-    Returns the same columns as compute_deviation_mortality() plus `method`.
-    """
+    """Deviation-mortality curve binned on EACH method's own deviation score."""
     exclude = exclude_analytes or set()
     cls = cls.copy()
     cls['analyte'] = cls['analyte'].replace('', 'NA').fillna('NA')
@@ -398,16 +374,15 @@ def main():
     print("\n  Computing deviation mortality...")
     dev_df = compute_deviation_mortality(merged, event_col)
     dev_df = dev_df.round({'z_median': 2, 'mortality_pct': 1, 'ci_lo': 1, 'ci_hi': 1})
-    # binned on the deviation from the patient's own baseline period, not on any
-    # RI method's z -- that is a method level of the same table (BASELINE_Z), so the
-    # per-method rows below go into the same file.
+    # binned on the deviation from the patient's own baseline period, not on any RI method's z --
+    # that is a method level of the same table (BASELINE_Z), so the per-method rows below go into
+    # the same file.
     dev_df.insert(0, 'method', BASELINE_Z)
     dev_path = os.path.join(results_dir, 'mortality_deviation.csv')
     save_csv(dev_df, dev_path, analytes=ds._analytes, keys=('method',))
     print(f"  Saved {len(dev_df)} rows to {dev_path}")
 
-    # 3. Deviation mortality per METHOD (each method's own z), so the RI methods and
-    #    the NORMA ablation arms can be compared on the same curve.
+    # 3.
     print("\n  Computing per-method deviation mortality...")
     if args.dataset == "chs":
         # the whole classification does not fit in memory here; see chunked_deviation_by_method
@@ -441,9 +416,7 @@ def main():
             print(f"  Saved {len(bym)} rows to {dev_path}")
 
 
-# ═════════════════════════════════════════════════════════════════════════
 # Figures and tables
-# ═════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 
@@ -517,13 +490,7 @@ def fig_mortality_deviation():
     return {"": fig}
 
 def fig_mortality_deviation_norma(ds):
-    """fig_mortality_deviation for one cohort, one line per NORMA ablation arm.
-
-    The main figure's z is |value - baseline_mean| / baseline_std, which comes from
-    the `base` rows and is identical for every method, so it cannot separate them.
-    This one reads the per-method rows of mortality_deviation.csv, each binned on
-    that method's OWN deviation score (10_mortality.py:compute_deviation_mortality_by_method).
-    """
+    """fig_mortality_deviation for one cohort, one line per NORMA ablation arm."""
     df = load_result(ds, "mortality_deviation.csv")
     if df is not None and "method" in df.columns:
         df = df[df["method"].astype(str) != BASELINE_Z]      # each method's own z

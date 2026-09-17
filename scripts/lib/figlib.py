@@ -1,34 +1,6 @@
 """Everything the stage scripts' figure and table halves share (2026-09-08; was
 plotting.py + figlib.py + tablelib.py).  The figure half of every scripts/<stage>.py does
 `from figlib import *`; make_figures.py / make_tables.py import it as P.
-
-  style, palettes, result loading   setup_style(), load_result(), find_result(), ...
-  figure helpers + FigSpec          save_fig(), placeholder_fig(), hide_spines(), ...
-  table helpers + TableSpec         save_table(), fmt_ci(), fmt_pval(), tex_escape(), ...
-Model / cohort names, colours and markers stay in models.py (the registry).
-
-Validation figures — one matplotlib figure per panel, saved to results/figures/<analysis>/.
-
-Registry (FIGURES) entries tell make_figures.py how to drive each function:
-
-  per_dataset=True   fn(dataset) is called for every dataset in figlib.DATASETS and
-                     returns {suffix: fig}; files are <base>_<dataset>[_<suffix>].pdf.
-                     If results/<kind>/<dataset>/ lacks any file in `requires`, a placeholder
-                     PDF is written for every name in expected(dataset) instead.
-  per_dataset=False  fn() returns {suffix: fig}; files are <base>[_<suffix>].pdf.
-
-"NORMA" everywhere is the quantile-head run datasets.NORMA_RUN_ID; the Gaussian head
-is not shown.  Grids that are small multiples of the same plot over analytes
-(mortality_quintile, mortality_deviation, age_ri) stay as one file.
-
-Validation tables — LaTeX + CSV (+ PDF via tectonic), saved to results/tables/<analysis>/.
-
-Registry (TABLES) entries drive make_tables.py the same way figures.py does:
-  per_dataset=True   fn(dataset) writes its tables via save_table and returns the
-                     list of names written; missing `requires` -> placeholder tables
-                     for every name in expected(dataset).
-  per_dataset=False  fn() writes pooled tables (one row/column per dataset; datasets
-                     without results show "---").
 """
 
 import functools
@@ -59,8 +31,8 @@ if SCRIPTS_DIR not in sys.path:          # for `process.config` below
     sys.path.append(SCRIPTS_DIR)
 import models        # the single registry of model / cohort names and colours
 import models as M
-# lib/constants.py is the single definition of everything the analysis and the
-# figures must agree on; re-exported here so `from figlib import *` still sees it.
+# lib/constants.py is the single definition of everything the analysis and the figures must agree
+# on; re-exported here so `from figlib import *` still sees it.
 from constants import (ALL_SPLIT, ANCHOR, COHORT_ORDER, DATASET_ORDER, DEV_COHORTS, DEV_SPLITS,
                     EXCLUDE_ANALYTES, FDR, FLAG_RATE, MATCHED_SENSITIVITY, MEDIAN_ROW, MIN_EVENTS,
                     BASELINE_Z, POOLED_ROW, PSEUDO_ANALYTES,
@@ -69,25 +41,18 @@ from constants import VAL_COHORTS as _ALL_VAL_COHORTS
 from process.config import REFERENCE_INTERVALS   # the intervals the pipeline classifies against
 
 PREDICTION_DIR = os.path.join(RESULTS_DIR, "raw", DEV_KEY)   # model/evaluate.py output
-# Where find_result() looks, in order: results/raw/<cohort>/ (what a stage writes)
-# then results/processed/<cohort>/ (the figure data, all that comes back from
-# Clalit).  make_figures.py --from processed narrows it to prove the processed
-# files alone can draw everything.
+# Where find_result() looks, in order: results/raw/<cohort>/ (what a stage writes) then
+# results/processed/<cohort>/ (the figure data, all that comes back from Clalit).
 RESULT_KINDS = ["raw", "processed"]
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Datasets & outcomes
-# ═══════════════════════════════════════════════════════════════════════════
 
-# External validation cohorts. Every per-dataset figure/table produces one
-# output per entry; a placeholder is written when results/<kind>/<ds>/ lacks the input.
+# External validation cohorts.
 DATASETS = list(DATASET_ORDER)
 _ALL_DATASETS = tuple(DATASETS)
-# results/figures/<OUTPUT_TAG>/: the SCOPE of the build, not a per-cohort split of
-# the outputs -- "all" is the full cohort set (the manuscript build, whose figures
-# already carry one row or panel per cohort); one cohort key (or e.g. eicu_chs)
-# when --dataset restricts the build, so a Clalit or smoke-test run never
-# overwrites the pooled outputs and one cohort can be inspected on its own.
+# results/figures/<OUTPUT_TAG>/: the SCOPE of the build, not a per-cohort split of the outputs --
+# "all" is the full cohort set (the manuscript build, whose figures already carry one row or
+# panel per...
 OUTPUT_TAG = "all"
 _LINKED = []      # module-level cohort lists that --dataset must restrict as well
 
@@ -134,9 +99,7 @@ def set_datasets(datasets):
     OUTPUT_TAG = "all" if set(keep) == set(_ALL_DATASETS) else "_".join(keep)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Reference-interval methods, palette
-# ═══════════════════════════════════════════════════════════════════════════
 
 PALETTE = {
     "teal": "#0097A7", "coral": "#E85D4A", "grey": "#78909C",
@@ -152,20 +115,15 @@ METHOD_DISPLAY = M.labels(METHODS)
 METHOD_COLORS = M.colors(METHODS)
 METHOD_MARKERS = {k: M.marker(k) for k in METHODS}
 
-# Balanced accuracy is deliberately NOT a panel: it weights a missed case and a
-# false alarm equally, the objection Referee 3 raised (R3.M3). Discrimination is
-# shown as AUROC (threshold-free, from 12_auroc.csv) next to the
-# operating-point metrics.
+# Balanced accuracy is deliberately NOT a panel: it weights a missed case and a false alarm
+# equally, the objection Referee 3 raised (R3.M3).
 EVAL_METRICS = ["ppv", "sensitivity", "specificity", "auroc"]
 EVAL_METRIC_LABELS = {"ppv": "Precision", "sensitivity": "Sensitivity",
                       "specificity": "Specificity", "auroc": "AUROC"}
 EVAL_METRIC_COLORS = {"ppv": PALETTE["teal"], "sensitivity": PALETTE["coral"],
                       "specificity": PALETTE["green"], "auroc": PALETTE["gold"]}
 
-# Forecasting models as the dev-set prediction CSVs name them.  "NORMA" = the
-# quantile head (run NORMA_RUN_ID); the Gaussian head is not shown anywhere.
-# models.canonical() maps these spellings onto the registry, so the colours are
-# the same ones the 05_forecasting figures use.
+# Forecasting models as the dev-set prediction CSVs name them.
 NORMA_MODEL = "NORMA-Quantile"
 BASELINE_MODELS = ["ARIMA", "Mean", "Last"]
 MODEL_ORDER = [NORMA_MODEL] + BASELINE_MODELS
@@ -173,12 +131,7 @@ MODEL_COLORS = M.colors(MODEL_ORDER)
 
 
 def model_label(m):
-    """Display label for a forecasting model named as the prediction CSVs name it.
-
-    Goes through the registry so the forecasting tables carry the same names as
-    the forecasting figures ("NORMA-S" for the realized-state query, not a bare
-    "NORMA" that hides which query it was).
-    """
+    """Display label for a forecasting model named as the prediction CSVs name it."""
     if M.canonical(m):
         return M.label(m, short=True)
     return "NORMA" if str(m).startswith("NORMA") else m
@@ -188,10 +141,7 @@ SENSITIVITY_FEATURES = ["history_length", "horizon", "history_std"]
 FEATURE_LABELS = {"history_length": "History Length", "horizon": "Prediction Horizon",
                   "history_std": "Within-Person Variability"}
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Analytes
-# ═══════════════════════════════════════════════════════════════════════════
-
 
 CORE_ANALYTES = sorted([
     "A1C", "ALB", "ALP", "ALT", "AST", "BUN", "CA", "CL", "CO2", "CRE",
@@ -245,9 +195,7 @@ def analyte_panel_order(analytes):
     return [a for a in order if a in analytes] + rest
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Font sizes / styling
-# ═══════════════════════════════════════════════════════════════════════════
 
 FONT_TITLE = 8
 FONT_AXIS = 7
@@ -310,9 +258,7 @@ def lighten(color, amt=0.35):
     return tuple(c + (1 - c) * amt for c in (r, g, b))
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Result loading
-# ═══════════════════════════════════════════════════════════════════════════
 
 def results_dir(dataset, kind="raw"):
     """results/<kind>/<cohort>/ — read through find_result(), which knows the stage."""
@@ -320,15 +266,7 @@ def results_dir(dataset, kind="raw"):
 
 
 def find_result(dataset, filename):
-    """Locate a result file in results/<kind>/<cohort>/.
-
-    A cohort's results are one flat folder, so this is a lookup, not a search.
-    Callers pass the bare name ("eval.csv"); the file on disk carries its stage
-    prefix ("12_eval.csv", datasets.stage_file), so the prefix is resolved here
-    rather than at every one of the ~100 call sites.  RESULT_KINDS gives the
-    order (raw first, then processed — the figure data, which is all that comes
-    back from Clalit).
-    """
+    """Locate a result file in results/<kind>/<cohort>/."""
     for kind in RESULT_KINDS:
         path = find_in(os.path.join(RESULTS_DIR, kind, dataset), filename)
         if os.path.exists(path):
@@ -343,13 +281,7 @@ def load_csv(path):
 
 
 def has_result(dataset, *filenames):
-    """True if ANY of the given result files exists for this dataset.
-
-    Must go through find_result(), which checks raw before processed. Resolving
-    only one kind here made every
-    available_datasets() call return [], which silently replaced real pooled
-    figures with "pending" placeholders.
-    """
+    """True if ANY of the given result files exists for this dataset."""
     return any(find_result(dataset, f) is not None for f in filenames)
 
 
@@ -367,11 +299,7 @@ def normalize_norma_cols(df, dataset=None):
     registry knows (the ablation arms, which since 2026-09-03 include the old
     main 334f7e21 as the "no covariates" arm) is left untouched; an unregistered
     NORMA_<hex> run is a stale leftover and is dropped.
-
-    The previous version treated whichever hex id was present as the primary
-    and renamed it -- correct only while the main run had a hex id and no arm
-    did. With a named main run that silently renamed the 334f7e21 arm to NORMA
-    and gave every consumer two NORMA rows."""
+    """
     if df is None:
         return None
     from models import canonical  # lazy: models is a leaf, but keep import order flexible
@@ -416,9 +344,9 @@ def to_numeric(df, skip=("analyte", "method", "outcome", "model", "setting", "me
                          "realized_state", "target_state", "dataset", "test_name", "feature",
                          "subset", "state", "code", "reference", "comparator", "favours", "stratum",
                          "panel", "model_type", "time_window", "new_method", "ref_method", "design",
-                         # 13_cox landmark columns: coercing these to numeric turned every
-                         # value into NaN, so the exposure/encoding filters matched nothing
-                         # and every 13_cox figure silently fell back to a placeholder.
+                         # 13_cox landmark columns: coercing these to numeric turned every value
+                         # into NaN, so the exposure/encoding filters matched nothing and every
+                         # 13_cox figure silently fell back to a placeholder.
                          "exposure", "encoding", "level", "norma_run",
                          # 05_forecasting/norma_versions.csv label columns
                          "version", "source")):
@@ -435,9 +363,7 @@ def get_metric(sub, analyte, method, metric):
     return np.nan
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Figure output
-# ═══════════════════════════════════════════════════════════════════════════
 
 def figure_path(analysis, name):
     """results/figures/<OUTPUT_TAG>/<nn>_<name>.pdf — flat, like the results
@@ -448,8 +374,8 @@ def figure_path(analysis, name):
 def save_fig(fig, analysis, name):
     path = figure_path(analysis, name)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    # 0.06 rather than a hairline: "tight" crops to the ink, so a rotated cohort
-    # label on the right edge came out flush against the crop box and read as cut off.
+    # 0.06 rather than a hairline: "tight" crops to the ink, so a rotated cohort label on the
+    # right edge came out flush against the crop box and read as cut off.
     fig.savefig(path, format="pdf", bbox_inches="tight", pad_inches=0.06)
     plt.close(fig)
     print(f"  -> {os.path.relpath(path, BASE_DIR)}")
@@ -478,9 +404,7 @@ def pending_message(dataset, missing):
     return f"{ds}: pending\nmissing {dataset}/{files}"
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Table output (LaTeX helpers + save)
-# ═══════════════════════════════════════════════════════════════════════════
 
 def tex_escape(s):
     if not isinstance(s, str):
@@ -591,13 +515,12 @@ def save_placeholder_table(analysis, name, message):
     return save_table(analysis, name, lines, csv_df)
 
 
-# ── Loaders shared by the figure and table modules ──────────────────────────
-# Defined here rather than in figlib/tablelib: both need them, and the two
-# copies had already drifted apart in formatting.
+# ── Loaders shared by the figure and table modules ────────────────────────── Defined here
+# rather than in figlib/tablelib: both need them, and the two copies had already drifted apart in
+# formatting.
 
 EVAL_CSV = "eval.csv"        # one file; the `subset` column says which restriction
-# The primary eval subset: per-analyte normal history, scored inside Pop_RI-normal
-# tests.  eval.csv also carries "all", "per_normal" and "pop_normal" rows.
+# The primary eval subset: per-analyte normal history, scored inside Pop_RI-normal tests.
 EVAL_SUBSET = "per_normal_pop_normal"
 
 # Coefficients of variation above this are fitting artefacts, not biology.
@@ -641,11 +564,7 @@ def attach_auroc(ev, ds, subset="pop_normal"):
 
 
 def pooled_rows(df, *dims):
-    """The rows of a consolidated table that are NOT broken out along `dims`.
-
-    A table that also carries stratified rows (age_band, target_rate, sex, split)
-    gives the un-stratified ones the level "all", so asking for the pooled rows is
-    a filter rather than a separate file."""
+    """The rows of a consolidated table that are NOT broken out along `dims`."""
     if df is None:
         return None
     for d in dims:
@@ -667,9 +586,7 @@ def _load_eval_restricted(ds):
     return attach_auroc(load_eval(ds), ds)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Figure helpers, FigSpec and the per-stage constants
-# ═══════════════════════════════════════════════════════════════════════════
 
 def _load_mortality_deviation(ds):
     df = load_result(ds, "mortality_deviation.csv")
@@ -704,12 +621,7 @@ def _method_legend(ax, methods, markers=None, **kw):
 
 def plan_legend(labels, width_in, fontsize=FONT_LEGEND, handlelength=1.8,
                 handletextpad=0.4, columnspacing=1.0, pad_in=0.06):
-    """(ncol, height_in) for a centred legend of `labels` across `width_in`.
-
-    Separate from top_legend so a caller can size the figure before creating it:
-    the legend sits above the panels, so its height has to be known first or the
-    panels shrink to absorb it.
-    """
+    """(ncol, height_in) for a centred legend of `labels` across `width_in`."""
     if not len(labels):
         return 1, 0.0
     char_in = 0.52 * fontsize / 72.0          # mean glyph advance at this size
@@ -723,16 +635,7 @@ def plan_legend(labels, width_in, fontsize=FONT_LEGEND, handlelength=1.8,
 
 def top_legend(fig, handles, labels, fontsize=FONT_LEGEND, handlelength=1.8,
                handletextpad=0.4, columnspacing=1.0, pad_in=0.06):
-    """Legend above the panels, centred, wrapped to as many rows as it needs.
-
-    Call sites used to pass ncol=len(labels), which is fine for the four or five
-    series a cohort figure carries and unreadable once an arm figure shows every
-    trained arm: thirteen entries of "NORMA | sex, age, setting, analytes" do not
-    fit across 7.2 inches in one row. The number of columns is chosen from the
-    widest label so the row fits the figure, and the height the legend needs is
-    returned in inches for the caller's tight_layout rect -- reserving a fixed
-    0.26 in silently overlaps the panels as soon as the legend wraps.
-    """
+    """Legend above the panels, centred, wrapped to as many rows as it needs."""
     if not handles:
         return 0.0
     ncol, height_in = plan_legend(labels, fig.get_figwidth(), fontsize, handlelength,
@@ -918,81 +821,56 @@ def _lead_time_unit(plot_df):
     if med > 24 * 30:
         return 1 / (24 * 30.44), "Lead Time (months)"
     return 1.0, "Lead Time (hours)"
-# Benchmark method sets. The main figure carries the four methods that make the
-# argument — the population interval, the simple personal interval, the strongest
-# published benchmark, and NORMA — because eight bars per panel is unreadable and
-# the Cohen variants differ only in feature set. The rest go to the supplement.
-#
-# Cohen variants (Cohen et al. 2021, Nat Med): m2 = single-lab (age, sex, that
-# lab's baseline mean); m3 = multi-lab (baseline means of every analyte);
-# m4 = multi-lab x time (per-time-bin means of the top-15 labs). m4 is the
-# fullest and the best performing, so it is the one shown as "Cohen".
+# Benchmark method sets.
 _BM_MAIN = ["PopRI", "PerRI", "Cohen_m4", "NORMA"]
 # Cohen m2 / m3 are computed (04_refs) but not shown: Aashna 2026-08-28, "the only Cohen I want is m4".
 _BM_SUPP = ["PopRI", "PerRI", "Gaussian_mle", "Gaussian_trunc", "Gaussian_eb", "Cohen_m4", "NORMA"]
 _BM_METHODS = _BM_MAIN
 
-# One naming convention for every reference-interval method, used by calibration,
-# prevalence and benchmark figures alike (RI_SHORT / _BM_LABELS are aliases).
-# Views of lib/models.py — change a label there, not here. The ablation arms are
-# included so a lookup works unchanged inside `ablation_mode()`.
+# One naming convention for every reference-interval method, used by calibration, prevalence and
+# benchmark figures alike (RI_SHORT / _BM_LABELS are aliases).
 _RI_AND_ARMS = models.group("ri") + models.group("norma_arm")
 RI_LABELS = models.labels(_RI_AND_ARMS)
 _BM_LABELS = RI_LABELS
 _BM_LABELS_MAIN = dict(RI_LABELS, Cohen_m4="Cohen")
 
-# Colour-vision-deficient-safe method palette (2026-08-31), now defined once in
-# lib/models.py; the rationale lives in that module's docstring. Includes the
-# ablation arms so a lookup works unchanged inside `ablation_mode()`.
+# Colour-vision-deficient-safe method palette (2026-08-31), now defined once in lib/models.py;
+# the rationale lives in that module's docstring.
 _BM_COLORS = models.colors(_RI_AND_ARMS)
-# Methods that are variants of one underlying approach. Grouped-bar figures, where
-# colour is the only identity channel, show at most one member (a 7-colour
-# categorical scale cannot be made CVD-safe); dot and heatmap figures show all.
+# Methods that are variants of one underlying approach.
 METHOD_FAMILY = {k: models.MODELS[k].family for k in models.group("ri")
                  if models.MODELS[k].family in ("Gaussian", "Cohen")}
-# Linestyle is the second identity channel where colour alone is too close
-# (Gaussian_trunc sits under the dE 15 floor against Gaussian_eb and NORMA).
+# Linestyle is the second identity channel where colour alone is too close (Gaussian_trunc sits
+# under the dE 15 floor against Gaussian_eb and NORMA).
 METHOD_LINESTYLE = dict(models.LINESTYLES)
 # Marker per method family, for the figures that encode the method by shape.
-# Keyed by family so `m.split("_")[0]` on a variant or an arm still resolves.
 FAMILY_MARKERS = {models.MODELS[k].family: models.marker(k) for k in _RI_AND_ARMS}
 FAMILY_MARKERS["NORMA"] = models.marker("NORMA")
 
 # ── NORMA covariate-ablation arms as first-class methods ────────────────────────
-# config.NORMA_ABLATION_RUN_IDS puts norma_<arm> rows in ref_intervals, so every
-# downstream result carries the arms as extra methods named NORMA_<arm>
-# (plotting.normalize_norma_cols only collapses the hex-id primary run, so the
-# arm names survive untouched).  `ablation_variant(fig_fn)` re-runs any existing
-# figure with the method list swapped to the arms, which is how each analysis gets
-# an <base>_ablation.pdf without duplicating its plotting code.
+# config.NORMA_ABLATION_RUN_IDS puts norma_<arm> rows in ref_intervals, so every downstream
+# result carries the arms...
 ABLATION_RUN_IDS = list(NORMA_ABLATION_RUN_IDS)
 ABLATION_METHODS = ["NORMA"] + [f"NORMA_{r}" for r in ABLATION_RUN_IDS]
-# Plots use the shorthand codes (NORMA-B, -A, -S, -C, -AS, ...; key in
-# models.SHORT_KEY for the caption); tables use models.label(m) -- the full text.
-# In ablation figures the main run is one arm among others: label it by its own
-# code and mark it, not as NORMA_RI.
+# Plots use the shorthand codes (NORMA-B, -A, -S, -C, -AS, ...; key in models.SHORT_KEY for the
+# caption); tables use models.label(m) -- the full text.
 _MAIN_RUN = NORMA_RUN_ID
 ABLATION_LABELS = {m: models.label(m, short=True) for m in ABLATION_METHODS}
 ABLATION_LABELS["NORMA"] = models.RUN_SHORT.get(_MAIN_RUN, "NORMA")             # the main run, unmarked
 ABLATION_KEY = models.SHORT_KEY
-# Any figure that looks an arm up in RI_LABELS (the per-stage legends) gets the
-# same code, so an arm is named identically in every plot of the pipeline.
+# Any figure that looks an arm up in RI_LABELS (the per-stage legends) gets the same code, so an
+# arm is named identically in every plot of the pipeline.
 for _m in ABLATION_METHODS:
     if _m != "NORMA":
         RI_LABELS[_m] = ABLATION_LABELS[_m]
 ABLATION_COLORS = models.colors(ABLATION_METHODS)
-# There used to be a second arm registry here (NORMA_ARM_LABELS / _COLORS) with
-# different labels and different hues, so one arm was "+age at draw" in #E8734A
-# in 07_classify and "+ age at draw" in #C2185B in 06_calibration. Both names now
-# point at the one registry; keep them until the 06_calibration call sites move.
+# There used to be a second arm registry here (NORMA_ARM_LABELS / _COLORS) with different labels
+# and different hues, so one arm was "+age at draw" in #E8734A in 07_classify and "+ age at draw"
+# in...
 NORMA_ARM_LABELS = ABLATION_LABELS
 
-# ── Every arm, not only the ones carried through the pipeline ────────────────
-# ABLATION_METHODS above is what NORMA_ABLATION_RUN_IDS forwards, i.e. what a
-# figure can actually plot. These are all twenty arms trained since the
-# covariate ablation began, so a figure can show what was tried and mark the
-# rest, rather than silently omitting it. Order and grouping come from
-# run_names, the one registry of run identities.
+# ── Every arm, not only the ones carried through the pipeline ──────────────── ABLATION_METHODS
+# ABLATION_METHODS above is what NORMA_ABLATION_RUN_IDS forwards, i.e. what a figure can plot.
 from run_names import ALL_ARMS, ARM_GROUP, arm_short   # noqa: E402
 
 ALL_ARM_METHODS = [f"NORMA_{r}" for r in ALL_ARMS]
@@ -1009,27 +887,7 @@ def arm_trained():
 
 
 def arm_notes(present, methods=None, split_text=None):
-    """{method: why it is blank} for arms with nothing to plot.
-
-    Two statements a blank row cannot distinguish on its own:
-
-      "not trained"   the run never produced predictions
-      "not run here"  the arm exists but this analysis was not run over it,
-                      usually because NORMA_ABLATION_RUN_IDS was narrower when
-                      the stage last ran
-
-    split_text adds a third, and only a *paired* figure may pass it. A
-    comparison that pairs arms on identical target rows cannot include an arm
-    trained with --split_by patient, because it shares no test row with the
-    rest. Per-arm figures -- coverage, width, conformal widening -- have no such
-    constraint: the patient-split arms are missing from the cohort-level ones
-    simply because 04_refs and 06_calibration were never run over them, which is
-    "not run here". Saying "separate figure" there would claim a methodological
-    barrier that does not exist.
-
-    Read from disk rather than from a constant, so an arm that finishes training
-    stops being described as untrained without anyone editing this.
-    """
+    """{method: why it is blank} for arms with nothing to plot."""
     methods = methods or ALL_ARM_METHODS
     trained = arm_trained()
     out = {}
@@ -1050,11 +908,7 @@ _METHOD_SET = None      # None = normal figures; a list = ablation mode
 
 
 def bm_methods(default=None):
-    """The method list a fig_* function should draw.
-
-    Returns the ablation arms inside `ablation_mode()`, otherwise the usual set.
-    Figures call this instead of referencing _BM_SUPP directly so that one
-    definition drives both the normal and the ablation version."""
+    """The method list a fig_* function should draw."""
     if _METHOD_SET is not None:
         return list(_METHOD_SET)
     return list(default if default is not None else _BM_SUPP)
@@ -1089,8 +943,8 @@ def ablation_variant(fn):
             return fn(*args, **kwargs)
     return wrapped
 _BM_MARKERS = ["o", "s", "^", "D"]   # positional, one per outcome — not per method
-# Reclassification rate is no longer a benchmark panel: 07_classify/reclassification.pdf
-# and prevalence_overall.pdf show it per lab and per method for every cohort.
+# Reclassification rate is no longer a benchmark panel: 07_classify/reclassification.pdf and
+# prevalence_overall.pdf show it per lab and per method for every cohort.
 BENCHMARK_PANELS = ["ppv", "auroc", "sensitivity", "specificity", "hr_fraction", "concordance"]
 _bm_method = models.collapse_run_id   # keeps the ablation arms separable
 def _bm_bars(ax, df, value_col, outcomes, ylabel, ref=None, agg="median",
@@ -1150,23 +1004,11 @@ def pending_axis(ax, cohort):
 def heatmap_blocks(blocks, columns, cmap, vmin, vmax, fmt, cbar_label, extend="neither",
                    neg_color=None, col_groups=None, legend_extra=(), cell_w=0.255, cell_h=0.175,
                    row_label_fontsize=5, small_n=SMALL_N):
-    """Stacked heatmap blocks, one per cohort, sharing the column axis.
-
-    blocks: list of (cohort, block) where block is None (pending) or a dict with
-        mat        rows x columns values (annotated with fmt)
-        rows       row labels
-        shown      optional matrix driving the colour (default: mat)
-        nmat       optional matrix of counts; cells below `small_n` get grey text
-                   (raise it where the figure asks the reader to compare cells that
-                   differ by a fraction of a percent: 74 EHRSHOT targets cannot
-                   separate two NORMA arms)
-        row_groups optional list of group keys per row; separators between groups
-    columns: column labels (shared); col_groups: {group: members} for brackets.
-    """
+    """Stacked heatmap blocks, one per cohort, sharing the column axis."""
     n_c = len(columns)
-    # Left margin holds only the row labels; the cohort name is on the right
-    # (Aashna 2026-08-31), between the cells and the colourbar, so `right` carries
-    # the name (_coh_w), the bar and the bar's own label.
+    # Left margin holds only the row labels; the cohort name is on the right (Aashna 2026-08-31),
+    # between the cells and the colourbar, so `right` carries the name (_coh_w), the bar and the
+    # bar's own label.
     left, right, _coh_w = 0.72, 1.20, 0.22
     W = left + cell_w * n_c + right
     y_legend, y_bracket, y = 0.08, 0.50, 0.70
@@ -1278,8 +1120,8 @@ def dot_blocks(frames, metrics, methods, colors, labels, open_marker=(), block_k
     for c, d in frames:
         blocks.append((c, d, y0)); y0 += n_m + 1
     y_max = y0 - 1
-    # Cohort names sit on the right of the last column, not the left of the first
-    # (Aashna 2026-08-31), so the reading order is metric axes then cohort.
+    # Cohort names sit on the right of the last column, not the left of the first (Aashna
+    # 2026-08-31), so the reading order is metric axes then cohort.
     _lab_w = 0.30 if label_rotation else 0.72
     left, right, gap_c, top, bottom = 0.10, _lab_w, 0.30, 0.42, 0.34
     if row_labels:   # left margin has to hold the longest method name
@@ -1334,8 +1176,8 @@ def dot_blocks(frames, metrics, methods, colors, labels, open_marker=(), block_k
                            fontsize=FONT_AXIS, rotation=label_rotation, va="center")
 
     if not share_x:
-        # One axis per (metric, cohort): each cohort keeps its own scale, so the
-        # ticks have to be repeated under every block rather than once at the foot.
+        # One axis per (metric, cohort): each cohort keeps its own scale, so the ticks have to be
+        # repeated under every block rather than once at the foot.
         tick_h = 0.20                       # room for a block's own x tick labels
         block_h = row_h * n_m; block_gap = row_h + tick_h
         h_total = len(blocks) * block_h + (len(blocks) - 1) * block_gap
@@ -1418,15 +1260,11 @@ def output_name(base, ds, suffix):
     return "_".join(parts)
 
 
-# Export everything, including the imports re-exported for the per-analysis
-# modules (load_result, DATASETS, METHOD_COLORS, …) and the underscore-prefixed
-# helpers the fig_/table_ functions rely on. An explicit __all__ is required
-# because `import *` skips underscore names by default.
+# Export everything, including the imports re-exported for the per-analysis modules (load_result,
+# DATASETS, METHOD_COLORS, …) and the underscore-prefixed helpers the fig_/table_ functions rely
+# on.
 
-
-# ═══════════════════════════════════════════════════════════════════════════
 # Table helpers and TableSpec
-# ═══════════════════════════════════════════════════════════════════════════
 
 def _fmt_hr(hr, lo, hi):
     if any(pd.isna(v) or not np.isfinite(v) for v in (hr, lo, hi)) or hr > 100:
@@ -1476,13 +1314,9 @@ def _fmt_val(mean, lo, hi, metric):
 TableSpec = namedtuple("TableSpec", "analysis base fn per_dataset requires expected")
 
 
-# Export everything, including the imports re-exported for the per-analysis
-# modules (load_result, DATASETS, METHOD_COLORS, …) and the underscore-prefixed
-# helpers the fig_/table_ functions rely on. An explicit __all__ is required
-# because `import *` skips underscore names by default.
+# Export everything, including the imports re-exported for the per-analysis modules (load_result,
+# DATASETS, METHOD_COLORS, …) and the underscore-prefixed helpers the fig_/table_ functions rely
+# on.
 
-
-# Export everything, including the underscore-prefixed helpers the fig_/table_
-# functions rely on. An explicit __all__ is required because `import *` skips
-# underscore names by default.
+# Export everything, including the underscore-prefixed helpers the fig_/table_ functions rely on.
 __all__ = [_n for _n in dir() if not _n.startswith("__")]

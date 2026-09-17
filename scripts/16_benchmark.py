@@ -8,48 +8,9 @@ therefore works on the continuous deviation z = |value - centre| / halfwidth
 per patient as the max over that analyte's index measurements, on the patients
 ALL methods can score.
 
-  comparison       threshold-free AUROC of z per analyte x method x outcome, the
-                   native operating point (flag rate, PPV, lift) and PPV / lift at
-                   matched alert budgets (top 5 / 10 / 20 % of patients)
-                   -> 16_method_comparison.csv (per analyte + analyte="median")
-  operating_point  every method re-thresholded to the SAME operating point (R1-6,
-                   R3-M2/M3): anchors native | rate:<r> (5/10/20/30 %) |
-                   rate_of:<M> (M's native rate; M = PopRI, NORMA, PerRI) |
-                   sensitivity:<s> (0.5, 0.8) | specificity:<s> (0.9, 0.95), each
-                   with flag rate, sensitivity, specificity, PPV, NPV, lift
-                   -> 16_matched_operating_point.csv (per analyte + analyte="median")
-  burden           does a method degrade on patients with an abnormal history?
-                   Pairs stratified by the fraction of their BASELINE values outside
-                   Pop_RI (0 % / 1-25 / 26-50 / >50); flag rate and interval width
-                   per stratum and method (the centre is 05_forecasting's concern)
-                   -> 16_abnormal_burden.csv (per analyte + analyte="median" rows)
-  significance     where does NORMA beat each comparator (Referee 2.2)?  Paired
-                   DeLong test of the two AUCs on the same patients, per analyte x
-                   outcome, BH-FDR within (outcome, comparator) plus a global
-                   correction; on the Pop_RI-normal subset, the tests a population
-                   interval calls normal and a personalised one can reclassify
-                   -> 16_significance.csv
-
 Usage:
     python 16_benchmark.py --dataset eicu
     python 16_benchmark.py --dataset eicu --only operating_point --subsets pop_normal
-
-Figures and tables
-------------------
-Only what this folder's own scripts produce lives here. The per-method PPV /
-balanced-accuracy / sensitivity / specificity panels are 12_eval/methods_<ds>,
-the HR-fraction / concordance panels are 13_cox/methods_<ds>, and the
-reclassification rate is 07_classify/reclassification.
-
-  circos_matched_<ds>      the 12_eval circos redrawn with NORMA re-thresholded to Per_RI's flag
-                           rate (16_benchmark.py, operating_point step): read next to circos_<ds>, it
-                           shows how much of the native difference is operating point rather than
-                           estimation (R1-6 / R3-M2 / R3-M3)
-The pooled-bar matched_operating_point figures were dropped 2026-09-04 (pooled medians could
-not be read against the per-lab circos); a per-analyte dumbbell version was tried the same
-day and dropped as hard to read; method_comparison[_all,_norma] went the same day because
-12_eval/methods_all already shows the AUROC and the 10 % flag (lift there = relative risk).
-The comparison step's CSVs are still written for the tables.
 """
 import bootstrap  # noqa: F401
 
@@ -65,8 +26,8 @@ from metrics import delong_test, population_reference_range
 from metrics import (auroc, bh_fdr, method_prefix, operating_point, patient_level, ppv_at_budget,
                         threshold_for_rate, threshold_for_sensitivity, threshold_for_specificity)
 
-# Reuse is keyed on these: a step whose files are all present is skipped
-# unless --force (datasets.already_done).
+# Reuse is keyed on these: a step whose files are all present is skipped unless --force
+# (datasets.already_done).
 STEP_OUTPUTS = {
     "comparison": ["method_comparison.csv"],
     "operating_point": ["matched_operating_point.csv"],
@@ -157,9 +118,7 @@ def per_subset_and_outcome(ds, classified, methods, outcomes, subsets, compute, 
     return rows
 
 
-# =============================================================================
 # comparison
-# =============================================================================
 
 def native_operating_point(patients):
     """Flag rate, PPV and lift of the method's own flag rule, or NaNs."""
@@ -221,9 +180,7 @@ def run_comparison(ds, classified, methods, outcomes, args, results_dir):
                             metric_cols)
 
 
-# =============================================================================
 # operating_point
-# =============================================================================
 
 def anchor_method(methods, name):
     hits = [m for m in methods if m == name or m.startswith(name + "_")]
@@ -298,9 +255,7 @@ def run_operating_point(ds, classified, methods, outcomes, args, results_dir):
                             ["subset", "outcome", "method", "anchor", "target"], ["auroc"] + OP_METRICS)
 
 
-# =============================================================================
 # burden
-# =============================================================================
 
 def baseline_burden(ds):
     """Per (patient, analyte): fraction of the BASELINE values outside Pop_RI."""
@@ -313,8 +268,8 @@ def baseline_burden(ds):
     keys = list(zip(baseline["analyte"], baseline["sex"]))
     low = np.array([ranges[k][0] for k in keys], dtype=float)
     high = np.array([ranges[k][1] for k in keys], dtype=float)
-    # an analyte without a published interval gives (None, None); comparing against NaN
-    # is False both ways, which would score every such value as normal
+    # an analyte without a published interval gives (None, None); comparing against NaN is False
+    # both ways, which would score every such value as normal
     value = baseline["value"].to_numpy()
     known = np.isfinite(low) & np.isfinite(high)
     baseline["_abnormal"] = np.where(known, ((value < low) | (value > high)).astype(float), np.nan)
@@ -386,9 +341,7 @@ def run_burden(ds, classified, methods, args, results_dir):
     print(f"Wrote {results_dir}/abnormal_burden.csv")
 
 
-# =============================================================================
 # significance
-# =============================================================================
 
 def paired_delong(grp, reference, comparator, event_col, min_patients, min_events):
     """DeLong test of reference vs comparator on the patients both score, or None."""
@@ -400,8 +353,8 @@ def paired_delong(grp, reference, comparator, event_col, min_patients, min_event
     if len(joined) < min_patients:
         return None
     n_events = int(joined["event"].sum())
-    # both classes need enough members: DeLong's variance is undefined with a single
-    # member in either class, which used to surface as p = 0
+    # both classes need enough members: DeLong's variance is undefined with a single member in
+    # either class, which used to surface as p = 0
     if min(n_events, len(joined) - n_events) < min_events:
         return None
     r = delong_test(joined["z"].to_numpy(), joined["z_comp"].to_numpy(), joined["event"].to_numpy())
@@ -411,9 +364,9 @@ def paired_delong(grp, reference, comparator, event_col, min_patients, min_event
 
 
 def run_significance(ds, classified, methods, outcomes, args, results_dir):
-    # NORMA is the reference the manuscript tests against; on a cohort run with
-    # --no_norma the personalised baseline Per_RI takes its place, so the step still
-    # produces the pairwise DeLong table (the `reference` column names which it was).
+    # NORMA is the reference the manuscript tests against; on a cohort run with --no_norma the
+    # personalised baseline Per_RI takes its place, so the step still produces the pairwise
+    # DeLong table (the...
     reference = (args.reference
                  or next((m for m in methods if m.startswith("NORMA")), None)
                  or next((m for m in ("PerRI", "PopRI") if m in methods), None))
@@ -470,9 +423,7 @@ def run_significance(ds, classified, methods, outcomes, args, results_dir):
     print(f"\nWrote {path} ({len(df)} comparisons)")
 
 
-# =============================================================================
 # main
-# =============================================================================
 
 def main():
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -492,8 +443,6 @@ def main():
     ds = get_dataset(args)
     results_dir = ds.setup_output()
     # Reuse is the default: drop any step whose output is already written.
-    # This runs BEFORE the classification is loaded, so a fully-cached run
-    # costs nothing rather than paying the read and then skipping.
     todo = [s for s in args.only
             if not already_done(args, results_dir, *STEP_OUTPUTS[s], label=s)]
     if not todo:
@@ -505,8 +454,8 @@ def main():
     if missing:
         print(f"  Attaching outcomes: {missing}")
         classified = ds.attach_outcomes(classified)
-    # only methods whose interval columns exist in this cohort (some NORMA arms are
-    # scored on eICU before the external cohorts catch up)
+    # only methods whose interval columns exist in this cohort (some NORMA arms are scored on
+    # eICU before the external cohorts catch up)
     methods = [m for m in ds.methods
                if f"{m}_class" in classified.columns or f"{method_prefix(m)}_low" in classified.columns]
     print(f"  {len(classified):,} measurements, {classified['patient_id'].nunique():,} patients, "
@@ -526,9 +475,7 @@ def main():
         run_significance(ds, classified, methods, outcomes, args, results_dir)
 
 
-# ═════════════════════════════════════════════════════════════════════════
 # Figures and tables
-# ═════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 

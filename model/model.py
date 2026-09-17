@@ -4,9 +4,8 @@ import math
 from scipy.stats import t as scipy_t
 import torch.nn.functional as F
 
-# Output modes whose forward returns five quantiles (B, 5) at NORMA2.QUANTILES.
-# 'gate' and 'nig' also keep their distribution parameters on model.last_params
-# for the loss (see loss.py QuantilePriorLoss mode 'gate' and StudentTNLLLoss).
+# Output modes whose forward returns five quantiles (B, 5) at NORMA2.QUANTILES. 'gate' and 'nig'
+# also keep their distribution parameters on model.last_params for the loss (see loss.py...
 QUANTILE_OUTPUT_MODES = ('quantile', 'gate', 'nig')
 
 
@@ -14,13 +13,8 @@ def is_quantile_mode(output_mode):
     return output_mode in QUANTILE_OUTPUT_MODES
 
 
-
 class TimeEmbedding(nn.Module):
-    """Improved time embedding: log-delta-t + Time2Vec on deltas.
-
-    Uses inter-measurement gaps (delta_t) instead of absolute time,
-    plus log(delta_t + 1) for a monotonic signal that encodes "how far apart."
-    """
+    """Improved time embedding: log-delta-t + Time2Vec on deltas."""
 
     def __init__(self, d_model):
         super().__init__()
@@ -43,10 +37,7 @@ class TimeEmbedding(nn.Module):
 
 
 class TimeEmbeddingQuery(nn.Module):
-    """Time embedding for the query token: encodes the horizon (gap from last obs).
-
-    Uses log(horizon + 1) + periodic + linear on the raw horizon value.
-    """
+    """Time embedding for the query token: encodes the horizon (gap from last obs)."""
 
     def __init__(self, d_model):
         super().__init__()
@@ -67,49 +58,6 @@ class TimeEmbeddingQuery(nn.Module):
 class NORMA2(nn.Module):
     """NORMA v2: decoder-only transformer with improved time encoding,
     within-sequence normalization, and quantile output heads.
-
-    Sequence layout: [context] [hist_1 ... hist_T] [query]
-    - context: single token encoding patient demographics (sex, age, lab code)
-    - hist: value + state + time per measurement
-    - query: target state + prediction horizon
-
-    Key changes from NormaLight:
-    1. Context token for demographics (no repeated sex/age/lab on every token)
-    2. Log-delta-t time encoding (monotonic) instead of Time2Vec
-    3. Within-sequence normalization (subtract mean, divide by std)
-    4. Quantile output heads (or Gaussian via output_mode='gaussian')
-    5. Binned age embedding
-
-    causal_memory (default False) reproduces the published forward pass. The layers
-    are nn.TransformerDecoderLayer called with memory=tgt=tokens; tgt_mask makes the
-    self-attention block causal but memory_mask is left None, so the cross-attention
-    block sees the whole sequence and history token i can read history token j > i.
-    This does not leak the label (the target value is never a token and only the last
-    position is read out), but it makes the causal mask inert and the encoder
-    effectively bidirectional over history. Set causal_memory=True to mask both
-    blocks. Required before supervising positions other than the last, or before
-    feeding a time-sorted multi-analyte stream where a co-analyte drawn at the query
-    timestamp would otherwise be visible. Changes predictions, so published
-    checkpoints must keep the default.
-
-    Optional per-measurement covariates (revision ablation; all default off, in
-    which case the module and its state_dict are identical to the original):
-    - use_age_t:      binned age-at-draw embedding on every history token and
-                      age-at-query on the query token (context keeps age at first draw)
-    - use_setting:    care-setting embedding (process/covariates.SETTING_VOCAB) on
-                      history tokens and on the query token (setting of the next draw)
-    - use_coanalytes: for each history token, the other analytes drawn at the same
-                      timestamp: PopRI-normalised value, drawn/not-drawn mask and the
-                      co-analyte's own population state (low / normal / high, i.e.
-                      value < 0 / in [0, 1] / > 1 after normalisation), linearly
-                      projected and added to the token. Co-analytes are inputs only;
-                      the query still conditions on the target analyte's state alone.
-    - query_coanalytes: additionally add the most recent *prior* panel to the query
-                      token, through the same co_proj (no new parameters). Without it
-                      the encoder can lean on co-analytes that the query cannot use,
-                      an asymmetry that lets the model be confident for a reason not
-                      available at prediction time. Never sees the target draw's own
-                      panel: co_h already excludes it (data.py takes draw_idx[:-1]).
     """
 
     QUANTILES = [0.025, 0.25, 0.50, 0.75, 0.975]
@@ -169,15 +117,14 @@ class NORMA2(nn.Module):
         if output_mode == 'quantile':
             self.quantile_head = nn.Linear(d_model, len(self.QUANTILES))
         elif output_mode == 'gate':
-            # Own quantiles + a trust gate g in (0, 1); the returned quantiles are
-            # g * own + (1 - g) * state-conditional population quantiles (prior_q).
+            # Own quantiles + a trust gate g in (0, 1); the returned quantiles are g * own + (1 -
+            # g) * state-conditional population quantiles (prior_q).
             self.quantile_head = nn.Linear(d_model, len(self.QUANTILES))
             self.gate_head = nn.Linear(d_model, 1)
         elif output_mode == 'nig':
-            # Conjugate normal-inverse-gamma head: the network emits sufficient
-            # statistics (setpoint estimate, observed within-person variance, an
-            # effective sample size <= n) and the interval is the closed-form
-            # Student-t posterior predictive under the population prior.
+            # Conjugate normal-inverse-gamma head: the network emits sufficient statistics
+            # (setpoint estimate, observed within-person variance, an effective sample size <= n)
+            # and the interval is the closed-form...
             self.mean_head = nn.Linear(d_model, 1)
             self.logvar_head = nn.Linear(d_model, 1)
             self.neff_head = nn.Linear(d_model, 1)
@@ -185,10 +132,7 @@ class NORMA2(nn.Module):
             self.mean_head = nn.Linear(d_model, 1)
             self.logvar_head = nn.Linear(d_model, 1)
 
-        # State-conditional population prior, indexed [code, state, sex]. Filled by
-        # set_prior_table (priors.py) before training and restored from the
-        # checkpoint afterwards. Only read by the 'gate' and 'nig' heads.
-        # (Registered only for those heads so older checkpoints still load strictly.)
+        # State-conditional population prior, indexed [code, state, sex].
         Q = len(self.QUANTILES)
         if output_mode in ('gate', 'nig'):
             self.register_buffer('prior_q', torch.zeros(ncodes, nstates, 2, Q))
@@ -238,11 +182,7 @@ class NORMA2(nn.Module):
         return torch.clamp((age - 20) / 10, min=0, max=self.age_bins - 1).long()
 
     def _seq_normalize(self, x_h, pad_mask, obs_mask=None):
-        """(x - mean) / std over valid positions. Returns normalized x, mean, std.
-
-        obs_mask (B,T) excludes positions carrying no target-analyte value, which
-        exist only in use_full_panel mode. Folding those zeros into the mean/std
-        would corrupt the statistics the output head is denormalized by."""
+        """(x - mean) / std over valid positions. Returns normalized x, mean, std."""
         if pad_mask is not None:
             valid = (~pad_mask).unsqueeze(-1).float()
         else:
@@ -279,8 +219,8 @@ class NORMA2(nn.Module):
         s_h = s_h.long()
         s_next = s_next.view(-1).long()
 
-        # use_full_panel: the history spans every draw of the patient, so some
-        # positions carry no target-analyte value. obs_h marks the ones that do.
+        # use_full_panel: the history spans every draw of the patient, so some positions carry no
+        # target-analyte value.
         obs = obs_h.float() if (self.use_full_panel and obs_h is not None) else None
 
         # Within-sequence normalize values
@@ -341,9 +281,7 @@ class NORMA2(nn.Module):
             co_feat = self._co_features(co_h, co_mask)                 # (B, T, 5K)
             hist = hist + self.co_proj(co_feat)
             if self.query_coanalytes:
-                # The most recent panel the patient already has. co_h excludes the
-                # target draw, so this stays strictly causal; it only makes the query
-                # symmetric with the history tokens.
+                # The most recent panel the patient already has.
                 co_q = co_feat[torch.arange(B, device=co_feat.device), last]   # (B, 5K)
                 query = query + self.co_proj(co_q)
 
@@ -394,9 +332,9 @@ class NORMA2(nn.Module):
             else:
                 n = torch.full_like(mu_hat, float(T))
             n_eff = n * torch.sigmoid(self.neff_head(query_features))
-            # population prior: setpoint ~ N(m0, sigma^2 / kappa0), sigma^2 ~ InvGamma(nu0/2, nu0 sigma0^2/2)
-            # with sigma0^2 = rho * var_pop (within-person share) and kappa0 = rho/(1-rho), so
-            # that at n_eff = 0 the predictive variance is sigma0^2 (1 + 1/kappa0) = var_pop.
+            # population prior: setpoint ~ N(m0, sigma^2 / kappa0), sigma^2 ~ InvGamma(nu0/2, nu0
+            # sigma0^2/2) with sigma0^2 = rho * var_pop (within-person share) and kappa0 =
+            # rho/(1-rho), so that at n_eff = 0...
             m0 = self.prior_mu[lab, s_next, sex].unsqueeze(-1)
             var_pop = self.prior_var[lab, s_next, sex].unsqueeze(-1)
             rho = self.prior_rho[lab].unsqueeze(-1).clamp(0.05, 0.95)

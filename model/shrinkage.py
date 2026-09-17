@@ -2,29 +2,7 @@
 """Post-hoc Bayesian shrinkage of NORMA's interval toward the population prior,
 and the real-data diagnostic behind it: coverage and width by history length.
 
-For every prediction row the blended quantiles are
-
-    q_blend = w * q_norma + (1 - w) * q_prior,   w = n / (n + k)
-
-with n the number of target-analyte observations in the history and q_prior the
-state-conditional population quantiles (priors.py: the sex-specific Pop_RI read as
-a normal distribution for normal-state queries, the dev-cohort empirical
-distribution for low/high). k is chosen on the VAL split so the 95% interval of
-normal-state queries covers 95%; the test split is then reported by history-length
-bin for the raw model, the blend, and a conformal comparator that multiplies every
-interval by one constant fitted the same way (what a constant widening can and
-cannot fix).
-
-Runs without n_hist in predictions_combined.csv (arms trained before 2026-09-08)
-get it from the sequence pickle by (pid, cid, t_next, x_next); sex comes from the
-same lookup.
-
-Outputs (logs/prior_ablation/<run>/):
-    shrinkage_grid.csv     val coverage / width for every k
-    by_nhist.csv           test metrics x history bin x method x state
-    summary.csv            one row per method (test, normal-state and all)
-    by_nhist.pdf           coverage and relative width vs history length
-
+Usage:
     python shrinkage.py --runs q_age_set 334f7e21
     python shrinkage.py --runs pa_k5 --k 0          # diagnostic only, no blend
 """

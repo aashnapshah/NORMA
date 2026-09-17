@@ -3,69 +3,9 @@
 both disease-agnostic (the endpoint is the lab value itself leaving Pop_RI) and both
 DIRECTIONAL.  Clinical endpoints live in 17_outcomes.
 
-  future_abnormal  Cohen et al. 2021 Fig. 5b (Methods, "Abnormal lab classification
-                   models") on every RI method, in hospital time:
-                     pairs     aged 20-90; index = the first measurement after the
-                               baseline, inside Pop_RI; >= --min-normal-frac of the
-                               baseline inside Pop_RI (Cohen: all)
-                     outcome   ONE test, the first --gap..--horizon h after the index
-                               (Cohen: one sampled test 2 y on), so the retest count
-                               does not move the label
-                     endpoints abnormal high and abnormal low, separately; score = the
-                               signed deviation from each method's centre toward that side
-                     matching  normals downsampled to the abnormals' 5-year age x sex mix;
-                               every method scored on the same matched sample
-                     RR        cutoff at --sensitivity (their 0.2) per 10-year age band x
-                               sex, TP/FP re-weighted to the population before downsampling
-                   plus AUROC (DeLong CI) and AUPRC on the matched sample, and the AUROC
-                   within quintiles of position inside Pop_RI (what a method adds beyond
-                   how close the value already is to the bound).  Not transferable from
-                   Cohen: the healthy-patient, medication and lab-hours filters.  Pop_RI
-                   defines the endpoint, so it is a reference line, not a competitor.
-                   Also the centre bias of every method at the index.
-                   -> 11_future_abnormal.csv (per analyte x direction, analyte="median"
-                      with direction "all" / high / low, age band x sex rows),
-                      11_centre_bias.csv
-
-  lead_time        how many hours (and tests) BEFORE a value leaves Pop_RI does
-                   each method already flag it, at equal alert burden?  A deviation
-                   toward the population centre is never a flag
-                   (lib/ri_metrics.deviates_toward_bound); a pair enters only if
-                   retested in the window.  Cohort = pairs with a Pop_RI-normal
-                   index value, fixed --window;
-                   every follow-up measurement scored.  Anchors:
-                     native      each method's own rule, z > 1 (NORMA's flags contain
-                                 Pop_RI's here, so it is earlier by construction)
-                     soc_rate    every method thresholded to the standard of care's
-                                 MEASUREMENT-LEVEL flag rate -- equal burden
-                     early_sens  every method at the same EARLY sensitivity
-                                 (--early-sens): the false alarms this costs
-                   plus a threshold sweep (target_rate rows of 11_lead_time.csv, an early-detection
-                   ROC).  Among pairs reaching the endpoint: lead in hours AND in
-                   tests, stratified by tests/day tertile, fraction flagged >= h
-                   hours before; flags among non-events; alerts per 100 pair-days.
-                   The standard of care fires exactly AT the endpoint (lead 0).
-                   -> 11_lead_time.csv (age_band / target_rate = "all" for the pooled rows)
-
 Usage:
     python 11_lead_time.py --dataset eicu
     python 11_lead_time.py --dataset eicu --only lead_time --window 72
-
-Figures and tables
-------------------
-Everything here is disease-agnostic: the endpoint is the lab value itself
-leaving Pop_RI.  Clinical-endpoint figures live in 17_outcomes.
-  future_abnormal        RR of a future Pop_RI-abnormal value per method, one panel
-                         per cohort (Cohen Fig. 5b pooled over endpoints)
-  future_abnormal_age_<ds>  the same RR against age, one panel per analyte x endpoint
-  lead_time              fraction of eventually-abnormal pairs each method had already
-                         flagged h hours before the crossing, one panel per cohort
-  lead_time_analyte      median lead (hours) of an early flag per analyte, one panel per
-                         cohort, Per_RI / Cohen / NORMA only
-  *_norma                the NORMA covariate arms instead of the RI methods
-Pop_RI defines the endpoint, so it is never a series.  Trimmed 2026-09-04: the
-flagged-early panel, the age variants of lead time, the early-detection ROC and
-the centre-bias diagnostic were removed.
 """
 import bootstrap  # noqa: F401
 
@@ -82,8 +22,8 @@ from metrics import cut_at_sensitivity, jitter, matched_sensitivity_flags, strat
 from metrics import delong_auc_cov, signed_z
 from sklearn.metrics import average_precision_score
 
-# Reuse is keyed on these: a step whose files are all present is skipped
-# unless --force (datasets.already_done).
+# Reuse is keyed on these: a step whose files are all present is skipped unless --force
+# (datasets.already_done).
 STEP_OUTPUTS = {
     "future_abnormal": ["future_abnormal.csv"],
     "lead_time": ["lead_time.csv"],
@@ -103,13 +43,9 @@ def time_in_hours(df):
     raise KeyError(f"no usable time column; looked for {TIME_COLUMNS}")
 
 
-# ── per-chunk pair cache ────────────────────────────────────────────────────
-# A chunked cohort cannot hold its classification in one frame, and a run over a
-# SUBSET of chunks should be progress rather than a throwaway.  So the reduction that
-# both steps start from -- one row per (patient, analyte) -- is cached next to each
-# chunk, and the scoring streams it one analyte at a time.  The metric code is the
-# same code the unchunked cohorts run, on the same rows, so the numbers are identical;
-# only the order they are read in changes.
+# ── per-chunk pair cache ──────────────────────────────────────────────────── A chunked cohort
+# cannot hold its classification in one frame, and a run over a SUBSET of chunks should be
+# progress...
 PAIRS_CACHE = "11_future_pairs"        # a directory: one parquet per analyte
 
 
@@ -175,15 +111,9 @@ def load_classified(ds):
     return cls, methods
 
 
-# =============================================================================
 # future_abnormal
-# =============================================================================
 
-
-# Cohen et al. 2021, Methods "Abnormal lab classification models": abnormal high and
-# abnormal low are separate endpoints, patients aged 20-90, normals downsampled to the
-# abnormals' age x sex mix at 5-year resolution, cutoff at 0.2 sensitivity per 10-year
-# age band x sex, RR re-weighted to the population before downsampling.
+# Cohen et al.
 ENDPOINTS = {"high": 2, "low": 0}      # endpoint -> PopRI_class of the outcome test
 AGE_RANGE = (20, 90)
 MATCH_AGE_YEARS = 5
@@ -320,15 +250,7 @@ RR_BOOT = int(os.environ.get("NORMA_RR_BOOT", "200"))   # 0 turns the RR bootstr
 
 
 def _rr_ci(z, y, strata, population, sensitivity, rng, B=None):
-    """Percentile bootstrap CI for the population-reweighted risk ratio.
-
-    Why a bootstrap: rr is PPV / prevalence on counts that have been re-weighted to the
-    population across age x sex strata, so it has no closed-form variance. Resampling
-    patients within each stratum, then re-picking that stratum's threshold at the target
-    sensitivity, puts both the sampling noise and the threshold choice into the interval.
-
-    Returns (lo, hi), or (nan, nan) when too few replicates come back finite.
-    """
+    """Percentile bootstrap CI for the population-reweighted risk ratio."""
     B = RR_BOOT if B is None else B
     if not B:
         return np.nan, np.nan
@@ -421,10 +343,7 @@ def endpoint_rows(pairs, analyte, endpoint, methods, sensitivity):
 def within_position_auc(z, y, position, n_bands=5):
     """AUROC inside quintiles of where the index value sits in Pop_RI (toward the
     endpoint's bound), n-weighted mean.
-
-    A value near a Pop_RI bound is likely to cross it whatever the method, so the plain
-    AUROC partly measures position. Inside a band every value is about equally close to
-    the bound, so what is left is the method's own signal. 0.5 = nothing beyond position."""
+    """
     position = np.asarray(position, float)
     ok = np.isfinite(position)
     if ok.sum() < 100:
@@ -499,9 +418,8 @@ def run_future_abnormal(ds, cls, methods, args, results_dir):
     if not len(per_endpoint):
         print("  no endpoint had enough data")
         return
-    # The across-endpoint rows use the SAME metric column names as the per-endpoint
-    # rows (rr, not median_rr) -- `analyte` says which kind of row it is, so one
-    # metric column serves both.  direction "all" = median over high and low endpoints.
+    # The across-endpoint rows use the SAME metric column names as the per-endpoint rows (rr, not
+    # median_rr) -- `analyte` says which kind of row it is, so one metric column serves both.
     agg = dict(n_endpoints=("analyte", "size"), n=("n", "sum"), n_events=("n_events", "sum"),
                rr=("rr", "median"), ppv=("ppv", "median"),
                sensitivity=("sensitivity", "median"), specificity=("specificity", "median"),
@@ -528,9 +446,7 @@ def run_future_abnormal(ds, cls, methods, args, results_dir):
     print("\n" + summary[summary["direction"] == ALL_SPLIT].to_string(index=False))
 
 
-# =============================================================================
 # lead_time
-# =============================================================================
 
 def lead_frames(cls, analyte, window_h):
     """(measurements, patients) for one analyte: every measurement after each pair's
@@ -667,10 +583,9 @@ def lead_rows(measurements, patients, flag, method, anchor, analyte, outcome):
     except ValueError:
         pass
 
-    # landmark view: every pair judged on its FIRST follow-up draw, outcome = the value
-    # leaves Pop_RI LATER in the window; pairs that cross on that very draw are excluded
-    # (no lead is possible).  Counting "any flag before the crossing" instead gives
-    # never-abnormal pairs the whole window and pushes every RR below 1.
+    # landmark view: every pair judged on its FIRST follow-up draw, outcome = the value leaves
+    # Pop_RI LATER in the window; pairs that cross on that very draw are excluded (no lead is
+    # possible).
     first_draw = (flagged.sort_values("t").groupby("patient_id", observed=True).head(1)
                   [["patient_id", "t", "_flag"]].rename(columns={"t": "t_m1", "_flag": "flag_m1"}))
     lm = p.merge(first_draw, on="patient_id", how="inner")
@@ -724,8 +639,8 @@ def score_method(collector, method, measurements, patients, soc_rate, analyte, l
     """Every anchor for one method on one analyte."""
     z = pd.to_numeric(measurements[f"{method}_z"], errors="coerce").to_numpy(float)
     z_any = jitter(z)                                             # ties would inflate the matched rate
-    # directional: only an exit toward the nearer Pop_RI bound can count as a flag;
-    # exits toward the population centre are sent below every threshold
+    # directional: only an exit toward the nearer Pop_RI bound can count as a flag; exits toward
+    # the population centre are sent below every threshold
     z_toward = np.where(deviates_toward_bound(measurements, method), z_any, -np.inf)
 
     def flags(z, threshold):
@@ -767,10 +682,9 @@ def score_method(collector, method, measurements, patients, soc_rate, analyte, l
 # what lead_frames and the scoring read; a chunked cohort loads these columns only
 LEAD_COLUMNS = ["patient_id", "analyte", "timestamp", "t_hours", "value", "age",
                 "PopRI_class", "pop_ri_low", "pop_ri_high"]
-# The reduction lead_frames performs -- each pair's follow-up inside the window -- cached
-# per chunk, because the classification itself is far too large to hold even a few
-# analytes at a time (42 M rows for four analytes on CHS).  The window is baked in, so
-# --force rebuilds when it changes.
+# The reduction lead_frames performs -- each pair's follow-up inside the window -- cached per
+# chunk, because the classification itself is far too large to hold even a few analytes at a time
+# (42 M...
 LEAD_CACHE = "11_lead_measurements"
 LEAD_PATIENTS = "11_lead_patients"
 
@@ -896,8 +810,8 @@ def run_lead_time(ds, cls, methods, args, results_dir):
         return
     out = pd.DataFrame(collector.rows)
     out["window_hours"] = args.window
-    # One table: the pooled rows, the age-band rows and the threshold sweep are the
-    # same analysis cut three ways, so the cut is a column ("all" = not cut).
+    # One table: the pooled rows, the age-band rows and the threshold sweep are the same analysis
+    # cut three ways, so the cut is a column ("all" = not cut).
     parts = [out]
     if collector.age_rows:
         parts.append(pd.DataFrame(collector.age_rows))
@@ -927,9 +841,7 @@ def run_lead_time(ds, cls, methods, args, results_dir):
         print(summary.to_string(float_format=lambda x: f"{x:.3f}"))
 
 
-# =============================================================================
 # main
-# =============================================================================
 
 def main():
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -958,14 +870,12 @@ def main():
     ds = get_dataset(args)
     results_dir = ds.setup_output()
     # Reuse is the default: drop any step whose output is already written.
-    # This runs BEFORE the classification is loaded, so a fully-cached run
-    # costs nothing rather than paying the read and then skipping.
     todo = [s for s in args.only
             if not already_done(args, results_dir, *STEP_OUTPUTS[s], label=s)]
     if not todo:
         return
-    # A chunked cohort never holds its whole classification: future_abnormal works from
-    # the per-chunk pair caches, lead_time one analyte batch at a time.
+    # A chunked cohort never holds its whole classification: future_abnormal works from the per-
+    # chunk pair caches, lead_time one analyte batch at a time.
     if ds.name == "chs":
         methods = [m for m in ds.methods if f"{m}_z" in set(ds.classification_columns())]
         cls = None
@@ -980,9 +890,7 @@ def main():
         run_lead_time(ds, cls, methods, args, results_dir)
 
 
-# ═════════════════════════════════════════════════════════════════════════
 # Figures and tables
-# ═════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 from models import collapse_run_id
@@ -1133,7 +1041,6 @@ def fig_future_abnormal_age(ds):
 
 # ── lead time before a value leaves Pop_RI (disease-agnostic) ────────────────
 
-
 _PER_ANALYTE = ["PerRI", "Cohen_m4", "NORMA"]
 
 
@@ -1149,8 +1056,6 @@ def _main_methods(present):
     (lib/figlib.bm_methods -- all RI methods; the NORMA arms in ablation mode).
     Pop_RI is dropped by the callers where it is the endpoint."""
     return [m for m in bm_methods() if m in present]
-
-
 
 
 def _cohort_row(draw, width=2.3, height=2.5, legend_ncol=6):
@@ -1299,15 +1204,13 @@ FIGURES = [
 ]
 
 
-# ══════════════════════════════════════════════════════════════════════════
 # Tables — 11_lead_time: table_* definitions and registry slice (disease-agnostic).
-# ══════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 from models import collapse_run_id, label as _label
 
-# save_table()'s first argument is the folder the table is written into, so it
-# must match this directory name.
+# save_table()'s first argument is the folder the table is written into, so it must match this
+# directory name.
 _FOLDER = "11_lead_time"
 _MAIN = ["PopRI", "PerRI", "Cohen_m4", "NORMA"]
 

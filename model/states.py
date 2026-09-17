@@ -1,37 +1,5 @@
 """Priors over the future state, and mixing the state-conditional predictions.
 
-NORMA is a conditional model p(x_next | H, s_next). Comparing it with baselines
-that only see the history H needs p(x_next | H), which takes two pieces -- a
-prior over s_next that uses nothing the baselines do not also see, and the
-machinery to marginalise over it:
-
-    p(x | H) = sum_s p(s | H) p(x | H, s)
-
-p(s_next | .), estimated from the *training* split only, with additive
-(Laplace) smoothing of one count per cell:
-
-  marginal    p(s_next | analyte)
-  transition  p(s_next | s_last, analyte), s_last = state of the most recent
-              history value (derived from the population reference interval,
-              so it is part of H for every method)
-
-The mixing, given those weights:
-
-  Gaussian head  each state gives (mu_s, sigma_s). The mixture mean and
-                 variance are exact; quantiles come from the mixture CDF (a sum
-                 of normal CDFs) inverted by bisection.
-  Quantile head  each state gives five quantiles. Each becomes a
-                 piecewise-linear CDF with linear tails (extrapolated at the
-                 slope of the outermost segment), the CDFs are mixed, and the
-                 mixture CDF is inverted on the union of knots. The mixture
-                 median is therefore NOT the weighted average of the state
-                 medians.
-
-Was state_prior.py and state_mixture.py; they were only ever imported together,
-by model/inference.py and scripts/04_refs.py. Not to be confused with
-priors.py, which builds the state-conditional prior over *values* that the
-prior-anchored heads and losses read.
-
 Usage:
     python states.py               # fit and write state_priors_combined.json
     python states.py --selftest    # check the mixing math
@@ -49,18 +17,13 @@ STATE_NAMES = ['low', 'normal', 'high']
 QUANTILE_LEVELS = np.array([0.025, 0.25, 0.50, 0.75, 0.975])
 QUANTILE_COLS = ['q025', 'q25', 'q50', 'q75', 'q975']
 
-# Weights that produced each run's published predictions_combined.csv.  train.py
-# writes that file from the in-memory model after the last epoch (checkpoint_latest),
-# but 167f05e8's file was regenerated later from checkpoint_best; verified by
-# re-scoring the test split against the published file (2026-08-26).
+# Weights that produced each run's published predictions_combined.csv.
 PUBLISHED_CHECKPOINT = {'334f7e21': 'latest', '167f05e8': 'best', 'q_age_set': 'latest'}
 DEFAULT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             'predictions', 'state_priors_combined.json')
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # p(s_next | .) -- the leak-free state prior
-# ═══════════════════════════════════════════════════════════════════════════
 
 def _states(seq, nstates):
     s = np.asarray(seq['s'] if nstates == 2 else seq['s3'], dtype=np.int64)
@@ -118,16 +81,12 @@ def prior_weights(priors, cid, s_last, kind='transition'):
     return out
 
 
-# ═════════════════════════════════════════════════════════════════════════
 # Mixing the state-conditional predictions into p(x_next | H)
-# ═════════════════════════════════════════════════════════════════════════
 
 # ---------------------------------------------------------------- Gaussian head
 
 def mix_gaussian(mu, log_var, w, levels=QUANTILE_LEVELS, n_iter=60):
-    """mu, log_var: (N, S); w: (N, S) rows summing to 1.
-
-    Returns dict with mixture 'mu', 'log_var' and one entry per quantile level."""
+    """mu, log_var: (N, S); w: (N, S) rows summing to 1."""
     sd = np.exp(0.5 * log_var)
     m = (w * mu).sum(1)
     v = (w * (sd ** 2 + mu ** 2)).sum(1) - m ** 2
@@ -152,10 +111,7 @@ def mix_gaussian(mu, log_var, w, levels=QUANTILE_LEVELS, n_iter=60):
 # ---------------------------------------------------------------- quantile head
 
 def _pl_knots(q, levels=QUANTILE_LEVELS):
-    """Piecewise-linear CDF knots for quantile arrays q: (N, S, K).
-
-    Returns x (N, S, K+2) and F (K+2,) with F[0]=0, F[-1]=1; the outer knots are
-    extrapolated at the slope of the outermost observed segment."""
+    """Piecewise-linear CDF knots for quantile arrays q: (N, S, K)."""
     q = np.sort(q, axis=-1)
     # enforce strict monotonicity so slopes are finite
     eps = 1e-6 * np.maximum(np.abs(q).max(-1), 1.0)
@@ -182,10 +138,7 @@ def _pl_cdf(x_eval, knots, F):
 
 
 def mix_quantiles(q, w, levels=QUANTILE_LEVELS):
-    """q: (N, S, 5) state-conditional quantiles; w: (N, S).
-
-    Returns dict with the five mixture quantiles plus 'mu' (= mixture median)
-    and 'log_var' (from the 95% width, as predict.py does)."""
+    """q: (N, S, 5) state-conditional quantiles; w: (N, S)."""
     N, S, K = q.shape
     knots, F = _pl_knots(q.astype(float), levels)
     # union of all knots per row; the mixture CDF is piecewise-linear between them
@@ -210,9 +163,7 @@ def mix_gaussian_batched(mu, log_var, w, batch=50000):
     parts = [mix_gaussian(mu[i:i + batch], log_var[i:i + batch], w[i:i + batch]) for i in range(0, len(mu), batch)]
     return {k: np.concatenate([p[k] for p in parts]) for k in parts[0]}
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Self-test for the mixing math
-# ═══════════════════════════════════════════════════════════════════════════
 
 def selftest():
         # sanity checks

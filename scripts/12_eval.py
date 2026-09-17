@@ -3,64 +3,9 @@
 deviation scores 07_classify stored.  Unit of analysis: one patient x analyte with
 the patient's worst measurement (any abnormal flag; max z for the continuous form).
 
-  metrics    PPV, NPV, sensitivity, specificity, F1 of each method's OWN flag per
-             analyte x method x outcome, on all measurements, on the Pop_RI-normal
-             ones (where personalised intervals can reclassify) and on the
-             per_normal subsets -> 12_eval.csv, one `subset` column (per-chunk counts cached on CHS)
-
-  auroc      threshold-free discrimination (R1-6, R3-M2/M3): the native flag rates
-             differ by more than 20x, so native sensitivity / specificity mostly
-             measure stringency.  Sweeping the threshold on z = |value - centre| /
-             halfwidth walks the one-parameter family of intervals the coverage
-             level indexes, and AUC is invariant to any monotone relabelling of it.
-             Per (subset, outcome, analyte, method): AUC with DeLong 95% CI, a paired
-             DeLong test against NORMA, average precision with its prevalence
-             baseline, and the case-mix adjusted reading (age + sex logistic model
-             on a 40% stratified holdout, with and without the score: auc_base /
-             auc_adj / auc_gain).  `Overall` = the worst deviation over all analytes
-             -> 12_auroc.csv
-
-  deviation  patient-level deviation score, no model fitted (Cohen Fig. 5e design):
-             the patient's WORST deviation across all analytes and draws (pooled,
-             analyte = 'all') and per analyte; `any` = max |z|, `toward` = max of
-             zs * pop_side floored at 0 (only deviations pointing at the nearer
-             Pop_RI bound count).  --landmark_h L > 0 uses only draws within L hours
-             of the patient's first scored draw and excludes patients whose event
-             or follow-up ends at or before it; L = 0 scores the whole stay.
-             Per outcome, subset, score and landmark: AUROC (DeLong CI), AUPRC /
-             prevalence (bootstrap CI), and at MATCHED flag rates (top 5/10/20 %
-             of patients, at each method's native flag, at Pop_RI's native rate):
-             PPV, NPV, lift, RR flagged vs unflagged, sensitivity, specificity
-             -> 12_deviation_score.csv
-
 Usage:
     python 12_eval.py --dataset eicu
     python 12_eval.py --dataset eicu --only auroc deviation --landmark_h 0 24
-
-Figures and tables
-------------------
-Within Pop_RI-normal tests of patients with a stable baseline:
-  circos_<ds>              radial bars of delta(NORMA - comparator) per analyte at each method's
-                           own threshold; rows = metrics, columns = outcomes; three rings per
-                           panel on one scale: inner vs Per_RI, middle vs Cohen (model 4), outer vs
-                           Empirical Bayes.  16_benchmark/circos_matched_<ds> is the single-ring
-                           Per_RI comparison with NORMA at Per_RI's flag rate
-  methods_all              every RI method on every cohort (rows) at a MATCHED flag rate: the
-                           top 10 % of patients by each method's deviation score in the first
-                           24 h are flagged, outcomes strictly after 24 h.  Columns: AUROC of
-                           the score (threshold-free), then relative risk, precision,
-                           sensitivity and specificity of that flag.  Written by
-                           12_eval.py (deviation step)
-  methods_all_norma        the NORMA covariate arms instead of the RI methods
-  roc                      ROC space, rows = cohorts, columns = outcomes: each method's median
-                           operating point over analytes (IQR whiskers), filled on all tests
-                           and hollow within Pop_RI-normal tests, joined by a line (the subset
-                           a referee read as random -- it sits on the diagonal by construction)
-Reduced 2026-09-04 from 23 families (roc, methods, auroc, by_outcome and 14 deviation
-variants, then the per-analyte relative-risk figure): the native-threshold bar figures
-confounded stringency with accuracy, the deviation variants (every draw / native / Pop_RI's
-rate, PPV / NPV per analyte) repeated one design at other anchors, and the per-analyte
-relative risks were too noisy to read.
 """
 import bootstrap  # noqa: F401
 
@@ -79,8 +24,8 @@ import datasets
 from datasets import already_done, cached_chunk_frames, read_chunk_classification, EXCLUDE_LABS, NORMA_RUN_ID, add_dataset_args, get_dataset, save_csv
 from metrics import delong_auc_cov, delong_test, hours_from_admit, to_hours, pop_side, signed_z
 
-# Reuse is keyed on these: a step whose files are all present is skipped
-# unless --force (datasets.already_done).
+# Reuse is keyed on these: a step whose files are all present is skipped unless --force
+# (datasets.already_done).
 STEP_OUTPUTS = {
     "metrics": ["eval.csv"],
     "auroc": ["auroc.csv"],
@@ -119,9 +64,7 @@ def _ci_pair(key, x, n):
     return {f"{key}_lo": lo, f"{key}_hi": hi}
 
 
-# =============================================================================
 # metrics
-# =============================================================================
 
 def _patient_flags(grp, cls_cols, outcome_col):
     """One row per patient: outcome, and per method whether ANY measurement was abnormal
@@ -299,9 +242,7 @@ def run_metrics(ds, cls, args, results_dir):
         print(f"    {outcome} / {method}: {row['mean_per_100']} had event (NNF: {row['mean_nnf']})")
 
 
-# =============================================================================
 # auroc
-# =============================================================================
 
 def _rank_auc(y, s):
     aucs, _ = delong_auc_cov(np.asarray(s, float)[None, :], np.asarray(y, float))
@@ -384,11 +325,8 @@ def auc_rows(pat, z_cols, methods, event_col, ref_col, meta):
     return rows
 
 
-# ── per-chunk patient scores (chunked cohorts) ──────────────────────────────
-# AUROC needs one score per patient, not every draw: the worst deviation each patient
-# reaches.  That reduction is chunk-local -- a patient's draws never span chunks -- so
-# it is cached per chunk and the AUCs are computed from the cached scores, which is the
-# same arithmetic on the same numbers as the unchunked path.
+# ── per-chunk patient scores (chunked cohorts) ────────────────────────────── AUROC needs one
+# score per patient, not every draw: the worst deviation each patient reaches.
 AUROC_CACHE = "12_patient_scores"      # a directory: one parquet per analyte
 
 
@@ -410,8 +348,8 @@ def chunk_patient_scores(ds, args):
         if cls is None:
             continue
         cls = _fix_analyte(cls)
-        # attach when any primary outcome lacks its column: a frame classified by an older
-        # run carries that run's outcomes and would otherwise lose one added since
+        # attach when any primary outcome lacks its column: a frame classified by an older run
+        # carries that run's outcomes and would otherwise lose one added since
         wanted = [ds.outcomes[o]["event_col"] for o in ds.primary_outcomes if o in ds.outcomes]
         if any(c not in cls.columns for c in wanted):
             cls = sub_ds.attach_outcomes(cls)
@@ -419,8 +357,8 @@ def chunk_patient_scores(ds, args):
         if len(event_cols) < len(wanted):
             print(f"    {os.path.basename(chunk_dir)}: no column for "
                   f"{sorted(set(wanted) - set(event_cols))} after attach_outcomes")
-        # a chunk classified by an older version can be missing a method's columns
-        # entirely; it keeps its rows, with that method empty, and is reported below
+        # a chunk classified by an older version can be missing a method's columns entirely; it
+        # keeps its rows, with that method empty, and is reported below
         missing = [c for c in z_cols if c not in cls.columns]
         if missing:
             print(f"    {os.path.basename(chunk_dir)}: no {', '.join(missing)} "
@@ -552,9 +490,7 @@ def _save_auroc(rows, results_dir, ds):
     print(f"  Wrote {len(out):,} rows -> {path}")
 
 
-# =============================================================================
 # deviation
-# =============================================================================
 
 def _rr_ci(a, k, c, u, z=1.96):
     """Risk ratio (a/k) / (c/u) with a log-scale 95% interval; NaN if a cell is empty."""
@@ -708,8 +644,8 @@ def deviation_rows(method, scores, cls, groups, outcomes, patients_by_outcome, t
     for landmark_h in landmarks:
         for group, in_group in groups:
             pooled = group == "all"
-            # the window starts at the patient's first scored draw of this group, as
-            # the incidence step's index draw does (classified draws begin after the history)
+            # the window starts at the patient's first scored draw of this group, as the
+            # incidence step's index draw does (classified draws begin after the history)
             t0 = pd.Series(t_draw[in_group]).groupby(pid[in_group]).min()
             in_window = np.ones(len(cls), bool)
             if landmark_h > 0:
@@ -788,9 +724,7 @@ def run_deviation(ds, cls, args, results_dir):
         print(table.round(2).to_string())
 
 
-# =============================================================================
 # main
-# =============================================================================
 
 def load_classified(ds):
     cls = _fix_analyte(ds.load_classification())
@@ -813,16 +747,14 @@ def main():
     ds = get_dataset(args)
     results_dir = ds.setup_output()
     # Reuse is the default: drop any step whose output is already written.
-    # This runs BEFORE the classification is loaded, so a fully-cached run
-    # costs nothing rather than paying the read and then skipping.
     todo = [s for s in args.only
             if not already_done(args, results_dir, *STEP_OUTPUTS[s], label=s)]
     if not todo:
         return
     print(f"  Methods: {ds.methods}")
     cls = None
-    # CHS: metrics works off the per-chunk count caches and auroc off the per-chunk score
-    # caches; only the deviation step still needs every draw in one frame.
+    # CHS: metrics works off the per-chunk count caches and auroc off the per-chunk score caches;
+    # only the deviation step still needs every draw in one frame.
     if args.dataset != "chs" or "deviation" in todo:
         cls = load_classified(ds)
     if "metrics" in todo:
@@ -836,17 +768,15 @@ def main():
         run_deviation(ds, cls, args, results_dir)
 
 
-# ═════════════════════════════════════════════════════════════════════════
 # Figures and tables
-# ═════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 
 COHORTS = VAL_COHORTS         # eicu, inspire, chs: one row each in the pooled figure
 
 
-# Named apart from the compute half's _outcomes(ds, df): both halves live in this
-# one module, so a shared name silently rebinds the one defined first.
+# Named apart from the compute half's _outcomes(ds, df): both halves live in this one module, so
+# a shared name silently rebinds the one defined first.
 def _outcome_order(df):
     return [o for o in OUTCOME_DISPLAY if o in set(df["outcome"])] + \
            sorted(set(df["outcome"]) - set(OUTCOME_DISPLAY))
@@ -856,9 +786,7 @@ def _prevalence(sub):
     return float(np.nanmedian(sub["prevalence"])) if "prevalence" in sub and len(sub) else np.nan
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # circos: NORMA - Per_RI per analyte at native thresholds
-# ─────────────────────────────────────────────────────────────────────────────
 _COMPARATORS = ["PerRI", "Cohen_m4", "Gaussian_eb"]   # rings, inner to outer
 
 
@@ -902,9 +830,7 @@ def fig_circos(ds):
     return {None: fig}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # patient-level deviation score at a matched flag rate (12_eval.py, deviation step)
-# ─────────────────────────────────────────────────────────────────────────────
 def _deviation_frame(ds, score="toward", subset="pop_normal", analyte=None, landmark=24):
     """Rows of deviation_score.csv for one score / subset / landmark. analyte None
     = the pooled ('all') rows, '*' = every per-analyte row. Falls back to the
@@ -965,10 +891,7 @@ def _cohort_label(ax, ds):
             rotation=270, ha="left", va="center", fontsize=FONT_AXIS, color=DARK)
 
 
-# (column, label, reference line, y limits).  Precision and specificity are not panels:
-# at a fixed 10 % flag rate specificity is ~0.90 for every method by construction, and
-# precision is base rate x relative risk, so it only re-scales the relative-risk panel
-# by an outcome prevalence that ranges from 0.02 to 0.75.
+# (column, label, reference line, y limits).
 _MATCHED_PANELS = [
     ("auc", "AUROC", 0.5, (0.45, None)),
     (f"rr_at_{ANCHOR}", "Relative risk", 1.0, (0, None)),
@@ -1012,9 +935,7 @@ def fig_eval_methods_all():
     return {None: fig}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # roc: each method's median operating point on all tests and within Pop_RI-normal tests
-# ─────────────────────────────────────────────────────────────────────────────
 _ROC_SUBSETS = ("all", "pop_normal")   # subsets of eval.csv the ROC panel contrasts
 
 
@@ -1142,16 +1063,12 @@ FIGURES = [
 ]
 
 
-# ══════════════════════════════════════════════════════════════════════════
 # Tables — 12_eval: table_* definitions and registry slice.
-# ══════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 
-# save_table()'s first argument is the folder the table is written into,
-# so it must match this directory name. Keeping the literal here (rather
-# than only in the TableSpec) is what drifted during the restructure.  # noqa: F401,F403
-
+# save_table()'s first argument is the folder the table is written into, so it must match this
+# directory name.
 
 def table_eval():
     """Mean PerRI vs NORMA metrics per dataset x outcome (Pop_RI-normal, Per_RI-normal subset)."""

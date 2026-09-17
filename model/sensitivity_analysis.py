@@ -52,9 +52,7 @@ def init_model(model=None, device=None, hparams=None, run_id=None, log_dir=None)
 
     print(f'Sensitivity model ready  nstates={NSTATES}  normalize={NORMALIZE}  quantile={IS_QUANTILE}')
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Inference helper
-# ─────────────────────────────────────────────────────────────────────────────
 def value_to_state3(value, low, high):
     if value < low:  return 0
     if value > high: return 2
@@ -62,15 +60,7 @@ def value_to_state3(value, low, high):
 
 
 def predict(test_name, sex01, age, t_arr, x_arr, t_next, state=1, covariates=False):
-    """Run model. Returns (mu, sigma) for Gaussian or (median, ci_width) for quantile.
-
-    covariates=True supplies the per-measurement inputs the ablation arms were trained
-    with, for a history of this analyte alone: age at each draw (counted back from `age`
-    at the query, see below), setting "unknown" (0, the padding index) and an all-missing
-    co-analyte panel. That last one matters: passing no panel at all skips co_proj,
-    whereas an all-missing panel applies it and is what "no other analyte was drawn"
-    actually looks like to the model.
-    """
+    """Run model. Returns (mu, sigma) for Gaussian or (median, ci_width) for quantile."""
     cid     = TEST_VOCAB[test_name]
     sex_str = 'F' if sex01 == 1 else 'M'
     low, high, unit = REFERENCE_INTERVALS[test_name][sex_str]
@@ -97,11 +87,8 @@ def predict(test_name, sex01, age, t_arr, x_arr, t_next, state=1, covariates=Fal
     extras = {}
     if covariates:
         n = x_h.shape[1]
-        # Age is anchored at the QUERY, so `age` is the age the interval is being asked
-        # about and the history runs backwards from it. Anchoring at the first draw
-        # instead would confound history length with ageing -- 300 draws 90 days apart
-        # span 74 years, so the query would drift to age 124 -- and would no longer match
-        # the covariate-free model, which sees `age` as the age at the query.
+        # Age is anchored at the QUERY, so `age` is the age the interval is being asked about and
+        # the history runs backwards from it.
         age_hist = np.clip(age - (float(t_next) - t) / 365.25, 0.0, None)
         extras["age_h"] = torch.tensor(age_hist).view(1, n).float()
         extras["age_next"] = torch.tensor([float(age)]).float()
@@ -265,9 +252,7 @@ def run_sweeps():
     return pd.DataFrame(records)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Plotting
-# ─────────────────────────────────────────────────────────────────────────────
 def plot_sweep_curves(results_df, all_test_names, save_dir='../figures'):
     """Per-feature sweep curves: 2 rows (CI width change, mu deviation from midpoint)."""
     sns.set_context('paper', font_scale=1.3)
@@ -365,9 +350,7 @@ def plot_effect_sizes(results_df, all_test_names, lab_cmap, save_dir='../figures
     plt.show()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Main
-# ─────────────────────────────────────────────────────────────────────────────
 
 NORMA_RUNS = {
     '334f7e21': 'NORMA-Quantile',

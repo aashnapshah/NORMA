@@ -1,78 +1,10 @@
 #!/usr/bin/env python
 """How well does each model predict a patient's first index measurement?
 
-Targets are built by lib/metrics.py (baseline history -> first index
-measurement), the same rows the norma step of 04_refs.py scored, so three
-families of predictors are compared on identical targets:
-
-  NORMA                   04_refs (norma)       oracle (query = realized state, leaks
-                                                the future state), normal (query fixed
-                                                to "normal"), marginal / marginal_freq
-                                                (mixture over states)
-  history-only baselines  computed here         Last, Mean, ARIMA(1,1,1)
-                                                [+ state-informed variants, --with_state]
-  reference-interval      04_refs (baselines)   each method's centre as a point forecast:
-  centres                                       PopRI midpoint, PerRI mean,
-                                                Gaussian_{mle,trunc,eb}, Cohen_{m2,m3,m4}
-                                                (NORMA's centre is NORMA_normal)
-
-Every method is scored per analyte on the rows common to the methods that cover
-the analyte, on all targets and on targets whose realized state is normal.
-
-Outputs:
-  results/raw/<cohort>/05_forecast_baselines.parquet
-                                             Last / Mean / ARIMA per target (reused
-                                             unless --force)
-  results/raw/<cohort>/05_forecast.csv          n, MAE, MAPE, RMSE, R2, bias per
-                                             (analyte, method, target_state)
-                                            analyte, plus analyte="pooled" (all
-                                            rows at once) and analyte="median"
-                                            (median over analytes) rows
-
---norma_versions compares the NORMA model versions (covariate-ablation arms) with
-EACH OTHER on the development test split -- no baselines, no centres -- from
-model/logs/<version>/predictions_combined.csv, on the rows every version
-predicted, split by development source -> results/raw/dev/05_norma_versions.csv
-(fig_norma_versions).  Metrics are the ones above, so the numbers are comparable
-with the cohort figures.
-
---no_norma scores the baselines and the interval centres alone, on targets built
-here from index_labs instead of taken from the norma step's predictions -- for a
-cohort the model was never run on.
-
 Usage:
     python 05_forecasting.py --dataset eicu --workers 16
     python 05_forecasting.py --dataset mimiciv --max_patients 40000
     python 05_forecasting.py --norma_versions [--versions q_age_set 334f7e21 ...]
-
-Figures and tables
-------------------
-Composites with one row per cohort (EHRSHOT, MIMIC-IV, eICU, INSPIRE, CHS):
-
-  summary[_normal]     averaged over analytes — the six forecasters in FC_SHOW (same set
-                       on both target sets) as colours; columns = MAE / MAPE / R² (weighted
-                       mean ± SD across analytes); rows = cohorts, labelled vertically.
-                       Open marker = given the state of the next value.
-                       No in-figure legend: the manuscript legend explains the labels.
-  by_analyte_<metric>[_normal]  methods × analytes heatmap, one block per cohort.
-                       MAE is coloured relative to the best method for that analyte
-                       (raw units differ across analytes); grey text = fewer than 50 targets.
-
-Every cohort reads `<cohort>/05_forecast.csv` from `05_forecasting.py` (NORMA from
-04_refs.py (norma step), history baselines computed there, interval centres from
-04_refs.py (baselines step); the development cohorts run the same three steps).
-
-The NORMA model versions (covariate-ablation arms) are compared only with each other,
-on the development test split, from `results/raw/dev/05_norma_versions.csv` (05_forecasting.py --norma_versions):
-
-  summary_norma        each arm's paired change from plain NORMA in MAE / MAPE / R²,
-                       with a 95% bootstrap interval over analytes; rows = EHRSHOT /
-                       MIMIC-IV, each on its own x scale.
-  by_analyte_<metric>_norma  versions × analytes, one block per source,
-                       absolute values in the cells.
-
-The external cohorts are absent from these two: on them the arms are compared through
-the pipeline (04_refs.py --runs <arms>, then the *_norma figures of each stage).
 """
 import bootstrap
 
@@ -115,10 +47,9 @@ PRINT_ORDER = ["PopRI", "PerRI", "Gaussian_mle", "Gaussian_trunc", "Gaussian_eb"
 # --norma_versions: display order; the keys must match NORMA_VERSIONS in figures.py
 VERSIONS = [NORMA_RUN_ID] + [r for r in ["334f7e21", "q_age", "q_set", "q_co", "q_age_set", "q_age_co",
                                          "q_set_co", "q_age_set_co", "q_co_q"] if r != NORMA_RUN_ID]
-# The patient-split arms are their own group: --split_by patient holds out whole
-# patients, so they share no test row with the sequence-split arms above and a
-# paired comparison across the two is impossible, not merely unwise. Selected
-# with --split_group patient, written to its own file.
+# The patient-split arms are their own group: --split_by patient holds out whole patients, so
+# they share no test row with the sequence-split arms above and a paired comparison across the
+# two is...
 PATIENT_VERSIONS = ["p_base", "p_co", "p_causal", "p_full"]
 SPLIT_GROUPS = {"sequence": (VERSIONS, "norma_versions.csv"),
                 "patient": (PATIENT_VERSIONS, "norma_versions_patient.csv")}
@@ -191,10 +122,7 @@ def run_baselines(recs, workers=4, with_state=False, skip_arima=False):
 
 
 def load_baselines(ds, targets, args, results_dir, recs=None):
-    """Last / Mean / ARIMA per target, computed once per cohort and reused.
-
-    `recs` is the already-built target records (--no_norma builds them to get the
-    target rows in the first place), so index_labs is not read and paired twice."""
+    """Last / Mean / ARIMA per target, computed once per cohort and reused."""
     path = result_path(results_dir, BASELINES_FILE)
     if os.path.exists(path) and not args.force:
         print(f"  Loading {path}")
@@ -247,12 +175,9 @@ def load_static_centres(ds):
             absent.append(method)
             continue
         centre = pd.to_numeric(df[col], errors="coerce")
-        # A null `ri_mean` with bounds present is not a missing prediction: the
-        # Gaussian baselines use it to MARK a Pop_RI fallback (too few Pop_RI-normal
-        # history points, or no EB prior) and still emit the population interval
-        # as the bounds — the centre is then the interval midpoint.  Where the
-        # bounds are missing too (Cohen skips analytes with too little healthy
-        # training data) there is genuinely no prediction and the centre stays NaN.
+        # A null `ri_mean` with bounds present is not a missing prediction: the Gaussian
+        # baselines use it to MARK a Pop_RI fallback (too few Pop_RI-normal history points, or no
+        # EB prior) and still emit the...
         prefix = col[:-len("_mean")]
         low_col, high_col = f"{prefix}_low", f"{prefix}_high"
         if low_col in df.columns and high_col in df.columns:
@@ -295,10 +220,8 @@ def score_frame(df, dataset, min_n):
     methods = [c[5:] for c in df.columns if c.startswith("pred_")]
     pred_cols = [f"pred_{m}" for m in methods]
 
-    # Common rows, per analyte: every method that covers the analyte must have a
-    # prediction, so methods are compared on identical targets.  A method with
-    # NO prediction for an analyte (Cohen skips analytes with too little healthy
-    # training data, e.g. LDL / MPV / TC on eICU) is left out for that analyte only.
+    # Common rows, per analyte: every method that covers the analyte must have a prediction, so
+    # methods are compared on identical targets.
     rows = []
     for analyte, grp in df.groupby("analyte"):
         covered = [m for m in methods if grp[f"pred_{m}"].notna().any()]
@@ -366,9 +289,9 @@ def run_cohort(args):
     recs = None
     score_norma = bool(args.norma_predictions) or ds.has_norma_predictions()
     if not score_norma:
-        # No NORMA predictions to take the target rows from (--no_norma, or a cohort
-        # whose NORMA intervals came without them, as on CHS), so the targets are built
-        # here; the baselines and the interval centres are scored on exactly those.
+        # No NORMA predictions to take the target rows from (--no_norma, or a cohort whose NORMA
+        # intervals came without them, as on CHS), so the targets are built here; the baselines
+        # and the interval...
         why = "--no_norma" if ds.no_norma else "no norma_predictions.parquet"
         print(f"  Targets from index_labs ({why}: NORMA forecasts are not scored)")
         recs = build_targets(ds, args)
@@ -401,14 +324,7 @@ def run_cohort(args):
 # ----------------------------------------------------------------- --norma_versions (dev test split)
 
 def _load_version(run_id, log_dir):
-    """Test-split rows of one version: pid, code, t_next, x_next and the centre.
-
-    The quantile head writes q50; the Gaussian and NIG heads write mu and no
-    quantiles at all, so the centre column has to be chosen per run rather than
-    assumed -- otherwise a prior-anchored arm cannot be scored beside the
-    covariate arms it is meant to be compared with. Renamed to q50 so every
-    caller downstream sees one name.
-    """
+    """Test-split rows of one version: pid, code, t_next, x_next and the centre."""
     path = os.path.join(log_dir, run_id, "predictions_combined.csv")
     if not os.path.exists(path):
         return None
@@ -441,12 +357,9 @@ def run_norma_versions(args):
     if not preds:
         raise SystemExit("No version has predictions_combined.csv — nothing to compare.")
 
-    # t_next is not a safe part of the key across arms: --use_full_panel puts the
-    # query on the drawmeta index's absolute clock (data.py sets t_next = q_time)
-    # while every other arm uses sequence-relative time, so p_full shares no row
-    # with p_base under a t_next key even though the targets are identical.
-    # (pid, code) identifies a target uniquely in each arm's test split, so use
-    # that when it does, and only fall back to including t_next when it does not.
+    # t_next is not a safe part of the key across arms: --use_full_panel puts the query on the
+    # drawmeta index's absolute clock (data.py sets t_next = q_time) while every other arm uses
+    # sequence-relative...
     key = ["pid", "code"]
     if any(d.duplicated(key).any() for d in preds.values()):
         key = NV_KEYS
@@ -457,11 +370,9 @@ def run_norma_versions(args):
         common = idx if common is None else common.intersection(idx)
     print(f"  common test rows across {len(preds)} versions: {len(common):,} (key: {key})")
     if len(common) == 0:
-        # Writing here would replace a good file with an empty one, which is what
-        # happened when the patient-split arms (p_base, p_co, p_causal, p_full,
-        # trained with --split_by patient) were passed alongside the
-        # sequence-split covariate arms: their test rows are different sequences,
-        # so the intersection is empty by construction.
+        # Writing here would replace a good file with an empty one, which is what happened when
+        # the patient-split arms (p_base, p_co, p_causal, p_full, trained with --split_by
+        # patient) were passed alongside...
         raise SystemExit(
             "No test row is shared by all versions, so nothing can be compared "
             "pairwise. Versions trained with different --split_by values do not "
@@ -488,8 +399,7 @@ def run_norma_versions(args):
         sub = df[df.source == s]
         if not len(sub):
             continue
-        # skip analytes _metrics could not score (n < 2, e.g. EHRSHOT has one
-        # TGL target): np.average propagates a single NaN to the whole mean
+        # skip analytes _metrics could not score: np.average propagates one NaN to the whole mean.
         def _wmean(g):
             ok = np.isfinite(g.mae) & np.isfinite(g.n) & (g.n > 0)
             return np.average(g.mae[ok], weights=g.n[ok]) if ok.any() else np.nan
@@ -538,9 +448,7 @@ def main():
     run_cohort(args)
 
 
-# ═════════════════════════════════════════════════════════════════════════
 # Figures and tables
-# ═════════════════════════════════════════════════════════════════════════
 
 import warnings
 
@@ -548,39 +456,28 @@ from figlib import *  # noqa: F401,F403
 from datasets import NORMA_RUN_ID, dev_results_dir   # figlib's explicit re-export list does not carry them
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Method registry: key -> (label, family, colour, uses realized future state)
-# Colour = family hue, variant = lightness; identity is always carried by the
-# axis label as well, never by colour alone.
-# ─────────────────────────────────────────────────────────────────────────────
-# (key, heatmap column header, short label for the summary's row groups)
+# Method registry: key -> (label, family, colour, uses realized future state) Colour = family
+# hue, variant = lightness; identity is always carried by the axis label as well, never by colour
+# alone.
 FC_FAMILIES = [("norma", "NORMA", "NORMA"), ("history", "History-only baselines", "Baselines"),
                ("ri", "Reference-interval centres", "RI centres")]
-# Which methods this analysis can draw, in display order. Labels and colours come
-# from lib/models.py — this file used to carry its own copies, which is how
-# Cohen ended up terracotta here and brown in 06_calibration/07_classify.
-# `_group` is the bracket a method sits under in the composites, and is not the
-# same thing as the registry's family (which groups Gaussian/Cohen variants).
+# Which methods this analysis can draw, in display order.
 _FC_GROUP = {"NORMA_oracle": "norma", "NORMA_marginal": "norma",
              "Last": "history", "Mean": "history", "ARIMA": "history"}
 FC_ORDER = ["NORMA_oracle", "NORMA_marginal", "Last", "Mean", "ARIMA",
             "PopRI", "PerRI", "Gaussian_mle", "Gaussian_trunc", "Gaussian_eb", "Cohen_m4"]
 FC_METHODS = {k: (models.label(k), _FC_GROUP.get(k, "ri"), models.color(k),
                   k in models.USES_REALIZED_STATE) for k in FC_ORDER}
-# The interval centres are used here as point forecasts, so they get a forecast
-# reading of the same method: the midpoint of Pop_RI, the mean of Per_RI.
+# The interval centres are used here as point forecasts, so they get a forecast reading of the
+# same method: the midpoint of Pop_RI, the mean of Per_RI.
 FC_METHODS["PopRI"] = ("Pop$_{RI}$ Midpoint",) + FC_METHODS["PopRI"][1:]
 FC_METHODS["PerRI"] = ("Per$_{RI}$ Mean",) + FC_METHODS["PerRI"][1:]
 
-# What the figures show (Aashna, 2026-08-27: "going forward I only care about Cohen (m4),
-# ARIMA, Gaussian, last value, NORMA leak-free and realized state").  Short labels on
-# the axes; what they mean goes in the figure legend of the manuscript, not the PDF.
+# What the figures show (Aashna, 2026-08-27: "going forward I only care about Cohen (m4), ARIMA,
+# Gaussian, last value, NORMA leak-free and realized state").
 FC_SHOW = ["NORMA_oracle", "NORMA_marginal", "Last", "ARIMA", "Gaussian_mle", "Cohen_m4"]
 # The same six on both target sets (Aashna, 2026-08-28: "the same baselines should be in
-# summary_normal and summary").  Cohen and the Gaussian fit predict a *normal* value
-# (Gaussian = mean of the Pop_RI-normal history), so on all next values they are
-# expected to trail the history-only baselines.  Gaussian_eb / _trunc stay in the
-# registry for the tables.
+# summary_normal and summary").
 FC_SHOW_BY_TARGET = {"all_states": FC_SHOW, "normal": FC_SHOW}
 FC_SHORT = models.labels(FC_ORDER, short=True)
 FC_METRICS = [("mae", "MAE"), ("mape", "MAPE (%)"), ("r2", r"$R^2$")]
@@ -603,9 +500,7 @@ def _fc_color(m):
     return FC_METHODS[m][2]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Loading: long frame with columns analyte, method, target_state, mape, r2
-# ─────────────────────────────────────────────────────────────────────────────
 def load_forecast_ext(ds):
     d = load_result(ds, "forecast.csv", normalize=False)
     if d is None:
@@ -639,7 +534,6 @@ def _methods_present(d, target_state="all_states"):
     return [m for m in FC_SHOW_BY_TARGET.get(target_state, FC_SHOW) if m in have]
 
 
-
 def load_forecast(cohort):
     d = load_forecast_ext(cohort)
     if d is None and cohort in DEV_COHORTS:   # 05_forecasting.py not run for this dev cohort yet
@@ -651,9 +545,7 @@ def _cohort_title(cohort):
     return DATASET_DISPLAY.get(cohort, cohort)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # summary: one axis per metric, cohorts down the y axis, models as colours
-# ─────────────────────────────────────────────────────────────────────────────
 def _weighted_stats(d, metric, methods, key="method"):
     """Mean across analytes weighted by the number of targets, ± weighted SD."""
     out = {}
@@ -711,9 +603,7 @@ def fig_summary():
     return figs
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # by_analyte_<metric>[_normal]: methods × analytes heatmap, one block per cohort
-# ─────────────────────────────────────────────────────────────────────────────
 def _fmt_cell(metric):
     def f(v):
         if metric == "r2":
@@ -779,26 +669,13 @@ def fig_by_analyte():
     return figs
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# summary_norma / by_analyte_<metric>_norma: the NORMA model versions against each
-# other on the development test split, no baselines and no interval centres.
-# The versions differ only in which per-measurement covariates enter the
-# encoder, so they are scored on the rows all of them predicted
-# (05_forecasting.py --norma_versions).
-# ─────────────────────────────────────────────────────────────────────────────
-# norma_versions.csv is keyed by bare training run id; the registry keys the same
-# arms as the rest of the pipeline sees them (NORMA / NORMA_<arm>), so the labels
-# and colours here are the ones 06_calibration and 07_classify use for the arms.
-# Every covariate arm, in the additive-ladder order of run_names.RUN_ORDER, not
-# just the three that datasets.NORMA_ABLATION_RUN_IDS carries through the rest of
-# the pipeline. This figure is the one place the arms are compared with each
-# other, so showing the whole ladder is the point of it; _nv_shown() still drops
-# any arm that norma_versions.csv does not contain.
+# summary_norma / by_analyte_<metric>_norma: the NORMA model versions against each other on the
+# development test split, no baselines and no interval centres.
 from run_names import RUN_ORDER  # noqa: E402
 NV_RUNS = [NORMA_RUN_ID] + [r for r in RUN_ORDER if r != NORMA_RUN_ID]
 NV_KEY = {NORMA_RUN_ID: "NORMA", **{r: f"NORMA_{r}" for r in NV_RUNS if r != NORMA_RUN_ID}}
-# Short labels: this figure is about the forecast, so the baseline arm reads
-# "NORMA" rather than the interval's NORMA_RI.
+# Short labels: this figure is about the forecast, so the baseline arm reads "NORMA" rather than
+# the interval's NORMA_RI.
 NORMA_VERSIONS = {r: (models.label(NV_KEY[r], short=True), models.color(NV_KEY[r]))
                   for r in NV_RUNS}
 
@@ -819,16 +696,7 @@ def _nv_shown(d):
 
 
 def _nv_paired(sub, metric, arms, n_boot=2000, seed=0, baseline=None):
-    """Paired change from the baseline arm, over the analytes both versions scored.
-
-    Every version is scored on identical target rows (05_forecasting.py --norma_versions inner-joins
-    them), so the comparison is paired per analyte and the change is what carries
-    signal -- the absolute values differ by ~0.3% within a cohort. Error bar = 95%
-    bootstrap interval over analytes (2,000 resamples, n-weighted mean), i.e. how
-    much the direction of the change depends on which analytes were included.
-    Relative (%) for the error metrics, whose units differ across analytes;
-    absolute for R2, which is already unitless.
-    """
+    """Paired change from the baseline arm, over the analytes both versions scored."""
     base = sub[sub.version == (baseline or NORMA_RUN_ID)].set_index("analyte")
     rng = np.random.default_rng(seed)
     out = {}
@@ -858,39 +726,21 @@ def _nv_paired(sub, metric, arms, n_boot=2000, seed=0, baseline=None):
     return out
 
 
-# The change is what the figure is about, so the axes say so; the absolute values
-# are in the by_analyte heatmaps and in the tables.
+# The change is what the figure is about, so the axes say so; the absolute values are in the
+# by_analyte heatmaps and in the tables.
 NV_METRICS = [("mae", "Change in MAE (%)"), ("mape", "Change in MAPE (%)"),
               ("r2", r"Change in $R^2$")]
 
 
 def fig_summary_norma():
-    """Each arm's paired change from plain NORMA, one row per development source.
-
-    Read the co-analyte arms (q_co, q_co_q, q_age_co, q_set_co, q_age_set_co)
-    with the split in mind: every arm here uses the published patient-analyte
-    split, where one patient's other analytes can sit across the train/test
-    boundary. That is fine while a model sees only the target analyte, and not
-    fine once it conditions on co-analytes (jobs/run_patient_split.sh, R3
-    comment 11). The p_* arms re-run that question under --split_by patient and
-    cannot appear here, because holding out whole patients changes the test set.
-
-    Left of the dashed line is better for MAE and MAPE, right of it for R2. The
-    baseline arm is the dashed line itself rather than a row of zeros. Each source
-    gets its own x axis (share_x=False): EHRSHOT and MIMIC-IV differ by ~20% on MAE
-    and the arms by ~0.3%, so one shared scale collapsed every arm onto one point.
-    """
+    """Each arm's paired change from plain NORMA, one row per development source."""
     d = load_norma_versions()
     if d is None or NORMA_RUN_ID not in set(d.version):
         return None
     scored = [v for v in _nv_shown(d) if v != NORMA_RUN_ID]
 
-    # Every arm gets a row, whether or not it can be plotted, so the figure shows
-    # what was tried rather than only what finished. Two kinds of blank:
-    #   - trained on a different split, so no paired comparison against this
-    #     baseline exists at all (the patient-split group has its own figure);
-    #   - never produced predictions, which for the prior-anchored group means
-    #     the run has not finished.
+    # Every arm gets a row, whether or not it can be plotted, so the figure shows what was tried
+    # rather than only what finished.
     trained = {r.replace("NORMA_", "") for r in arm_trained()} | set(arm_trained())
     arms, notes = [], {}
     for run_id, (group, _) in ARM_GROUPS.items():
@@ -933,26 +783,14 @@ def fig_summary_norma():
                              zero_line=True, notes=notes)}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # summary_norma_patient: the patient-level split group (R3 comment 11).
-# Separate from summary_norma because --split_by patient holds out whole
-# patients, so these arms share no test row with the covariate ladder and the
-# two cannot appear on one paired plot.
 PATIENT_BASE = "p_base"
 PATIENT_VERSION_STYLE = {r: (models.label(f"NORMA_{r}", short=True), models.color(f"NORMA_{r}"))
                          for r in PATIENT_VERSIONS}
 
 
 def fig_summary_norma_patient():
-    """Each patient-split arm's paired change from p_base, one row per source.
-
-    The chain to read is p_base -> p_causal -> p_full: p_causal isolates the
-    effect of masking the cross-attention block, p_full adds every draw in the
-    patient's past on top of it. p_co answers whether the flat q_co result on
-    the sequence split was an artifact of that split, since conditioning on a
-    patient's other analytes is exactly what a patient-analyte split leaks
-    across (jobs/run_patient_split.sh).
-    """
+    """Each patient-split arm's paired change from p_base, one row per source."""
     d = load_norma_versions("norma_versions_patient.csv", versions=PATIENT_VERSIONS)
     if d is None or PATIENT_BASE not in set(d.version):
         return None
@@ -977,17 +815,7 @@ def fig_summary_norma_patient():
                              zero_line=True)}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # norma_all: every arm that has been scored, on one axis.
-# summary_norma and summary_norma_patient are paired -- each arm's per-analyte
-# change from a baseline on identical target rows -- which is the sharpest way to
-# read a difference of a few tenths of a percent, and also why an arm can only
-# appear beside arms it shares a test split with. This figure gives up the
-# pairing to show everything at once: the n-weighted mean across analytes, in
-# absolute units, with the split groups marked. Arms in different groups are
-# scored on different test rows, so read within a group and treat across-group
-# gaps as indicative only.
-# the cohorts whose 06_calibration.csv the arm table checks
 EXTERNAL_COHORTS = ("eicu", "inspire", "chs")
 NORMA_ALL_SOURCES = [("norma_versions.csv", VERSIONS, "sequence split"),
                      ("norma_versions_patient.csv", PATIENT_VERSIONS, "patient split")]
@@ -1003,13 +831,7 @@ def _na_weighted(sub, metric):
 
 
 def _na_weighted_ci(sub, metric, n_boot=2000, seed=0):
-    """The same mean with a 95% bootstrap interval over analytes.
-
-    Analytes are the resampling unit, as in _nv_paired: the error bar says how
-    much the number depends on which analytes went into it, not how much it
-    depends on which patients did (the arms all see the same targets, so the
-    within-analyte sampling noise is shared and cancels when arms are compared).
-    """
+    """The same mean with a 95% bootstrap interval over analytes."""
     ok = (np.isfinite(sub[metric]) & np.isfinite(sub["n"]) & (sub["n"] > 0)).to_numpy()
     v = sub.loc[ok, metric].to_numpy(float)
     w = sub.loc[ok, "n"].to_numpy(float)
@@ -1063,10 +885,9 @@ def fig_norma_all():
                              zero_line=False)}
 
 
-# The arms differ by a fraction of a percent, so an analyte needs a lot of targets
-# before its cells mean anything: EHRSHOT has 74 MPV targets and 1 TGL target, and MPV
-# is where the arms look most different (a 29% spread) purely because of that. Cells
-# below this many targets are greyed as unreliable rather than dropped.
+# The arms differ by a fraction of a percent, so an analyte needs a lot of targets before its
+# cells mean anything: EHRSHOT has 74 MPV targets and 1 TGL target, and MPV is where the arms
+# look most...
 NV_SMALL_N = 500
 
 
@@ -1131,16 +952,12 @@ FIGURES = [
 ]
 
 
-# ══════════════════════════════════════════════════════════════════════════
 # Tables — 05_forecasting: table_* definitions and registry slice.
-# ══════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 
-# save_table()'s first argument is the folder the table is written into,
-# so it must match this directory name. Keeping the literal here (rather
-# than only in the TableSpec) is what drifted during the restructure.  # noqa: F401,F403
-
+# save_table()'s first argument is the folder the table is written into, so it must match this
+# directory name.
 
 def table_prediction_performance():
     df = load_prediction("forecasting_overall.csv")
@@ -1204,21 +1021,9 @@ def table_analyte_performance():
     return ["analyte_performance"]
 
 
-# ══════════════════════════════════════════════════════════════════════════
 # What each NORMA arm actually is.
-# ══════════════════════════════════════════════════════════════════════════
-# The arms differ along four axes that the short labels cannot carry -- the
-# output head, the loss, the per-measurement covariates and the train/test
-# split -- and several were launched but never finished. One row per arm, read
-# from the run's own checkpoint rather than from a hand-maintained list, so an
-# arm cannot drift from what it was trained as.
 
 # Arm -> (group, the flags run_*.sh passes on top of that group's COMMON).
-# COMMON is NORMA2, d_model 64 / 4 heads / 8 layers, 3 states, batch 32,
-# lr 1e-4, 50 epochs, patience 10, seed 42, --train combined --test combined,
-# data_version v3. The prior-anchored group's COMMON also carries
-# --use_age_t --use_setting (every arm there is the main model with a different
-# loss or head), so those flags are repeated per arm below rather than implied.
 ARM_GROUPS = {
     "q_age_set":     ("covariate", "--use_age_t --use_setting"),
     "334f7e21":      ("covariate", ""),
@@ -1233,9 +1038,8 @@ ARM_GROUPS = {
     "p_co":          ("patient split", "--split_by patient --use_coanalytes"),
     "p_causal":      ("patient split", "--split_by patient --causal_memory"),
     "p_full":        ("patient split", "--split_by patient --use_full_panel --causal_memory"),
-    # The same losses on p_full's inputs and split, so the only thing varying
-    # against p_full is the loss. Listed first: the prior question is about the
-    # arm with the most context to be overconfident from.
+    # The same losses on p_full's inputs and split, so the only thing varying against p_full is
+    # the loss.
     "m_pa_k5":         ("prior-anchored, multivariate", "--split_by patient --use_full_panel --causal_memory --use_age_t --loss QuantilePriorLoss --prior_mode anchor --prior_k 5"),
     "m_pa_k20":        ("prior-anchored, multivariate", "--split_by patient --use_full_panel --causal_memory --use_age_t --loss QuantilePriorLoss --prior_mode anchor --prior_k 20"),
     "m_pa_tau":        ("prior-anchored, multivariate", "--split_by patient --use_full_panel --causal_memory --use_age_t --loss QuantilePriorLoss --prior_mode anchor --prior_k 5 --prior_tau 365"),
@@ -1306,14 +1110,7 @@ def _arm_status(run_id):
 
 
 def _arm_coverage():
-    """Which analyses actually contain each arm, read from the result files.
-
-    An arm can be trained and still be absent from an analysis: the external
-    cohorts only carry the arms datasets.NORMA_ABLATION_RUN_IDS forwarded when
-    04_refs and 07_classify last ran, and the sensitivity sweep was run over a
-    smaller set again. Reading the files rather than the constants is what makes
-    this table trustworthy.
-    """
+    """Which analyses actually contain each arm, read from the result files."""
     import glob
 
     def as_run(m):
@@ -1347,10 +1144,6 @@ def _arm_coverage():
 def _arm_r2():
     """Each arm's test R^2: the n-weighted mean over analytes fig_norma_all plots,
     with a bootstrap interval over analytes.
-
-    Both split groups are read, and an arm is only comparable with the arms it
-    shares a test split with -- the sequence-split and patient-split arms are
-    scored on different rows, so the two blocks of the table are two scales.
     """
     frames = []
     for name in ("norma_versions.csv", "norma_versions_patient.csv"):
@@ -1366,12 +1159,6 @@ def _arm_r2():
 def _arm_width():
     """Each arm's mean 95% interval width as a multiple of the population
     reference interval, from the calibration file training itself writes.
-
-    Normal-queried rows only, which is what fig_calibration_dev_norma shows and
-    the only state where the comparison is like for like: the population
-    interval IS the normal interval, so a high- or low-state query is not
-    trying to reproduce it. Below 1 the arm is narrower than the population
-    interval, above 1 it is wider.
     """
     out = {}
     for run_id in ARM_GROUPS:
@@ -1417,10 +1204,8 @@ def _describe(run_id, flags, st):
         params.append("weighted by n")
     loss_col = f"{loss} ({', '.join(params)})" if params else loss
 
-    # The analyte identity is unconditional (model.py embeds it for every arm) and
-    # stays in the caption. Sex is too, but it is listed in every row anyway: a
-    # Features cell reading "age, setting" invites the reading that the arm does
-    # not use sex, and the covariate names only mean anything against a baseline.
+    # The analyte identity is unconditional (model.py embeds it for every arm) and stays in the
+    # caption.
     feats = ["sex"]
     if _flag(flags, "use_age_t"):
         feats.append("age")
@@ -1442,26 +1227,14 @@ def _describe(run_id, flags, st):
 
 
 def table_norma_arms():
-    """One row per post-ablation NORMA arm: what it is, not how it scored.
-
-    Scope: every arm trained since the covariate ablation began. All are NORMA2
-    at d_model 64 / 4 heads / 8 layers / 3 states, and all were trained on
-    EHRSHOT and MIMIC-IV together (--train combined --test combined). The
-    earlier Gaussian-head architectures are deliberately absent, as are
-    58ba1f1c and 104506cf, which were trained on EHRSHOT alone.
-
-    Every column is derived from the run's own flags and checkpoint, so an arm
-    cannot drift from what it was trained as, and an arm that has not finished
-    still gets a row carrying its intended configuration with a Status saying
-    where it stopped.
-    """
+    """One row per post-ablation NORMA arm: what it is, not how it scored."""
     cov = _arm_coverage()
     r2, width = _arm_r2(), _arm_width()
     rows = []
     for run_id, (group, flags) in ARM_GROUPS.items():
         st = _arm_status(run_id)
-        # Deliberately not "stopped" or "running": whether a partial run is still
-        # on the cluster is transient state this table has no way to read.
+        # Deliberately not "stopped" or "running": whether a partial run is still on the cluster
+        # is transient state this table has no way to read.
         if not st["dir"]:
             state = "not trained"
         elif st["preds"]:
@@ -1489,19 +1262,10 @@ def table_norma_arms():
     df = pd.DataFrame(rows)
 
     # Question and Flags stay in the CSV; the typeset table keeps the configuration.
-    # Calib. dev is not a column of its own: the width ratio comes from exactly
-    # that file, so a number there IS the flag, as R2 is for the forecasting step.
-    # Group is not a column: it repeats down every row of a block and costs width
-    # the three wrapping columns need. It becomes a sub-header above each block.
     cols = ["Arm", "Head", "Loss", "Features", "Attention", "Split", "Status",
             "R2", "Width / Pop RI"]
     short = {"R2": r"$R^2$", "Width / Pop RI": r"Width / Pop$_{RI}$"}
-    # Which analyses an arm has been through (Calib. cohorts / Sensitivity) is
-    # pipeline bookkeeping rather than a property of the arm, so it stays in the
-    # CSV and is off the typeset table. The width those two and Group freed goes
-    # to Loss, Features and Attention, whose longest cells used to wrap to three
-    # lines ("QuantilePriorLoss (anchor, k=5, tau=365d)", "sex, age, setting,
-    # co-analytes + query", "fully causal, <= 128 tokens").
+    # Which analyses an arm has been through (Calib.
     lines = [r"\begin{table}[ht]", r"\centering", r"\setlength{\tabcolsep}{4pt}",
              r"\begin{tabular}{ll p{3.0cm} p{3.2cm} p{2.6cm} l p{1.9cm} rr}", r"\toprule",
              " & ".join(short.get(c, c) for c in cols) + r" \\"]
@@ -1537,11 +1301,139 @@ def table_norma_arms():
     return ["norma_arms"]
 
 
+# What each design dimension in table 05_norma_arms means, and what turning it on implies.
+# (dimension, option, what it is, what it implies)
+DESIGN_CHOICES = [
+    ("Attention", "cross bidirectional (default)",
+     "The causal mask is passed as tgt_mask only, so self-attention is causal but "
+     "cross-attention sees the whole history.",
+     "A history token can attend forward in time, so per-position states are not causal; fine "
+     "for one query at the end of the sequence."),
+    ("Attention", "fully causal (--causal_memory)",
+     "The mask is passed as memory_mask too, so both blocks are triangular.",
+     "Every token uses its own past only, which is what a bedside model has; costs a little "
+     "accuracy."),
+    ("History", "target analyte only (default)",
+     "Tokens are the patient's previous draws of the analyte being predicted.",
+     "A clean univariate setpoint model; no other analyte can leak into the query."),
+    ("History", "full panel (--use_full_panel)",
+     "Every past draw across analytes, capped at 128, with a flag for whether the target "
+     "analyte was drawn at that timestamp.",
+     "Multivariate and irregularly timed, so a creatinine trend can inform urea; longer, "
+     "sparser sequences."),
+    ("Covariates", "sex, analyte, age at first draw (always on)",
+     "Context token carrying the demographics and assay identity.",
+     "Matches how the population interval is stratified, so a width difference is not a "
+     "stratification difference."),
+    ("Covariates", "age at each draw (--use_age_t)",
+     "Binned age embedding on every history token, not just the context.",
+     "Lets the setpoint drift with age; matters over decades, not within an admission."),
+    ("Covariates", "care setting (--use_setting)",
+     "Inpatient / outpatient / ED embedding on each history token.",
+     "Separates an abnormal value from a value drawn in an abnormal place."),
+    ("Covariates", "same-draw co-analytes (--use_coanalytes)",
+     "The other analytes drawn at the same timestamp, as [value, observed, low, normal, high].",
+     "Adds the clinical context of each past draw; cannot see the query draw's panel."),
+    ("Covariates", "co-analytes on the query too (--query_coanalytes)",
+     "The same panel encoding attached to the query token.",
+     "Conditions the interval on concurrent results, so it can no longer be used to flag them."),
+    ("Split", "sequence-level (default)",
+     "Splits are over patient-analyte sequences.",
+     "One patient's potassium can train while their sodium tests: optimistic if any "
+     "patient-level signal is learnable."),
+    ("Split", "patient-level (--split_by patient)",
+     "Every sequence from a patient falls in one split.",
+     "The conservative generalisation claim; not comparable with sequence-split arms, which "
+     "score different rows."),
+    ("Normalisation", "within-sequence",
+     "Each history is standardised by its own mean and SD and the head's output de-normalised.",
+     "One model can serve every analyte, and the head predicts deviation from the patient's own "
+     "level; a one-draw history has no usable SD."),
+    ("Head", "quantile (default)",
+     "Linear head emitting the five levels (2.5, 25, 50, 75, 97.5).",
+     "Distribution-free, but nothing enforces monotonicity or stops the interval collapsing on a "
+     "short history."),
+    ("Head", "gate",
+     "Own quantiles plus a scalar gate g; returns g * own + (1 - g) * population quantiles.",
+     "A readable trust dial, bounded between the two inputs."),
+    ("Head", "nig",
+     "Conjugate normal-inverse-gamma head; the interval is the closed-form Student-t posterior "
+     "predictive against the population prior.",
+     "Shrinkage is analytic, so one draw provably gives the population interval; assumes "
+     "Gaussian within-person variation."),
+    ("Head", "gaussian",
+     "Mean and log-variance heads; interval is mu +/- 1.96 sigma.",
+     "Comparable likelihood with the Gaussian baselines; forces symmetric intervals."),
+    ("Loss", "QuantileLoss (pinball)",
+     "Mean pinball loss over the five levels.",
+     "Levels are fit independently; with few draws it shrinks toward the median, because that "
+     "minimises pinball in-sample."),
+    ("Loss", "QuantilePriorLoss, anchor",
+     "Pinball plus the expected pinball under the population interval, weighted k/(n+k), on "
+     "normal-state queries only.",
+     "Bayesian shrinkage as a loss: no history gives the population interval, and the pull "
+     "decays with draws."),
+    ("Loss", "QuantilePriorLoss, tau",
+     "The same with n time-decayed, sum(exp(-dt/tau)).",
+     "Old draws stop counting, so a stale setpoint is not treated as well estimated."),
+    ("Loss", "QuantilePriorLoss, floor",
+     "Pinball plus a hinge when the predicted width falls below the population width.",
+     "Fixes over-narrow intervals without pinning location; can only widen, never centre."),
+    ("Loss", "QuantilePriorLoss, gate",
+     "Pinball on the gated quantiles plus a KL pulling the gate to 1 - k/(n+k).",
+     "The prior acts on self-trust rather than location, so shrinkage is inspectable per "
+     "prediction."),
+    ("Loss", "StudentTNLLLoss",
+     "NLL of the NIG head's Student-t predictive.",
+     "The only arm whose reported interval and training objective are the same object."),
+    ("Loss", "NORMALoss (KL-aligned)",
+     "Gaussian NLL plus lambda * KL to the population distribution, weighted k/(n+k) on normal "
+     "queries and reversed on abnormal ones.",
+     "The original formulation; the abnormal-side push is a hinge, so its scale is arbitrary "
+     "relative to the KL."),
+    ("Prior", "state-conditional population table",
+     "Fixed lookup [analyte, state, sex] of quantiles, mu, var and rho (within-person share of "
+     "variance); never updated by gradient.",
+     "What every arm shrinks toward is frozen and auditable; rho sets how much one draw is "
+     "worth."),
+    ("Prior strength", "k = 5 vs k = 20",
+     "Pseudo-draws the prior is worth, in weight k/(n+k).",
+     "k = 5 hands control to the patient after a few draws; k = 20 keeps most histories near "
+     "population width."),
+]
+
+
+def table_design_choices():
+    """Companion to 05_norma_arms: what each design dimension is, and what it implies."""
+    df = pd.DataFrame(DESIGN_CHOICES,
+                      columns=["Dimension", "Option", "What it is", "What it implies"])
+    cols = list(df.columns)
+    lines = [r"\begin{table}[ht]", r"\centering", r"\setlength{\tabcolsep}{4pt}",
+             r"\begin{tabular}{l p{2.4cm} p{6.4cm} p{6.4cm}}", r"\toprule",
+             " & ".join(cols) + r" \\"]
+    last = None
+    for _, r in df.iterrows():
+        if r["Dimension"] != last:
+            lines.append(r"\midrule")
+        last = r["Dimension"]
+        lines.append(" & ".join(str(r[c]).replace("_", r"\_").replace("%", r"\%")
+                                for c in cols) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}",
+              r"\caption{The design dimensions that distinguish the NORMA arms in "
+              r"Table~\ref{tab:05_norma_arms}: each row is one option along one dimension, what "
+              r"the model does and what the choice costs. Options marked (default) are what an "
+              r"arm uses when the flag is absent. Heads, losses and priors combine freely; the "
+              r"arms table records which combinations were trained.}",
+              r"\end{table}"]
+    save_table("05_forecasting", "design_choices", lines, df, landscape=True, font_size="tiny")
+    return ["design_choices"]
+
 
 TABLES = [
     TableSpec("05_forecasting",   "prediction_performance",  table_prediction_performance,  False, (), None),
     TableSpec("05_forecasting",   "analyte_performance",     table_analyte_performance,     False, (), None),
     TableSpec("05_forecasting",   "norma_arms",              table_norma_arms,              False, (), None),
+    TableSpec("05_forecasting",   "design_choices",          table_design_choices,          False, (), None),
 ]
 
 

@@ -1,16 +1,5 @@
 """Architectures that predate the published model, kept only so the
 checkpoints in model/logs/ stay loadable.
-
-Of the 48 runs with saved checkpoints, 21 are NormaLight and 4 are NORMA --
-all Gaussian-head runs from before the quantile head. No published result uses
-them: the paper's model is NORMA2 with the quantile head (run q_age_set, see
-scripts/lib/datasets.py NORMA_RUN_ID), and the Gaussian head was dropped in the
-revision. utils.create_model is the only importer.
-
-The 21 NormaLight checkpoints load. The 4 NORMA ones do not, and did not
-before this file existed: they predate the age embedding, and create_model's
-legacy detection only covers the NormaLight/NormaLightV1 pair. Left as is --
-no result depends on them.
 """
 import torch
 import torch.nn as nn
@@ -33,11 +22,7 @@ class Time2Vec(nn.Module):
 
 
 class NormaLightV1(nn.Module):
-    """Legacy NormaLight (pre-age-embedding, decoder-named encoder layers).
-
-    Compatible with older checkpoints (e.g. 87345aff) whose state_dict has
-    'decoder.layers.*' keys and no 'age_emb'.
-    """
+    """Legacy NormaLight (pre-age-embedding, decoder-named encoder layers)."""
 
     def __init__(self, d_model, nhead, nlayers, ncodes, nstates=2):
         super().__init__()

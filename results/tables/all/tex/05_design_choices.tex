@@ -1,0 +1,46 @@
+\begin{table}[ht]
+\centering
+\tiny
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l p{2.4cm} p{6.4cm} p{6.4cm}}
+\toprule
+Dimension & Option & What it is & What it implies \\
+\midrule
+Attention & cross bidirectional (default) & The causal mask is passed as tgt\_mask only, so self-attention is causal but cross-attention sees the whole history. & A history token can attend forward in time, so per-position states are not causal; fine for one query at the end of the sequence. \\
+Attention & fully causal (--causal\_memory) & The mask is passed as memory\_mask too, so both blocks are triangular. & Every token uses its own past only, which is what a bedside model has; costs a little accuracy. \\
+\midrule
+History & target analyte only (default) & Tokens are the patient's previous draws of the analyte being predicted. & A clean univariate setpoint model; no other analyte can leak into the query. \\
+History & full panel (--use\_full\_panel) & Every past draw across analytes, capped at 128, with a flag for whether the target analyte was drawn at that timestamp. & Multivariate and irregularly timed, so a creatinine trend can inform urea; longer, sparser sequences. \\
+\midrule
+Covariates & sex, analyte, age at first draw (always on) & Context token carrying the demographics and assay identity. & Matches how the population interval is stratified, so a width difference is not a stratification difference. \\
+Covariates & age at each draw (--use\_age\_t) & Binned age embedding on every history token, not just the context. & Lets the setpoint drift with age; matters over decades, not within an admission. \\
+Covariates & care setting (--use\_setting) & Inpatient / outpatient / ED embedding on each history token. & Separates an abnormal value from a value drawn in an abnormal place. \\
+Covariates & same-draw co-analytes (--use\_coanalytes) & The other analytes drawn at the same timestamp, as [value, observed, low, normal, high]. & Adds the clinical context of each past draw; cannot see the query draw's panel. \\
+Covariates & co-analytes on the query too (--query\_coanalytes) & The same panel encoding attached to the query token. & Conditions the interval on concurrent results, so it can no longer be used to flag them. \\
+\midrule
+Split & sequence-level (default) & Splits are over patient-analyte sequences. & One patient's potassium can train while their sodium tests: optimistic if any patient-level signal is learnable. \\
+Split & patient-level (--split\_by patient) & Every sequence from a patient falls in one split. & The conservative generalisation claim; not comparable with sequence-split arms, which score different rows. \\
+\midrule
+Normalisation & within-sequence & Each history is standardised by its own mean and SD and the head's output de-normalised. & One model can serve every analyte, and the head predicts deviation from the patient's own level; a one-draw history has no usable SD. \\
+\midrule
+Head & quantile (default) & Linear head emitting the five levels (2.5, 25, 50, 75, 97.5). & Distribution-free, but nothing enforces monotonicity or stops the interval collapsing on a short history. \\
+Head & gate & Own quantiles plus a scalar gate g; returns g * own + (1 - g) * population quantiles. & A readable trust dial, bounded between the two inputs. \\
+Head & nig & Conjugate normal-inverse-gamma head; the interval is the closed-form Student-t posterior predictive against the population prior. & Shrinkage is analytic, so one draw provably gives the population interval; assumes Gaussian within-person variation. \\
+Head & gaussian & Mean and log-variance heads; interval is mu +/- 1.96 sigma. & Comparable likelihood with the Gaussian baselines; forces symmetric intervals. \\
+\midrule
+Loss & QuantileLoss (pinball) & Mean pinball loss over the five levels. & Levels are fit independently; with few draws it shrinks toward the median, because that minimises pinball in-sample. \\
+Loss & QuantilePriorLoss, anchor & Pinball plus the expected pinball under the population interval, weighted k/(n+k), on normal-state queries only. & Bayesian shrinkage as a loss: no history gives the population interval, and the pull decays with draws. \\
+Loss & QuantilePriorLoss, tau & The same with n time-decayed, sum(exp(-dt/tau)). & Old draws stop counting, so a stale setpoint is not treated as well estimated. \\
+Loss & QuantilePriorLoss, floor & Pinball plus a hinge when the predicted width falls below the population width. & Fixes over-narrow intervals without pinning location; can only widen, never centre. \\
+Loss & QuantilePriorLoss, gate & Pinball on the gated quantiles plus a KL pulling the gate to 1 - k/(n+k). & The prior acts on self-trust rather than location, so shrinkage is inspectable per prediction. \\
+Loss & StudentTNLLLoss & NLL of the NIG head's Student-t predictive. & The only arm whose reported interval and training objective are the same object. \\
+Loss & NORMALoss (KL-aligned) & Gaussian NLL plus lambda * KL to the population distribution, weighted k/(n+k) on normal queries and reversed on abnormal ones. & The original formulation; the abnormal-side push is a hinge, so its scale is arbitrary relative to the KL. \\
+\midrule
+Prior & state-conditional population table & Fixed lookup [analyte, state, sex] of quantiles, mu, var and rho (within-person share of variance); never updated by gradient. & What every arm shrinks toward is frozen and auditable; rho sets how much one draw is worth. \\
+\midrule
+Prior strength & k = 5 vs k = 20 & Pseudo-draws the prior is worth, in weight k/(n+k). & k = 5 hands control to the patient after a few draws; k = 20 keeps most histories near population width. \\
+\bottomrule
+\end{tabular}
+\caption{The design dimensions that distinguish the NORMA arms in Table~\ref{tab:05_norma_arms}: each row is one option along one dimension, what the model does and what the choice costs. Options marked (default) are what an arm uses when the flag is absent. Heads, losses and priors combine freely; the arms table records which combinations were trained.}
+\label{tab:05_design_choices}
+\end{table}

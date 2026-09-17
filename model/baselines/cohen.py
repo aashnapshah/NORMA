@@ -1,64 +1,18 @@
 #!/usr/bin/env python
-"""Cohen et al. 2021 (Nat Med) personalized lab test models as RI benchmarks.
-
-Implements the lab test regression models of Cohen et al., "Personalized lab
-test models to quantify disease potentials in healthy individuals", Nature
-Medicine 27, 1582-1591 (2021), doi:10.1038/s41591-021-01468-6, adapted to the
-NORMA validation splits:
-
-  m2  single-lab single-time point: XGBoost on (age, sex, baseline mean of
-      the target analyte).
-  m3  multi-lab single-time point: XGBoost on (age, sex, baseline means of
-      all analytes).
-  m4  multi-lab multi-time point: XGBoost on (age, sex, per-time-bin means
-      of the top-15 analytes), analytes selected per fold by mean absolute
-      SHAP values of the corresponding m3 model, as in the paper.
-
-Training follows their protocol exactly: separate model per lab test,
-XGBoost 'gbtree' booster with squared-error objective and their published
-hyperparameters, fivefold cross-validation with folds controlling for age
-and sex distribution, and downsampling of the training population to a
-uniform age distribution at 5-year resolution. Each patient's prediction is
-out-of-fold. Following their healthy-trajectory training criterion
-("showing within normal levels at least until prediction date", Fig. 4a),
-training is restricted to pairs whose baseline values all fall within the
-population reference interval; predictions are still produced for every
-pair, as in their patient report. (Their diagnosis/medication-based healthy
-filter is not reproducible in ICU-timescale cohorts; the within-norm
-criterion is the component that is defined in all cohorts.) Personalized range = prediction +/- z * s.d. of the predicted values for that
-analyte
-(their Fig. 4c report uses z=1; default here is z=1.96 for coverage parity
-with the 95% intervals of the other methods -- ri_std is stored so either
-band can be derived).
-
-Documented adaptations (their exact windows are undefined on ICU-timescale
-cohorts): features are drawn from each patient's baseline split rather than
-calendar windows 2-3y (m2/m3) or 2-6y (m4) before prediction, m4 uses 8
-equal-width bins over the patient's baseline span in place of 6-month
-calendar bins, and missing bins are filled with the patient's baseline mean
-of that analyte (in place of their iterative 6-month regression imputation),
-falling back to XGBoost's native missing-value handling when the patient
-never measured the analyte.
-
-Their healthy-cohort criteria (ST2 diagnoses, ST3 drug-lab pairs, pregnancy and
-hospitalization) are implemented at the end of this file and are applied to the
-development cohorts, where calendar timestamps and raw records exist; build the
-event tables once with `python process/cohen_events.py --build_healthy`.
-"""
+"""Cohen et al. 2021 (Nat Med) personalized lab test models as RI benchmarks."""
 import numpy as np
 import pandas as pd
 import xgboost as xgb
 from common import REFERENCE_INTERVALS, detect_cols, sex_key, sex_idx
-# Healthy-cohort event tables are built by process/cohen_events.py, which
-# reads raw MIMIC-IV / EHRSHOT records; see its --build_healthy CLI.
+# Healthy-cohort event tables are built by process/cohen_events.py, which reads raw MIMIC-IV /
+# EHRSHOT records; see its --build_healthy CLI.
 from process.cohen_events import load_events, healthy_mask
 
 N_FOLDS = 5
 N_BINS = 8  # m4: eight time periods, as in the paper
 TOP_K_LABS = 15  # m4: top 15 labs by m3 mean absolute SHAP, as in the paper
 
-# Exact hyperparameters from Cohen et al. Methods ("Lab test regression
-# models"). 'reg:linear' in xgboost 0.81 is 'reg:squarederror' today.
+# Exact hyperparameters from Cohen et al.
 XGB_PARAMS = {
     "m2": dict(num_boost_round=750, subsample=1.0, max_depth=2,
                colsample_bytree=1.0, eta=0.025, min_child_weight=3),
@@ -92,13 +46,7 @@ def _frac_within_popri(baseline, c):
 
 
 def build_pair_table(split_df, min_bl=5):
-    """One row per (patient, analyte) with baseline features and index target.
-
-    Returns (pairs, blmean_wide, bin_wide):
-      pairs       -- pair-level frame with shared cols, bl_mean, target
-      blmean_wide -- patient-level baseline mean per analyte (m3 features)
-      bin_wide    -- patient-level per-analyte per-bin means (m4 features)
-    """
+    """One row per (patient, analyte) with baseline features and index target."""
     c = detect_cols(split_df)
     df = split_df.copy()
     df[c["analyte"]] = df[c["analyte"]].replace("", "NA").fillna("NA")
@@ -125,10 +73,7 @@ def build_pair_table(split_df, min_bl=5):
     per_day = {"minutes": 60 * 24, "hours": 24, "days": 1}[time_unit]
     agg["t_span"] = (agg["t_max"] - agg["t_min"]) / per_day
 
-    # Fraction of baseline values within the population reference interval
-    # (Cohen et al. train on trajectories "showing within normal levels at
-    # least until prediction date"; pairs with frac < 1 are excluded from
-    # training but still receive predictions)
+    # Fraction of baseline values within the population reference interval (Cohen et al.
     agg["frac_bl_norm"] = _frac_within_popri(baseline, c)
 
     pairs = agg.join(target, how="inner").reset_index()
@@ -195,10 +140,7 @@ def uniform_age_mask(sub, eligible=None, floor=20, seed=0):
 
 
 def _train_predict(X, y, folds, train_ok, params, sigma_ok=None, seed=0):
-    """Per-fold XGBoost train/predict. Returns (oof_pred, sigma_per_fold, models).
-
-    sigma_ok restricts which pairs' predictions enter the interval-scale estimate
-    (Cohen et al.'s sigma is estimated on the healthy CV population)."""
+    """Per-fold XGBoost train/predict. Returns (oof_pred, sigma_per_fold, models)."""
     params = dict(params)
     n_rounds = params.pop("num_boost_round")
     xgb_params = {
@@ -262,11 +204,7 @@ def compute_cohen_refs(split_df, models=("m2", "m3", "m4"), z=1.96,
                        min_pairs=50, age_downsample=True, healthy_train=True,
                        norm_frac=1.0,
                        seed=0):
-    """Compute Cohen et al. reference intervals for every valid pair.
-
-    Returns a long-format frame matching ref_intervals.csv, with
-    method in {cohen_m2, cohen_m3, cohen_m4}.
-    """
+    """Compute Cohen et al. reference intervals for every valid pair."""
     pairs, blmean_wide, bin_wide = build_pair_table(split_df)
     analytes = sorted(pairs["analyte"].unique())
     print(f"  Cohen benchmark: {len(pairs):,} pairs, {len(analytes)} analytes, "
@@ -280,9 +218,9 @@ def compute_cohen_refs(split_df, models=("m2", "m3", "m4"), z=1.96,
 
     bin_cols = list(bin_wide.columns)
     bin_aligned = bin_wide.reindex(pairs["patient_id"])
-    # m4 imputation adaptation: fill a missing bin with the patient's
-    # baseline mean of that analyte (paper uses an iterative 6-month
-    # regression model); analytes never measured stay NaN (xgboost native).
+    # m4 imputation adaptation: fill a missing bin with the patient's baseline mean of that
+    # analyte (paper uses an iterative 6-month regression model); analytes never measured stay
+    # NaN (xgboost native).
     for col in bin_cols:
         a = col.rsplit("__b", 1)[0]
         src = f"bl__{a}"
@@ -388,23 +326,16 @@ def compute_cohen_refs(split_df, models=("m2", "m3", "m4"), z=1.96,
     return ref_df
 
 
-# ── Development-cohort training (MIMIC-IV + EHRSHOT, same split as NORMA) ────
-#
-# Trains the Cohen models on the same combined development split NORMA was
-# trained on (load_and_split_data, random_state=42) and applies them to the
-# validation cohorts, mirroring NORMA's train-once / transfer evaluation.
-# The within-norm healthy filter is applied to the development sequences:
-# a sequence enters training only if its history stays within the population
-# reference interval, and interval scales are estimated on the healthy
-# development validation split.
+# ── Development-cohort training (MIMIC-IV + EHRSHOT, same split as NORMA) ──── Trains the Cohen
+# models on the same combined development split NORMA was trained on (load_and_split_data,...
 
 import os
 import sys
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))   # model/baselines
 ROOT_DIR = os.path.dirname(os.path.dirname(_BASE_DIR))   # norma root
-# The processed dev cohort (EHRSHOT + MIMIC-IV) lives outside the repo because
-# both sources are access-controlled; point NORMA_DATA_DIR at your own copy.
+# The processed dev cohort (EHRSHOT + MIMIC-IV) lives outside the repo because both sources are
+# access-controlled; point NORMA_DATA_DIR at your own copy.
 DEFAULT_DEV_DIR = os.environ.get(
     "NORMA_DATA_DIR", os.path.join(os.path.dirname(ROOT_DIR), "data", "processed"))
 # model/logs/baselines/ here and inside Clalit (jobs/run_clalit.py --pack_bundle carries it in)
@@ -418,12 +349,7 @@ def load_dev_sequences(dev_dir, source="combined", nstates=2):
 
 
 def build_dev_frames(seqs, min_hist=5):
-    """Per-sequence history features + patient-level wide frames.
-
-    Each sequence contributes one training pair: history = x[:-1] (features),
-    target = x[-1]. frac_norm is the fraction of history values within the
-    population RI (Cohen et al.'s healthy-trajectory training criterion).
-    """
+    """Per-sequence history features + patient-level wide frames."""
     ri = REFERENCE_INTERVALS
 
     # Pass 1: per-sequence stats + patient-level history time spans
@@ -485,10 +411,6 @@ def build_dev_frames_cohen_healthy(dev_dir, min_hist=5, source="combined",
     healthy-cohort criteria at the point level (diagnoses, medications,
     pregnancy, hospitalization -- see the healthy-cohort criteria section
     at the end of this file).
-
-    Uses combined_lab_data_v2.csv (calendar timestamps) restricted to the
-    sequence keys of NORMA's own train/val split, drops unhealthy points,
-    and reassembles the surviving points into sequences.
     """
     train_seq, val_seq, _ = load_dev_sequences(dev_dir, source=source)
     key_split = {}
@@ -499,8 +421,8 @@ def build_dev_frames_cohen_healthy(dev_dir, min_hist=5, source="combined",
 
     lab_path = os.path.join(dev_dir, "combined_lab_data_v2.csv")
     print(f"  Loading dev lab points from {lab_path}")
-    # keep_default_na=False so sodium's test_name "NA" is not read as NaN;
-    # real missing values in the numeric columns are empty strings.
+    # keep_default_na=False so sodium's test_name "NA" is not read as NaN; real missing values in
+    # the numeric columns are empty strings.
     lab = pd.read_csv(lab_path,
                       usecols=["source", "subject_id", "sex", "test_name",
                                "time", "age", "numeric_value"],
@@ -581,18 +503,7 @@ def train_dev_cohen(dev_dir, models=("m2", "m3", "m4"), min_pairs=50,  # noqa: E
                     age_downsample=True, healthy_train=True, seed=0,
                     source="combined", cohen_healthy=True,
                     train_sources=("ehrshot",), norm_frac=1.0):
-    """Train Cohen m2/m3/m4 on the NORMA development train split.
-
-    cohen_healthy=True applies Cohen et al.'s full healthy-cohort criteria
-    (ST2 diagnoses, ST3 drug-lab pairs, pregnancy, hospitalization) at the
-    point level before sequence assembly; the within-norm-history criterion
-    (healthy_train) applies on top, as in their Fig. 4a; norm_frac is the
-    minimum fraction of a pair's history inside PopRI to count as healthy
-    (1.0 = every value, Cohen's definition; <1 relaxes it for thin cohorts).
-
-    Returns an artifact dict: per-analyte boosters, interval scales (estimated
-    on the healthy dev validation split), and feature-column metadata.
-    """
+    """Train Cohen m2/m3/m4 on the NORMA development train split."""
     if cohen_healthy:
         (tr_pairs, tr_blmean, tr_bins), (va_pairs, va_blmean, va_bins) = \
             build_dev_frames_cohen_healthy(dev_dir, source=source,
@@ -647,12 +558,9 @@ def train_dev_cohen(dev_dir, models=("m2", "m3", "m4"), min_pairs=50,  # noqa: E
         print(f"    {analyte}: {healthy.sum():,}/{len(sub):,} within-norm (>={norm_frac:g}), "
               f"{train_ok.sum():,} in training set, {v_healthy.sum():,} healthy val")
         if train_ok.sum() < min_pairs or v_healthy.sum() < 2:
-            # Each Cohen variant is a per-analyte gradient-boosted model whose
-            # interval WIDTH comes from the SD of held-out healthy predictions, so a
-            # handful of patients gives both an unreliable fit and an unreliable
-            # width. Skipping is our guard, not the paper's; the cost is that the
-            # analyte gets no Cohen interval at all and silently drops out of the
-            # benchmark. Tune with --cohen_min_pairs.
+            # Each Cohen variant is a per-analyte gradient-boosted model whose interval WIDTH
+            # comes from the SD of held-out healthy predictions, so a handful of patients gives
+            # both an unreliable fit and an...
             print(f"    {analyte}: too few healthy pairs "
                   f"({train_ok.sum():,} train < {min_pairs}, {v_healthy.sum():,} val), skipped")
             continue
@@ -700,9 +608,7 @@ def train_dev_cohen(dev_dir, models=("m2", "m3", "m4"), min_pairs=50,  # noqa: E
 
 
 def apply_dev_cohen(split_df, artifact, z=1.96):
-    """Apply dev-trained Cohen models to a validation cohort's pairs.
-
-    Returns long-format ref interval rows (method = cohen_m2/m3/m4)."""
+    """Apply dev-trained Cohen models to a validation cohort's pairs."""
     pairs, blmean_wide, bin_wide = build_pair_table(split_df)
     m3_cols = artifact["analytes"]
     bin_cols = artifact["bin_cols"]
@@ -761,12 +667,7 @@ def augment_cohen(ref_df, split_df, models=("m2", "m3", "m4"), z=1.96,
                   min_pairs=50, age_downsample=True, healthy_train=True,
                   cohen_healthy=True, train_sources=("ehrshot",), seed=0,
                   force=False, norm_frac=1.0):
-    """Append Cohen benchmark rows (cohen_m2/m3/m4) to an existing ref_df.
-
-    Trains on the dev cohorts once (cached at artifact_path) and applies to
-    split_df's pairs, restricted to the patient-analyte pairs already covered
-    by the existing methods. Called from 04_compute_refs.py.
-    """
+    """Append Cohen benchmark rows (cohen_m2/m3/m4) to an existing ref_df."""
     import pickle
     artifact_path = artifact_path or DEFAULT_ARTIFACT
     dev_dir = dev_dir or DEFAULT_DEV_DIR
@@ -798,11 +699,8 @@ def augment_cohen(ref_df, split_df, models=("m2", "m3", "m4"), z=1.96,
             raise RuntimeError(
                 f"Cohen artifact lacks models {missing} -- rerun with retrain")
     elif not os.path.isdir(dev_dir):
-        # Inside Clalit there are no dev cohorts: training needs
-        # combined_sequences_v2.pkl, NORMA's training data, which is not carried
-        # in.  Skip the Cohen arms and let every other method proceed -- 04_refs'
-        # coverage table reports them as missing, so nothing is silently absent.
-        # --cohen_retrain still fails loudly, since that asks for training.
+        # Inside Clalit there are no dev cohorts: training needs combined_sequences_v2.pkl,
+        # NORMA's training data, which is not carried in.
         if retrain:
             raise SystemExit(
                 f"\n  --cohen_retrain needs the dev cohorts, and {dev_dir} does not exist.")

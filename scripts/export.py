@@ -1,15 +1,10 @@
 #!/usr/bin/env python
 """Write results/processed/<cohort>/ -- the figure data -- from the raw results.
 
+Usage:
     python export.py --dataset chs                 # every stage that has raw results
     python export.py --dataset chs --only 'cox*'   # some files
     python export.py --dataset chs --txt           # + fixed-width .txt copies for screenshots
-
-A stage writes its full results to results/raw/<cohort>/; this derives
-the slice the figures and tables read (SPEC below: columns, rows, numbers rounded
-to SIG significant figures) so that one small folder is all that has to leave
-Clalit.  jobs/run_clalit.py calls it after every stage.  Here,
-`make_figures.py --dataset eicu --from processed` checks that it is enough.
 """
 import bootstrap  # noqa: F401
 
@@ -24,24 +19,10 @@ import pandas as pd
 from datasets import NORMA_RUN_ID, results_dir
 
 
-
-# ═══════════════════════════════════════════════════════════════════════════
 # What leaves a cohort
-# ═══════════════════════════════════════════════════════════════════════════
 
-# What leaves a cohort: the slice of every raw result file that the figures and
-# tables read (results/processed/<cohort>/, written by scripts/export.py).
-#
-# One entry per raw result filename (or glob).  `cols` = the columns to keep (None
-# = all), `patterns` = regexes for further columns to keep, `rows` = a row filter
-# (a callable frame -> boolean mask).  A raw file with no entry is not exported.
-#
-# The spec is the only definition of what the plotting code needs from a cohort,
-# so it is checked here rather than trusted: `make_figures.py --dataset eicu
-# --from processed` and the matching make_tables call must draw exactly what the
-# raw results draw (compare results/figures/eicu/*.pdf and
-# results/tables/eicu/csv/*.csv between the two builds).  Add a column here when
-# a figure starts reading one; the check catches the omission.
+# What leaves a cohort: the slice of every raw result file that the figures and tables read
+# (results/processed/<cohort>/, written by scripts/export.py).
 
 Spec = namedtuple("Spec", "cols patterns rows")
 ALL = Spec(None, (), None)
@@ -78,8 +59,8 @@ SPEC = {
     # 10_mortality
     "mortality_quintile.csv": ALL,
     "mortality_deviation.csv": ALL,   # method column: baseline_z + one per RI method
-    # 11_lead_time: future_abnormal (per analyte + the analyte="median" rows, per
-    # age band), lead time at every anchor
+    # 11_lead_time: future_abnormal (per analyte + the analyte="median" rows, per age band), lead
+    # time at every anchor
     "future_abnormal.csv": ALL,   # per analyte, analyte="median", and the age_band rows
     # only the pooled rows are drawn; the age-band and sweep rows stay in raw/
     "lead_time.csv": Spec(None, (), lambda d: (d["age_band"].astype(str) == "all")
@@ -111,10 +92,7 @@ SPEC = {
 
 
 def spec_for(filename):
-    """The Spec for a raw result filename, or None if it is not exported.
-
-    SPEC is keyed by the bare name; files on disk carry their stage prefix
-    (12_eval.csv), so strip it before looking up."""
+    """The Spec for a raw result filename, or None if it is not exported."""
     filename = re.sub(r"^\d\d_", "", os.path.basename(filename))
     if filename in SPEC:
         return SPEC[filename]
@@ -124,9 +102,7 @@ def spec_for(filename):
     return None
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Export
-# ═══════════════════════════════════════════════════════════════════════════
 
 SIG = None   # no rounding: even 8 significant figures moved a few values across a 3-s.f. display boundary
 

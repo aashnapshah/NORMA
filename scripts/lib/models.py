@@ -1,41 +1,8 @@
-"""The one place that decides what every model and cohort is called and coloured.
-
-Change a label, a colour or a marker HERE and every figure and table in the
-pipeline follows. Nothing else in the repo should define a model label or a
-hex colour: `lib/figlib.py` and `lib/figlib.py` re-export views of this
-registry under the names the per-stage modules already use
-(METHOD_COLORS, RI_LABELS, _BM_COLORS, ABLATION_*, MODEL_COLORS, DATASET_*),
-so those modules keep working unchanged.
-
-Three kinds of entry, all in MODELS:
-
-  ri          reference-interval methods, the ones a cohort figure compares:
-              Pop_RI, Per_RI, the Gaussian fits, the Cohen models, NORMA_RI
-  forecast    next-value forecasters: NORMA under either query, and the
-              history-only baselines
-  norma_arm   the covariate-ablation arms of NORMA (model/run_covariate_ablation.sh)
-
-`key` is the string that appears in the result CSVs. `aliases` lists the other
-spellings older result files use, so `canonical()` can fold them in.
-
-Colours are the colour-vision-deficient-safe set validated 2026-08-31: every
-cross-family pair clears Lab dE 15 under deuteranopia and protanopia (Machado
-matrices). Within a family (Gaussian, Cohen) the colours are one hue ramp on
-purpose, so they read as variants; a figure showing every member of a family
-must therefore carry a second identity channel (row or x position, or
-linestyle). Pop_RI is achromatic because it is the reference the others are
-measured against.
-
-The NORMA arms reuse the cross-family hues rather than a teal ramp: five steps
-of one hue are not separable, and an ablation figure never shows the RI methods
-at the same time (`figlib.ablation_mode`), so there is no clash.
-"""
+"""The one place that decides what every model and cohort is called and coloured."""
 
 from collections import namedtuple
 
-# Family hues. Anything needing a raw colour takes it from here, never inline.
-# Per-measurement covariates each training run was fitted with, by run id --
-# defined once in model/run_names.py so the dev-set scripts use the same names.
+# Family hues.
 import os as _os, sys as _sys
 _MODEL_DIR = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))), "model")   # lib is norma/scripts/lib
 if _MODEL_DIR not in _sys.path:
@@ -62,14 +29,8 @@ def lighten(hex_color, amount):
     return f"#{r:02X}{g:02X}{b:02X}"
 
 
-# Model, cohort, state and outcome names are Title Case everywhere (Aashna,
-# 2026-08-31); descriptive axis and colourbar text stays sentence case.
-#
-# label  full name, may contain TeX; used where there is room (legends, tables)
-# short  compact axis label; falls back to `label` when None
-# family variants of one approach share a family, which drives the row/column
-#        brackets in the grouped figures and the family marker
-# marker per-family marker shape, for figures that encode method by shape
+# Model, cohort, state and outcome names are Title Case everywhere (Aashna, 2026-08-31);
+# descriptive axis and colourbar text stays sentence case.
 Model = namedtuple("Model", "key label short family group marker aliases")
 
 
@@ -90,11 +51,9 @@ MODELS = {m.key: m for m in [
     _m("NORMA", r"NORMA$_{RI}$", "NORMA", "NORMA", "ri", "D",
        ["NORMA_RI", "norma", "q_age_set", "NORMA_q_age_set", "norma_q_age_set"]),
 
-    # ── forecasters ──────────────────────────────────────────────────────────
-    # Two NORMA entries because the query state is what differs: `oracle` is
-    # given the realized next state (the published setting, which the baselines
-    # cannot match), `marginal` uses the transition prior and is the
-    # like-for-like comparison. Both are the same weights, hence the same hue.
+    # ── forecasters ────────────────────────────────────────────────────────── Two NORMA entries
+    # because the query state is what differs: `oracle` is given the realized next state (the
+    # published...
     _m("NORMA_oracle", "NORMA (Realized State)", "NORMA-S", "NORMA", "forecast", "D",
        ["NORMA-Quantile", "NORMA_oracle", "oracle"]),
     _m("NORMA_marginal", "NORMA (Leak-Free)", "NORMA-H", "NORMA", "forecast", "D",
@@ -103,13 +62,9 @@ MODELS = {m.key: m for m in [
     _m("Mean", "Patient Mean", "Mean", "history", "forecast", "o", ["mean"]),
     _m("ARIMA", "ARIMA", None, "history", "forecast", "o", ["arima"]),
 
-    # ── NORMA covariate-ablation arms ────────────────────────────────────────
-    # Keyed as the pipeline writes them (config.NORMA_ABLATION_RUN_IDS puts
-    # norma_<arm> rows in ref_intervals -> method NORMA_<arm> downstream).
-    # Every arm is labelled by exactly the per-measurement covariates it was
-    # trained with -- one convention, readable whichever run is the main. The
-    # main run is folded onto "NORMA" above; in ablation figures figlib labels it
-    # by its own covariate set (RUN_COVARIATES) so it is comparable to the arms.
+    # ── NORMA covariate-ablation arms ──────────────────────────────────────── Keyed as the
+    # pipeline writes them (config.NORMA_ABLATION_RUN_IDS puts norma_<arm> rows in ref_intervals
+    # -> method...
     _m("NORMA_334f7e21", arm_label("334f7e21"), RUN_SHORT["334f7e21"], "NORMA_arm", "norma_arm", "D", ['334f7e21', 'norma_334f7e21']),
     _m("NORMA_q_age", arm_label("q_age"), RUN_SHORT["q_age"], "NORMA_arm", "norma_arm", "D", ['q_age']),
     _m("NORMA_q_set", arm_label("q_set"), RUN_SHORT["q_set"], "NORMA_arm", "norma_arm", "D", ['q_set']),
@@ -118,24 +73,19 @@ MODELS = {m.key: m for m in [
     _m("NORMA_q_set_co", arm_label("q_set_co"), RUN_SHORT["q_set_co"], "NORMA_arm", "norma_arm", "D", ['q_set_co']),
     _m("NORMA_q_age_set_co", arm_label("q_age_set_co"), RUN_SHORT["q_age_set_co"], "NORMA_arm", "norma_arm", "D", ['q_age_set_co']),
     _m("NORMA_q_co_q", arm_label("q_co_q"), RUN_SHORT["q_co_q"], "NORMA_arm", "norma_arm", "D", ['q_co_q']),
-    # patient-split arms: their own group, compared against p_base rather than
-    # against the covariate ladder (holding out whole patients changes the test set)
+    # patient-split arms: their own group, compared against p_base rather than against the
+    # covariate ladder (holding out whole patients changes the test set)
     _m("NORMA_p_base", arm_label("p_base"), RUN_SHORT["p_base"], "NORMA_arm", "norma_arm", "D", ['p_base']),
     _m("NORMA_p_co", arm_label("p_co"), RUN_SHORT["p_co"], "NORMA_arm", "norma_arm", "D", ['p_co']),
     _m("NORMA_p_causal", arm_label("p_causal"), RUN_SHORT["p_causal"], "NORMA_arm", "norma_arm", "D", ['p_causal']),
     _m("NORMA_p_full", arm_label("p_full"), RUN_SHORT["p_full"], "NORMA_arm", "norma_arm", "D", ['p_full']),
-    # prior-anchored arms, two input families (run_prior_ablation.sh). They had no
-    # rows here at all, so every one of them resolved to the #999999 fallback and
-    # plotted as the same grey line. Each family is read against its own
-    # reference -- m_* against p_full, the rest against q_age_set -- so the two
-    # reuse one hue set, as the patient-split group already does.
+    # prior-anchored arms, two input families (run_prior_ablation.sh).
 ] + [
     _m(f"NORMA_{r}", arm_label(r), RUN_SHORT[r], "NORMA_arm", "norma_arm", "D", [r])
     for r in MULTI_PRIOR_ORDER + PRIOR_ORDER
 ]}
 
-# Colours, kept next to the registry rather than inside it so a family ramp is
-# visible as a ramp. Every value comes from HUES.
+# Colours, kept next to the registry rather than inside it so a family ramp is visible as a ramp.
 COLORS = {
     "PopRI": HUES["popri"],
     "PerRI": HUES["perri"],
@@ -165,9 +115,7 @@ COLORS = {
     "NORMA_p_co": HUES["gaussian"],
     "NORMA_p_causal": HUES["cohen"],
     "NORMA_p_full": HUES["perri"],
-    # prior-anchored families: one ramp of seven, used twice. m_pa_k5 and pa_k5
-    # share a colour because they are never read against each other -- each sits
-    # beside its own reference model, and fig_norma_all marks the group.
+    # prior-anchored families: one ramp of seven, used twice.
     **{f"NORMA_{r}": c for fam in (MULTI_PRIOR_ORDER, PRIOR_ORDER)
        for r, c in zip(fam, [HUES["norma_alt"], HUES["perri"], HUES["cohen"],
                              HUES["gaussian"], HUES["popri"],
@@ -175,12 +123,12 @@ COLORS = {
                              lighten(HUES["cohen"], 0.45)])},
 }
 
-# Which query gets an open marker: the realized-state forecast is not a
-# like-for-like number, and every figure that shows it flags it the same way.
+# Which query gets an open marker: the realized-state forecast is not a like-for-like number, and
+# every figure that shows it flags it the same way.
 USES_REALIZED_STATE = {"NORMA_oracle"}
 
-# Linestyle as a second identity channel, for the line figures where two family
-# members sit under the dE 15 colour floor (06_calibration/sensitivity.pdf).
+# Linestyle as a second identity channel, for the line figures where two family members sit under
+# the dE 15 colour floor (06_calibration/sensitivity.pdf).
 LINESTYLES = {
     "Gaussian_mle": (0, (1, 1.2)),
     "Gaussian_trunc": (0, (3.5, 1.4)),
@@ -213,12 +161,7 @@ def marker(key, default="o"):
 
 
 def collapse_run_id(name):
-    """Fold a bare training-run id onto NORMA, leaving registry names alone.
-
-    Result files name the primary run's method NORMA_<hex run id>. Anything the
-    registry knows — including the ablation arms — comes back untouched, so
-    NORMA_q_age stays a separate series instead of being averaged into NORMA.
-    """
+    """Fold a bare training-run id onto NORMA, leaving registry names alone."""
     s = str(name)
     known = canonical(s)
     if known:
@@ -239,25 +182,15 @@ def colors(keys):
     return {k: color(k) for k in keys}
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# Queried state
-# ═══════════════════════════════════════════════════════════════════════════
-# The state token NORMA conditions on. The integer coding (0/1/2) is the data
-# side and lives with the code that reads the model; these are the display
-# identities, so a figure that shows the three states colours them the same way
-# wherever it sits in the pipeline.
+# Queried state The state token NORMA conditions on.
 STATE_ORDER = ["low", "normal", "high"]
 STATE_DISPLAY = {"low": "Low", "normal": "Normal", "high": "High"}
 STATE_COLORS = {"low": "#5C6BC0", "normal": "#2E7D32", "high": "#FF8F00"}
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# Cohorts
-# ═══════════════════════════════════════════════════════════════════════════
-# Display name, colour and marker for every cohort, development ones included
-# (they were missing from the marker and colour maps, so any figure that put a
-# development cohort on a shared axis fell back to a default). Hues are Dark2,
-# far enough apart to survive both common CVD types.
+# Cohorts Display name, colour and marker for every cohort, development ones included (they were
+# missing from the marker and colour maps, so any figure that put a development cohort on a
+# shared axis...
 Cohort = namedtuple("Cohort", "key display color marker")
 
 COHORTS = {c.key: c for c in [

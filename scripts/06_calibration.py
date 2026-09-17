@@ -1,59 +1,9 @@
 #!/usr/bin/env python
 """Calibration of every reference-interval method on the same index measurements.
 
-Both steps read the interval bounds 07_classify stored per measurement, so this
-runs after 07; rows are restricted to measurements EVERY method has bounds for
-(Cohen has no interval where the healthy history is too thin), so all methods
-are scored on the same values.
-
-  coverage   per method (Pop_RI, Per_RI, Gaussian mle/trunc/eb, Cohen m2/m3/m4,
-             NORMA_RI) and every index measurement:
-                 covered     value inside [low, high]   (nominal ~95% for every
-                             method: Pop_RI 2.5-97.5th pct, Per_RI +/-2 SD,
-                             Gaussian/Cohen z = 1.96, NORMA 95% PI)
-                 width_rel   (high - low) / (Pop_RI high - Pop_RI low)
-                 inside_pop  |[low, high] n Pop_RI| / (high - low)
-             aggregated per (method, analyte, realised Pop_RI state of the value:
-             low / normal / high / all).  NORMA_RI is the normal-conditioned
-             interval (the deployment query), so its coverage of realised-abnormal
-             values is expected to be low -- that is the interval doing its job.
-             -> 06_calibration.csv (per analyte + analyte="median" rows)
-
-  conformal  which interval is narrowest AT the coverage it claims (R1-5, R1-8)?
-             Methods miss their nominal coverage by different amounts (NORMA 0.92
-             on eICU, empirical Bayes 0.93-0.94), so comparing raw widths compares
-             nothing.  Split conformal calibration removes that confound, per
-             method and analyte, on Pop_RI-normal measurements:
-               1. split PATIENTS 50/50 (seeded) so calibration and evaluation
-                  share no patient
-               2. conformity score on the calibration half: s = |x - mid| / half_width
-               3. gamma = the split-conformal ceil((n+1)*level)/n quantile of s
-               4. widen the evaluation half's intervals to mid +/- gamma * half_width
-                  and measure achieved coverage and width
-             gamma > 1 means the method was over-confident; after step 4 every
-             method sits at the same coverage, so width relative to Pop_RI is a
-             like-for-like comparison.
-             -> 06_conformal.csv (per analyte + analyte="median" rows)
-
 Usage:
     python 06_calibration.py --dataset eicu
     python 06_calibration.py --dataset eicu --only conformal --level 0.9
-
-Figures and tables
-------------------
-Composite files, each one figure with subplots:
-
-    calibration.pdf               every RI method on every cohort's index measurements
-                                  (06_calibration.py, coverage step) in one row, colour = method and
-                                  marker = cohort: a coverage of the next value when it
-                                  is realised Pop_RI-normal, b width / Pop_RI width,
-                                  c fraction inside Pop_RI
-    calibration_dev.pdf           NORMA on the dev test split, by queried state:
-                                  nominal-vs-empirical quantiles (3) + 95% coverage
-
-The state-conditional densities (state_conditional.pdf) live with the
-reference-interval code in the refs folder: they describe the interval, not
-its calibration on a cohort.
 """
 import bootstrap  # noqa: F401
 
@@ -71,8 +21,8 @@ from constants import MEDIAN_ROW
 from datasets import already_done, EXCLUDE_LABS, add_dataset_args, get_dataset, save_csv
 from metrics import method_prefix
 
-# Reuse is keyed on these: a step whose files are all present is skipped
-# unless --force (datasets.already_done).
+# Reuse is keyed on these: a step whose files are all present is skipped unless --force
+# (datasets.already_done).
 STEP_OUTPUTS = {
     "coverage": ["calibration.csv"],
     "conformal": ["conformal.csv"],
@@ -349,8 +299,6 @@ def main():
         ds.run_ids = list(args.runs)
     results_dir = ds.setup_output()
     # Reuse is the default: drop any step whose output is already written.
-    # This runs BEFORE the classification is loaded, so a fully-cached run
-    # costs nothing rather than paying the read and then skipping.
     todo = [s for s in args.only
             if not already_done(args, results_dir, *STEP_OUTPUTS[s], label=s)]
     if not todo:
@@ -363,9 +311,7 @@ def main():
         run_conformal(ds, args, results_dir)
 
 
-# ═════════════════════════════════════════════════════════════════════════
 # Figures and tables
-# ═════════════════════════════════════════════════════════════════════════
 
 import os
 
@@ -424,12 +370,7 @@ def _plot_coverage(ax, df):
 
 
 def fig_calibration_dev():
-    """NORMA on the dev test split, one row: quantile calibration per queried state (a-c) + 95% coverage (d).
-
-    Separating by state matters because the query state is what NORMA
-    conditions on: the normal-state interval is the one used to flag, and it
-    is the one that has to be honest.
-    """
+    """NORMA on the dev test split, one row: quantile calibration per queried state (a-c) + 95% coverage (d)."""
     df = _load_calibration()
     if df is None:
         return None
@@ -558,9 +499,7 @@ _CAL_COLS = ["Coverage of realised-normal values", "Interval width", "Agreement 
 def _calibration_fig(methods_for, labels, colors, all_arms=False):
     """One row, columns = a/b/c, colour = method, marker = cohort; marker = median across
     analytes, whisker = IQR. `methods_for(frames)` picks and orders the methods to show.
-
-    all_arms=True keeps a slot for every NORMA arm even when it has nothing to
-    plot, and labels the empty ones with why (figlib.arm_notes)."""
+    """
     frames = {ds: _load_calibration_per_analyte(ds) for ds in DATASETS}
     frames = {ds: d for ds, d in frames.items() if d is not None}
     if not frames:
@@ -606,9 +545,6 @@ def fig_calibration():
     realised-normal state, the width ratio and the agreement panel, so it scores exactly
     1.0 in all three by construction and only took up a slot (Aashna 2026-09-04). The
     dashed lines are where it sits.
-
-    The NORMA quantile-calibration panel of the old 2x2 was the dev-test split,
-    identical on every row; it stays in calibration_dev.pdf instead.
     """
     return _calibration_fig(
         lambda frames: [m for m in _BM_SUPP if m != "PopRI" and any(m in set(d.method) for d in frames.values())],
@@ -618,42 +554,24 @@ def fig_calibration():
 def fig_calibration_norma():
     """The NORMA covariate-ablation arms only, on the real cohorts: does feeding age at draw /
     care setting / same-draw co-analytes change coverage, width or Pop_RI agreement?
-
-    Empty until the arms have reference intervals for a cohort: set NORMA_ABLATION_RUN_IDS in
-    lib/datasets.py, run 04_refs.py --only norma --runs <arms>, then 06_calibration.py, coverage step.
     """
     def arms(frames):
         present = set().union(*(set(d.method) for d in frames.values()))
-        # Every arm gets a slot, plotted or not, so the figure shows what was
-        # tried; arm_notes() says why each empty slot is empty.
+        # Every arm gets a slot, plotted or not, so the figure shows what was tried; arm_notes()
+        # says why each empty slot is empty.
         found = [m for m in ALL_ARM_METHODS if m in present]
         if len(found) < 2:                       # the baseline alone is not a comparison
             return []
         return ALL_ARM_METHODS
-    # Twenty arms will not fit with the covariate labels the other figures use
-    # ("NORMA | sex, age, setting" x 20 collides into an unreadable band), so the
-    # axis carries the run id and 05_norma_arms carries what each one is.
+    # Twenty arms will not fit with the covariate labels the other figures use ("NORMA | sex,
+    # age, setting" x 20 collides into an unreadable band), so the axis carries the run id and
+    # 05_norma_arms...
     labels = {m: m.replace("NORMA_", "") for m in ALL_ARM_METHODS}
     return _calibration_fig(arms, labels, ALL_ARM_COLORS, all_arms=True)
 
 
-
-
 def fig_conformal():
-    """Width each method needs to actually cover 95% (06_calibration.py, conformal step).
-
-    Answers R1-5 (are the intervals calibrated) and R1-8 (does the transformer beat
-    simple fits to the same Pop_RI-normal history) on one axis. Comparing raw widths
-    is meaningless while the methods miss their nominal coverage by different
-    amounts, so every method is first widened by its own split-conformal factor
-    until it truly covers 95%; only then is width comparable.
-
-    Left: that widening factor (1 = the method was already honest, >1 = it was
-    over-confident). Right: the resulting width relative to Pop_RI — below 1 means
-    the method genuinely beats the population interval, above 1 means it buys
-    nothing. Pop_RI is the reference line, not a competitor: the normal state is
-    defined by Pop_RI, so its own coverage here is circular.
-    """
+    """Width each method needs to actually cover 95% (06_calibration.py, conformal step)."""
     frames = []
     for ds in VAL_COHORTS:
         d = load_result(ds, "conformal.csv")
@@ -695,9 +613,6 @@ def fig_conformal_norma():
     """The same conformal recalibration, for the NORMA arms rather than the
     benchmark methods: how much each arm has to be widened to truly cover 95%,
     and what its width is worth once it does.
-
-    Every arm keeps a row whether or not it can be plotted, with the reason on
-    the blank ones, so the figure shows what was tried (figlib.arm_notes).
     """
     frames = []
     for ds in VAL_COHORTS:
@@ -707,8 +622,8 @@ def fig_conformal_norma():
         if d is None or not len(d):
             frames.append((ds, None)); continue
         d = to_numeric(d)
-        # conformal.csv calls the main model "NORMA" where calibration.csv calls
-        # it "NORMA_<run>"; without this the main arm reads as never run.
+        # conformal.csv calls the main model "NORMA" where calibration.csv calls it
+        # "NORMA_<run>"; without this the main arm reads as never run.
         frames.append((ds, {_arm_key(r["method"]): {"gamma": (float(r["gamma"]), np.nan, np.nan),
                                                     "width": (float(r["width_rel_cal"]), np.nan, np.nan)}
                             for _, r in d.iterrows()}))
@@ -730,14 +645,7 @@ def fig_conformal_norma():
 
 
 def _load_arm_calibration():
-    """Per-analyte dev-test calibration for every arm that has one.
-
-    model/logs/<arm>/calibration_test.csv is written per training run, so this
-    needs no pipeline stage: it is the one view where an arm's coverage can be
-    read without 04_refs having been run over a cohort. Arms trained under
-    --split_by patient measure it on their own held-out patients rather than the
-    sequence split, which the row labels carry.
-    """
+    """Per-analyte dev-test calibration for every arm that has one."""
     from datasets import MODEL_LOG_DIR
     out = {}
     for run in ALL_ARMS:
@@ -754,10 +662,6 @@ def _load_arm_calibration():
 def fig_calibration_dev_norma():
     """Coverage, width and Pop_RI agreement of every arm on the development test
     split: median across analytes, whisker = IQR.
-
-    The cohort-level calibration figure can only show the arms 04_refs was run
-    over; this one is written by training itself, so it reaches every arm that
-    finished -- the patient-split arms included, which no cohort figure has.
     """
     per_arm = _load_arm_calibration()
     if len(per_arm) < 2:

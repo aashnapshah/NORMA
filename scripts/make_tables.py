@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Build every validation table under results/tables/<tag>/{tex,csv,pdf}/<nn>_<name>.<ext>.
 
+Usage:
     python make_tables.py                      # all tables, all cohorts -> results/tables/all/
     python make_tables.py --only 12_eval cox   # by stage or table base name
     python make_tables.py --dataset chs        # one cohort only -> results/tables/chs/
@@ -8,9 +9,6 @@
     python make_tables.py --no-pdf             # skip the tectonic compile
     python make_tables.py --check              # list missing result inputs per dataset
     python make_tables.py --list
-
-Per-dataset tables whose results/<kind>/<ds>/ inputs are missing get placeholder tables
-with the final filenames; pooled tables show "---" for those datasets.
 """
 
 import bootstrap  # noqa: F401
@@ -33,8 +31,6 @@ if not TABLES:
         "registry variable, or a folder excluded by discover.SKIP). Failing rather "
         "than reporting success having built nothing."
     )
-
-
 
 
 def _call(fn, *args):

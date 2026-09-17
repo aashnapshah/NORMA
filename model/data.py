@@ -34,8 +34,8 @@ class TimeSeriesDataset(Dataset):
         self.seq = sequences
         self.nstates = nstates
         self.normalize = normalize
-        # Optional co-analyte draw table (n_draws, K) from process/covariates.py;
-        # sequences index it via seq['draw_idx'].
+        # Optional co-analyte draw table (n_draws, K) from process/covariates.py; sequences index
+        # it via seq['draw_idx'].
         self.panel = panel
         self.drawmeta = drawmeta      # process/draw_meta.py index; enables the full past
         self.max_draws = max_draws
@@ -83,12 +83,11 @@ class TimeSeriesDataset(Dataset):
         ref_low_t = torch.tensor([ref_low], dtype=torch.float)
         ref_high_t = torch.tensor([ref_high], dtype=torch.float)
 
-        # Optional per-measurement covariates (v3 sequences). History = [:-1],
-        # the last element belongs to the query/target measurement.
+        # Optional per-measurement covariates (v3 sequences).
         extras = {}
-        # Always carried (prior-anchored losses and post-hoc shrinkage): the
-        # sex-specific population interval in the model's units and the number of
-        # target-analyte observations in the history.
+        # Always carried (prior-anchored losses and post-hoc shrinkage): the sex-specific
+        # population interval in the model's units and the number of target-analyte observations
+        # in the history.
         pop_low, pop_high = self._get_ref_bounds(seq['test_name'], sex_val)
         if self.normalize:
             pop_low, pop_high = 0.0, 1.0
@@ -106,8 +105,8 @@ class TimeSeriesDataset(Dataset):
             extras['setting_h'] = st[:-1]
             extras['setting_next'] = st[-1:].clone()
         if self.panel is not None and self.drawmeta is not None and 'draw_idx' in seq:
-            # Full irregular past: every draw this patient had before the query,
-            # not just the timestamps where the target analyte happened to be drawn.
+            # Full irregular past: every draw this patient had before the query, not just the
+            # timestamps where the target analyte happened to be drawn.
             dm = self.drawmeta
             di = np.asarray(seq['draw_idx'], dtype=np.int64)
             q_time = float(dm['row_time'][di[-1]])          # absolute time of the query draw
@@ -132,8 +131,8 @@ class TimeSeriesDataset(Dataset):
                 sv = np.zeros(len(rows), dtype=np.int64)
                 hist_di = di[:-1]
                 if len(hist_di):
-                    # map each selected panel row back to its position in the
-                    # target analyte's own history, where it has one
+                    # map each selected panel row back to its position in the target analyte's
+                    # own history, where it has one
                     srt = np.argsort(hist_di, kind='stable')
                     sd = hist_di[srt]
                     pos = np.clip(np.searchsorted(sd, rows), 0, len(sd) - 1)
@@ -149,13 +148,8 @@ class TimeSeriesDataset(Dataset):
             s_h = torch.from_numpy(sv).long()
             t_h = torch.from_numpy(rt_sel.astype(np.float32)).float().unsqueeze(-1)
             t_next = torch.tensor([q_time], dtype=torch.float)  # same absolute clock
-            # age_h was built above from age_t, i.e. one entry per draw of the TARGET
-            # analyte. The history is now one entry per panel row, so the two lengths
-            # disagree and model.forward would add (B,T_panel,D) to (B,T_target,D).
-            # Rebuild it on the panel clock: drawmeta carries no age, but age at the
-            # query is known and row_time is absolute, so age at a panel row is just
-            # the query age less the elapsed years. --use_setting has no such
-            # derivation (train.py rejects it with --use_full_panel).
+            # age_h was built from age_t (one entry per target draw); rebuild it on the panel
+            # clock, or model.forward adds (B,T_panel,D) to (B,T_target,D).
             if 'age_h' in extras:
                 age_q = float(extras['age_next'][0])
                 age_rows = age_q + (rt_sel.astype(np.float32) - np.float32(q_time)) / np.float32(365.25)
@@ -189,8 +183,7 @@ def sample_by_key(seq_list, n, key="cid", seed=0, replace=False):
     return out
 
 def get_stratify_labels(sequences, nstates=2):
-    """
-    For each code (cid), get counts per state. If any state has < 2 samples per cid,
+    """For each code (cid), get counts per state. If any state has < 2 samples per cid,
     stratify only by source and code; else include s_next.
     nstates: 2 uses seq['s'], 3 uses seq['s3'].
     """
@@ -334,18 +327,7 @@ def patient_key(seq):
 
 
 def patient_split(sequences, test_size=0.2, val_size=0.125, random_state=42):
-    """Split whole patients into train/val/test so no patient appears in two splits.
-
-    Unlike the sequence-level split, every analyte sequence belonging to a patient
-    lands in the same partition. Required before conditioning a target sequence on
-    the patient's other analytes, which would otherwise carry training targets into
-    the test set (R3 comment 11).
-
-    Patients are stratified by source, so the MIMIC-IV / EHRSHOT ratio of the full
-    set is preserved in each split. cid / next-state balance is left to the size of
-    the patient pool and to create_weighted_sampler, since a patient contributes
-    many analytes and has no single sequence-level label to stratify on.
-    """
+    """Split whole patients into train/val/test so no patient appears in two splits."""
     keys = [patient_key(s) for s in sequences]
     patients = sorted(set(keys))
     src = [k[0] for k in patients]

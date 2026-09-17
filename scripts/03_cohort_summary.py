@@ -1,20 +1,4 @@
-"""Compute cohort demographics and per-analyte summary statistics.
-
-Per dataset (results/raw/<cohort>/):
-    03_cohort.csv         per-analyte stats, one row per split x analyte
-    03_demographics.csv   cohort-level demographics, one row per split
-
-Both carry a `split` column whose "all" level is the whole cohort -- the pooled
-rows and the per-split rows are the same statistic over different row sets, so
-they are one table, not two.  "split" is baseline/index for the validation
-cohorts (from index_labs). The development cohorts carry two split families:
-NORMA's train/val/test sequence split (predictions_combined.csv of
-datasets.NORMA_RUN_ID; a split is assigned per patient-analyte sequence, so a
-patient can contribute to more than one split) computed on the full NORMA data
-(combined_sequences_v2.pkl), plus baseline/index computed on the DevDataset
-index_labs — NORMA's test patients run through 01_process/02_index_labs like the
-validation cohorts, i.e. the rows the forecasting / RI figures are scored on.
-"""
+"""Compute cohort demographics and per-analyte summary statistics."""
 import bootstrap
 
 import os
@@ -29,15 +13,8 @@ from datasets import NORMA_RUN_ID, DATASETS as LOADERS, save_csv
 ROOTDIR = bootstrap.BASE_DIR      # norma/: model/logs/, data/processed/
 
 
-
 def days_per_unit(ds):
-    """Timestamps are stored in different units per cohort; convert spans to days.
-
-    eICU keeps minutes, INSPIRE and CHS keep days. The span columns are named
-    span_days_* / time_span_*, but the raw difference was reported unconverted,
-    so eICU's median "span_days" read 8,870 — 24 years for an ICU stay, when the
-    real figure is 8,870 minutes = 6.2 days.
-    """
+    """Timestamps are stored in different units per cohort; convert spans to days."""
     unit = getattr(ds, "time_unit", None) or "days"
     return {"minutes": 1.0 / 1440.0, "hours": 1.0 / 24.0, "days": 1.0}.get(unit, 1.0)
 
@@ -128,12 +105,9 @@ def load_sequences(source):
     df = df.merge(norma_sequence_splits(), on=['patient_id', 'analyte'], how='left')
     n_missing = int(df['split'].isna().sum())
     if n_missing:
-        # predictions_combined.csv is complete for val (10 %) and test (20 %) — every
-        # sequence exactly once — but its train rows come from the training DataLoader,
-        # whose WeightedRandomSampler draws WITH replacement: ~30 % of training sequences
-        # are never drawn (others 2-4x). A sequence absent from the file is therefore a
-        # training sequence, not "data NORMA never used" (verified 2026-08-28:
-        # undrawn + distinct train rows == 0.7 x 3,407,595 exactly).
+        # predictions_combined.csv is complete for val (10 %) and test (20 %) — every sequence
+        # exactly once — but its train rows come from the training DataLoader, whose
+        # WeightedRandomSampler draws WITH...
         print(f"  {n_missing:,} measurements ({n_missing / len(df):.1%}) belong to training sequences "
               f"the resampling train loader never drew -> labelled 'train'")
         df['split'] = df['split'].fillna('train')
@@ -389,17 +363,13 @@ def main():
         run_dataset(dataset, results_dir, n_chunks=args.n_chunks, analytes=analytes_list, analytes_list=analytes_list)
 
 
-# ═════════════════════════════════════════════════════════════════════════
 # Figures and tables
-# ═════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 
 
-# save_table()'s first argument is the folder the table is written into,
-# so it must match this directory name. Keeping the literal here (rather
-# than only in the TableSpec) is what drifted during the restructure.  # noqa: F401,F403
-
+# save_table()'s first argument is the folder the table is written into, so it must match this
+# directory name.
 
 def _load_cohort_stats(ds, split):
     """(per-analyte frame indexed by analyte, demographics row) for one dataset and split (None = all)."""
@@ -468,9 +438,7 @@ def _cohort_table(name, split=None, datasets=COHORT_DATASETS):
         sex[ds] = f"{pf}% F / {pm}% M" if pf != "---" else "---"
         med = d.get("span_days_median")
         if pd.notna(med):
-            # cohort_summary converts every cohort's timestamps to days. Choose the
-            # display unit per cohort: an ICU stay is days, a longitudinal outpatient
-            # record is years, and forcing both into years printed eICU as 0.00.
+            # cohort_summary converts every cohort's timestamps to days.
             q25, q75 = d.get("span_days_q25"), d.get("span_days_q75")
             if med < 90:
                 spans[ds] = f"{med:.0f} [{q25:.0f}, {q75:.0f}] d"
@@ -490,8 +458,8 @@ def _cohort_table(name, split=None, datasets=COHORT_DATASETS):
     return [name]
 
 
-# All measurements; the 02_index_labs strata (every cohort — EHRSHOT / MIMIC-IV = NORMA's
-# test patients); NORMA's sequence split (development cohorts only).
+# All measurements; the 02_index_labs strata (every cohort — EHRSHOT / MIMIC-IV = NORMA's test
+# patients); NORMA's sequence split (development cohorts only).
 def table_cohort():          return _cohort_table("cohort")
 def table_cohort_baseline(): return _cohort_table("cohort_baseline", "baseline")
 def table_cohort_index():    return _cohort_table("cohort_index", "index")

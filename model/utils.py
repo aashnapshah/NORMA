@@ -66,8 +66,8 @@ def save_checkpoint(model, optimizer, scheduler, args, run_id, epoch, metrics, i
     with open(save_dir / 'checkpoint_latest.json', 'w') as f:
         json.dump(checkpoint_json, f, indent=2)
 
-    # Save model parameters as a separate file for easier inspection/sharing
-    # This will save just the model "named parameters"
+    # Save model parameters as a separate file for easier inspection/sharing This will save just
+    # the model "named parameters"
     model_params = {name: param.detach().cpu().numpy().tolist() for name, param in model.named_parameters()}
     with open(save_dir / 'model_parameters.json', 'w') as f:
         json.dump(model_params, f)
@@ -111,22 +111,13 @@ def load_checkpoint(log_dir, run_id, args=None, best=False, device='cpu', quiet=
         print("=" * 90)
     return checkpoint, hparams
     
-# def load_checkpoint(args, best=False, device='cpu'):
-#     run_dir = Path(args.log_dir) / args.run_id
-#     latest_path = run_dir / 'checkpoint_latest.pth'
-#     best_path = run_dir / 'checkpoint_best.pth'
-#     ckp_path = best_path if best else latest_path
+# def load_checkpoint(args, best=False, device='cpu'): run_dir = Path(args.log_dir) / args.run_id
+# latest_path = run_dir / 'checkpoint_latest.pth' best_path = run_dir / 'checkpoint_best.pth'
+# ckp_path...
 
-#     checkpoint = torch.load(ckp_path, map_location=device)
-#     model = create_model(args, len(TEST_VOCAB)).to(device)
-#     model.load_state_dict(checkpoint['model_state_dict'])
-#     optimizer = torch.optim.AdamW(model.parameters(), lr=checkpoint['hyperparameters']['lr'], weight_decay=checkpoint['hyperparameters']['weight_decay'])
-#     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
-#     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-#     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-#     epoch = checkpoint.get('epoch', -1)
-#     metrics = checkpoint.get('metrics', {})
-#     best_val_loss = metrics.get('val', {}).get('loss', float('inf'))
+# checkpoint = torch.load(ckp_path, map_location=device) model = create_model(args,
+# len(TEST_VOCAB)).to(device) model.load_state_dict(checkpoint['model_state_dict']) optimizer
+# =...
     
     # return model, optimizer, scheduler, epoch, metrics, best_val_loss
 
@@ -232,9 +223,7 @@ def create_loss(loss, lambda_align=None, args=None):
 def loss_extras(batch, model=None):
     """Side inputs for the prior-aware losses, from a collated batch (+ the model's
     last_params / last_gate for the gate and NIG heads).
-
-    ref_mu / ref_var are the population interval read as a normal distribution
-    (midpoint, (width/3.92)^2), in the model's units."""
+    """
     if 'pop_low' not in batch:
         return None
     lo, hi = batch['pop_low'], batch['pop_high']

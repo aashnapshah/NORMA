@@ -2,41 +2,9 @@
 """Classify every index measurement under each reference-interval method, then
 count what each method flags.
 
-  classify    index measurements joined to their pair's intervals (04_refs) and
-              labelled 0 = low / 1 = normal / 2 = high per method (`<Method>_class`;
-              a Pop_RI-abnormal call is inherited by every personalised method);
-              the continuous deviation `<method>_z` = |x - centre| / halfwidth
-              (z = 1 is that method's own boundary), its signed form `<method>_zs`
-              and `pop_side` (+1 / -1: nearer the upper / lower Pop_RI bound), which
-              together make any flag directional (lib/ri_metrics.deviates_toward_bound);
-              and the exposure markers 13_cox reads (`exp_first`, `exp_window`,
-              `exp_window_worst`; lib/metrics.py)
-              -> results/raw/<cohort>/07_classification.parquet (baseline methods) and
-                 07_classification_norma.parquet (the NORMA arms), aligned row for row;
-                 per chunk under data/clalit/chunk_*/ on CHS
-  prevalence  abnormality prevalence and reclassification among Pop_RI-normal per
-              analyte and method, with 95% patient-cluster-bootstrap intervals
-              (Wilson on the CHS chunk counts), on all measurements and on the
-              per_normal subset (Per_RI setpoint inside Pop_RI)
-              -> results/raw/<cohort>/07_prevalence.csv (subset = all | per_normal)
-
 Usage:
     python 07_classify.py --dataset eicu --force
     python 07_classify.py --dataset eicu --only prevalence
-
-Figures and tables
-------------------
-Composites with one column per validation cohort (eICU, INSPIRE, CHS). Every rate
-carries a 95% interval from 07_classify.py (prevalence step) (patient-cluster bootstrap; Wilson for
-CHS chunks):
-
-  prevalence              one row per cohort; grouped bars per analyte (grouped by panel),
-                          one bar per method (Pop_RI / Per_RI / Cohen / NORMA) with a 95%
-                          whisker. `_supp` = heatmap of all methods (cohort blocks x method
-                          rows x analyte columns, value in each cell).
-  reclassification        same pair for the share of Pop_RI-normal measurements a method flags
-  prevalence_overall      grouped bars per cohort: median across analytes per method,
-                          whisker = interquartile range across analytes
 """
 import bootstrap  # noqa: F401
 
@@ -66,9 +34,7 @@ def _atomic_parquet(df, path):
     os.replace(tmp, path)
 
 
-# =============================================================================
 # classify
-# =============================================================================
 
 def classify_values(values, lows, highs):
     """0 = low, 1 = normal, 2 = high, NaN where the value or a bound is missing."""
@@ -167,21 +133,14 @@ def build_classification(index_labs, ref_df, time_unit, window_hours):
     return mark_exposures(result, time_unit, window_hours)
 
 
-# Caches other stages derived from a chunk's classification.  When the classification is
-# rebuilt they describe rows that no longer exist, and every stage reuses its cache when
-# it is there -- so they are moved aside with it.
+# Caches other stages derived from a chunk's classification.
 DERIVED_CACHES = ["prevalence_counts.parquet", "eval_counts.parquet", "mortality_extract.parquet",
                   "mortality_zbins.parquet", "11_future_pairs", "11_lead_measurements",
                   "11_lead_patients", "12_patient_scores", "13_stay_tables", "17_cohort"]
 
 
 def expected_columns(ref_df):
-    """What build_classification will write for the methods this chunk has intervals for.
-
-    A chunk classified by an older version is missing whole columns -- `<method>_z` did
-    not always exist -- and every stage that reads them silently drops its patients.  So
-    the skip is "already classified WITH these columns", not "the file is there".
-    """
+    """What build_classification will write for the methods this chunk has intervals for."""
     want = {"pop_side", "t_hours", "t0_hours", "exp_first", "exp_window", "exp_window_worst"}
     for method in ref_df["method"].astype(str).unique():
         cls_col = class_column(f"{method}_ri_low")
@@ -260,9 +219,7 @@ def run_classify(ds, args):
     print(f"  {result['patient_id'].nunique()} patients, {result['analyte'].nunique()} analytes")
 
 
-# =============================================================================
 # prevalence
-# =============================================================================
 
 def per_normal_mask(df):
     """Per_RI setpoint inside Pop_RI, or None when the columns are absent."""
@@ -335,14 +292,7 @@ def wilson(k, n, z=1.96):
 
 
 def bootstrap_cis(df, methods, n_boot=200, seed=42):
-    """Patient-cluster bootstrap 95% intervals of every rate, per analyte.
-
-    Measurements from one patient are not independent (a patient contributes many
-    index measurements, all classified against the same interval), so the
-    measurement-level Wilson interval is far too narrow.  Patients are resampled
-    with replacement (multinomial weights) and the ratio of weighted counts taken.
-    Returns {analyte: {'<m>_pct': (lo, hi), '<m>_reclass_pct': (lo, hi)}}.
-    """
+    """Patient-cluster bootstrap 95% intervals of every rate, per analyte."""
     rng = np.random.default_rng(seed)
     df = _fix_analyte(df.copy())
     df = df[~df["analyte"].isin(EXCLUDE_LABS)]
@@ -498,9 +448,7 @@ def run_prevalence(ds, args):
         save_prevalence(table, methods, results_dir, subset, analytes=ds._analytes)
 
 
-# =============================================================================
 # main
-# =============================================================================
 
 def main():
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -521,9 +469,7 @@ def main():
         run_prevalence(ds, args)
 
 
-# ═════════════════════════════════════════════════════════════════════════
 # Figures and tables
-# ═════════════════════════════════════════════════════════════════════════
 
 from matplotlib.transforms import blended_transform_factory
 
@@ -579,9 +525,8 @@ def _load_prevalence(ds, subset="all"):
 
 
 _PANEL_GAP = 0.8      # extra slots of space between analyte panels
-# MIN_PATIENTS (lib/constants.py): bar figures omit analytes with fewer patients,
-                      # the supplementary heatmap keeps them with grey values
-
+# MIN_PATIENTS (lib/constants.py): bar figures omit analytes with fewer patients, the
+# supplementary heatmap keeps them with grey values
 
 def _panel_layout(analytes):
     """x position per analyte with a gap between panels; returns (x dict, [(panel, x0, x1)])."""
@@ -602,12 +547,7 @@ def _panel_layout(analytes):
 
 
 def _analyte_bars(suffix, ylabel, title, methods):
-    """One row per cohort; grouped bars per analyte (one bar per method) with 95% whiskers.
-
-    Rates are absolute. The normalized read -- each method as a share of the measurements
-    Pop_RI leaves normal, which is what makes a 96%-prevalence analyte comparable with a
-    19% one -- is the reclass_pct figure, not a variant of this one.
-    """
+    """One row per cohort; grouped bars per analyte (one bar per method) with 95% whiskers."""
     frames = {ds: _load_prevalence(ds) for ds in VAL_COHORTS}
     if not any(d is not None for d in frames.values()):
         return None
@@ -769,20 +709,8 @@ def fig_prevalence_overall():
     return {"": fig}
 
 
-# ── Redesign candidates (2026-08-31) ────────────────────────────────────────────
-# The grouped-bar figures above answer "how often does each method flag" with one
-# bar per method per analyte. Three things make that a poor use of the space:
-#   * 07_classify.py propagates every Pop_RI abnormal call to every personalised
-#     method, so each method is a strict superset of Pop_RI and its bar literally
-#     contains the Pop_RI bar. Verified: no analyte in either cohort has a negative
-#     delta. The excess over Pop_RI is the only part that varies.
-#   * absolute prevalence is set by the analyte and the cohort (ICU labs are 40-95%
-#     abnormal), so the bars are uniformly tall and the between-method differences
-#     that the figure exists to show are a few percent of the axis.
-#   * a grouped bar carries method identity in colour alone, and a 7-colour
-#     categorical scale cannot be made CVD-safe (see _BM_COLORS).
-# All three encode method by ROW POSITION instead, so they take the full method
-# list — including the covariate-ablation NORMA arms — without a palette problem.
+# ── Redesign candidates (2026-08-31) ──────────────────────────────────────────── The grouped-
+# bar figures above answer "how often does each method flag" with one bar per method per analyte.
 
 _GAUSS_FAMILY = ["Gaussian_mle", "Gaussian_trunc", "Gaussian_eb"]
 
@@ -801,10 +729,7 @@ def _overall_stats(d, method, suffix):
 
 
 def fig_prevalence_summary():
-    """Main-text candidate: median rate across analytes per method, cohorts stacked.
-
-    Methods are rows (identity by position), so all seven fit and the reader gets the
-    ordering at a glance instead of reconstructing it from 28 bar groups."""
+    """Main-text candidate: median rate across analytes per method, cohorts stacked."""
     frames = {ds: _load_prevalence(ds) for ds in VAL_COHORTS}
     if not any(d is not None for d in frames.values()):
         return {}
@@ -825,13 +750,7 @@ def fig_prevalence_summary():
 
 
 def fig_prevalence_delta():
-    """Supplementary candidate: excess flagging over Pop_RI per analyte, as a heatmap.
-
-    Same layout as the existing supplement but on the delta, so the colour ramp is
-    spent on the between-method differences rather than on the cohort's baseline
-    abnormality. vmax is the 95th percentile with an open top arrow, because a
-    couple of analytes (Per_RI on lipids) run to +67 points and would otherwise
-    flatten everything else."""
+    """Supplementary candidate: excess flagging over Pop_RI per analyte, as a heatmap."""
     frames = {ds: _load_prevalence(ds) for ds in VAL_COHORTS}
     if not any(d is not None for d in frames.values()):
         return {}
@@ -864,11 +783,7 @@ def fig_prevalence_delta():
 
 
 def fig_prevalence_excess():
-    """Third candidate: per-analyte excess over Pop_RI as dots on a zero line.
-
-    Keeps the per-analyte detail of the bar figure with about a third of the ink:
-    Pop_RI is the zero line rather than a bar, and the three Gaussian variants
-    collapse to one vertical range so only four colours are needed."""
+    """Third candidate: per-analyte excess over Pop_RI as dots on a zero line."""
     frames = {ds: _load_prevalence(ds) for ds in VAL_COHORTS}
     if not any(d is not None for d in frames.values()):
         return {}
@@ -953,16 +868,12 @@ FIGURES = [
 ]
 
 
-# ══════════════════════════════════════════════════════════════════════════
 # Tables — 07_classify: table_* definitions and registry slice.
-# ══════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 
-# save_table()'s first argument is the folder the table is written into,
-# so it must match this directory name. Keeping the literal here (rather
-# than only in the TableSpec) is what drifted during the restructure.  # noqa: F401,F403
-
+# save_table()'s first argument is the folder the table is written into, so it must match this
+# directory name.
 
 def table_prevalence():
     rows = []

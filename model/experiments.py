@@ -1,33 +1,7 @@
 #!/usr/bin/env python
 """Index every NORMA training run and put them side by side.
 
-The experiments live in three places, on three different schemas:
-
-  model/wandb/run-*/          every run that ever logged, including the sweep
-                              era. config.yaml carries the hyperparameters and
-                              wandb-summary.json the last epoch's losses, both
-                              readable without the wandb package or the network.
-  model/logs/<run>/           checkpoint_{latest,best}.json for the runs whose
-                              weights were saved: hyperparameters plus the
-                              train/val loss, r2, mae, coverage and width at the
-                              best epoch.
-  model/logs/<run>/bootstrap_metrics[_by_code].csv
-                              held-out test metrics with bootstrap CIs, overall
-                              and per analyte, for the runs that were evaluated.
-
-Two config schemas coexist: the sweep era wrote model_type / loss_type /
-num_layers and no run_id, later runs write model / loss / nlayers / run_id.
-Both are normalised here.
-
-Outputs (--out_dir, default model/logs/experiments/):
-
-  experiments.csv             one row per run: identity, architecture, loss,
-                              features, val loss, and every test metric
-  experiments_by_analyte.csv  one row per (run, analyte, metric)
-  val_loss.pdf                val loss per run, grouped by loss function
-  test_metrics.pdf            one panel per test metric, runs ranked, with CIs
-  by_analyte.pdf              run x analyte heatmap, one panel per metric
-
+Usage:
     python experiments.py                    # build the tables and figures
     python experiments.py --wandb            # also push them to W&B
     python experiments.py --min_epochs 5     # drop runs that died early
@@ -74,8 +48,8 @@ ALIASES = {
     'description': ('description',),
 }
 
-# The per-measurement covariates and attention variants, in the order the
-# ablation scripts add them.
+# The per-measurement covariates and attention variants, in the order the ablation scripts add
+# them.
 FEATURE_FLAGS = ['use_age_t', 'use_setting', 'use_coanalytes', 'query_coanalytes',
                  'causal_memory', 'use_full_panel']
 FEATURE_SHORT = {'use_age_t': 'age', 'use_setting': 'setting', 'use_coanalytes': 'co',
@@ -111,10 +85,8 @@ def from_wandb(wandb_dir=WANDB_DIR):
     """One row per local W&B trace: config plus the last epoch's losses."""
     import yaml
     rows = []
-    # offline-run-* too: a run started with WANDB_MODE=offline never synced,
-    # and globbing 'run-*' alone silently drops it. The 2026-09-08
-    # prior-anchored smoke tests are all offline, and they are the only
-    # runs that exercise NORMALoss and StudentTNLLLoss.
+    # offline-run-* too: a run started with WANDB_MODE=offline never synced, and globbing 'run-*'
+    # alone silently drops it.
     traces = (glob.glob(os.path.join(wandb_dir, 'run-*'))
               + glob.glob(os.path.join(wandb_dir, 'offline-run-*')))
     skipped = []
@@ -122,10 +94,8 @@ def from_wandb(wandb_dir=WANDB_DIR):
         files = os.path.join(d, 'files')
         cp, sp = os.path.join(files, 'config.yaml'), os.path.join(files, 'wandb-summary.json')
         if not os.path.exists(cp):
-            # A run started with WANDB_MODE=offline keeps everything in its
-            # binary .wandb file and only writes config.yaml on sync, so it
-            # cannot be read here. Reported rather than dropped in silence:
-            #   wandb sync model/wandb/offline-run-*
+            # A run started with WANDB_MODE=offline keeps everything in its binary .wandb file
+            # and only writes config.yaml on sync, so it cannot be read here.
             skipped.append(os.path.basename(d))
             continue
         try:
@@ -155,7 +125,6 @@ def from_wandb(wandb_dir=WANDB_DIR):
     if df.empty:
         return df
     # A resumed run logs a fresh trace each time, so one run_id can have several.
-    # Keep the trace that got furthest, and record how many there were.
     if skipped:
         print(f'  {len(skipped)} traces unreadable offline (no config.yaml, never synced):')
         for s in skipped:
@@ -192,10 +161,9 @@ def from_checkpoints(log_dir=LOG_DIR):
     return pd.DataFrame(rows)
 
 
-# The bootstrap files drifted over time: three header variants for the overall
-# table (model/split/metric lower case with CIs; Model/Metric/Split title case
-# with only std; and the same three title-case columns in a different order) and
-# two for the per-analyte one (analyte vs Code, n vs n_samples).
+# The bootstrap files drifted over time: three header variants for the overall table
+# (model/split/metric lower case with CIs; Model/Metric/Split title case with only std; and the
+# same three...
 _BOOT_RENAME = {'model': 'model', 'split': 'split', 'metric': 'metric',
                 'code': 'analyte', 'analyte': 'analyte',
                 'n_samples': 'n', 'n': 'n', 'mean': 'mean', 'std': 'std',
@@ -204,26 +172,11 @@ _BOOT_RENAME = {'model': 'model', 'split': 'split', 'metric': 'metric',
 
 
 def _read_boot(path, run):
-    """Read a bootstrap file onto one schema, keeping only `run`'s own rows.
-
-    Three things have to be handled:
-
-      * header drift, mapped through _BOOT_RENAME;
-      * the older files score the run *and* the forecasting baselines (ARIMA,
-        Mean, last) in the same file, so the model column has to be filtered --
-        taking the last row per metric silently reports a baseline's number as
-        the model's. Newer files label the run's own rows "NORMA";
-      * the older files store R2 as a percentage (71.5) where the newer ones
-        store a fraction (0.715). Anything above 1.5 is rescaled, since a
-        forecasting R2 that high is not otherwise achievable here.
-
-    Returns None if the file has no schema this understands, or if its rows
-    cannot be attributed to this run.
-    """
+    """Read a bootstrap file onto one schema, keeping only `run`'s own rows."""
     try:
-        # keep_default_na=False: the sodium analyte's code is "NA", which the
-        # default parser turns into a null, silently dropping that analyte from
-        # every per-analyte table and leaving a blank row in the heatmaps.
+        # keep_default_na=False: the sodium analyte's code is "NA", which the default parser
+        # turns into a null, silently dropping that analyte from every per-analyte table and
+        # leaving a blank row in the...
         d = pd.read_csv(path, keep_default_na=False, na_values=[''])
     except Exception:
         return None
@@ -284,8 +237,8 @@ def from_bootstrap(log_dir=LOG_DIR):
         keep = [c for c in ('analyte', 'metric', 'n', 'point_estimate', 'mean',
                             'ci_lower', 'ci_upper') if c in d.columns]
         d = d[keep].copy()
-        # Older runs stored the analyte as the integer cid, newer ones as the
-        # code; without this the two land on separate rows of every heatmap.
+        # Older runs stored the analyte as the integer cid, newer ones as the code; without this
+        # the two land on separate rows of every heatmap.
         as_str = d['analyte'].astype(str)
         numeric = as_str.str.fullmatch(r'\d+')
         if numeric.any():
@@ -303,8 +256,8 @@ def build(log_dir=LOG_DIR, wandb_dir=WANDB_DIR, min_epochs=0):
     wb, ck = from_wandb(wandb_dir), from_checkpoints(log_dir)
     boot, by_analyte = from_bootstrap(log_dir)
 
-    # A run's own checkpoint config wins over the W&B copy; W&B contributes the
-    # runs that never saved weights.
+    # A run's own checkpoint config wins over the W&B copy; W&B contributes the runs that never
+    # saved weights.
     df = wb.copy()
     if len(ck):
         shared = [c for c in ck.columns if c in df.columns and c != 'run']
@@ -316,9 +269,8 @@ def build(log_dir=LOG_DIR, wandb_dir=WANDB_DIR, min_epochs=0):
     if len(boot):
         df = df.merge(boot, on='run', how='left')
 
-    # `== True` rather than fillna(False).astype(bool): these columns arrive as
-    # object dtype with NaN for the runs that have no checkpoint or evaluation,
-    # and bool(nan) is True.
+    # `== True` rather than fillna(False).astype(bool): these columns arrive as object dtype with
+    # NaN for the runs that have no checkpoint or evaluation, and bool(nan) is True.
     for col in ('has_checkpoint', 'evaluated'):
         df[col] = (df[col] == True) if col in df.columns else False   # noqa: E712
     for f in FEATURE_FLAGS:
@@ -338,9 +290,7 @@ def build(log_dir=LOG_DIR, wandb_dir=WANDB_DIR, min_epochs=0):
     return df[cols].sort_values('val_loss', na_position='last').reset_index(drop=True), by_analyte
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Figures
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _style():
     import matplotlib
@@ -433,8 +383,8 @@ def fig_by_analyte(by_analyte, path, metrics=('MAE', 'R2', 'MAPE')):
     for ax, m in zip(axes[0], have):
         piv = (by_analyte[by_analyte['metric'] == m]
                .pivot_table(index='analyte', columns='run', values='mean'))
-        # normalise each analyte to its own best run so one big analyte cannot
-        # dominate the colour scale
+        # normalise each analyte to its own best run so one big analyte cannot dominate the
+        # colour scale
         best = piv.min(axis=1) if m != 'R2' else piv.max(axis=1)
         rel = piv.div(best, axis=0) if m != 'R2' else piv.sub(best, axis=0)
         im = ax.imshow(rel.values, aspect='auto', cmap='RdBu_r' if m == 'R2' else 'RdBu')

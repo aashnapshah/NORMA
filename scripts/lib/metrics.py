@@ -1,14 +1,4 @@
-"""Shared analysis helpers for the validation stages.
-
-One module (2026-09-08; was intervals.py + ri_metrics.py + delong.py + flags.py +
-exposure.py + forecast_pairs.py):
-  Pop_RI estimator / sex coding    population_reference_range(), sex_key()
-  method comparison metrics        method_prefix(), signed_z(), auroc(), ppv_at_budget(), ...
-  DeLong test                      delong_auc_cov(), delong_test()
-  flag rules (11 / 17)             threshold_at_rate(), matched_sensitivity_flags(), ...
-  stay exposure (07 / 12 / 13 / 14) mark_exposures(), exposure_rows(), hours_from_admit(), ...
-  forecasting targets (04 / 05)    build_pairs(), pairs_frame(), subsample_patients(), describe()
-"""
+"""Shared analysis helpers for the validation stages."""
 import os as _os
 import sys as _sys
 
@@ -23,27 +13,13 @@ if _SCRIPTS_DIR not in _sys.path:
 from process.config import REFERENCE_INTERVALS, TEST_VOCAB  # noqa: E402
 
 
-
-# ═══════════════════════════════════════════════════════════════════════════
 # Pop_RI estimator / sex coding
-# ═══════════════════════════════════════════════════════════════════════════
 
-# The published Pop_RI for a lab and sex, shared by 04_refs (where it builds the
-# `pop` rows), 06_sensitivity (synthetic histories) and 16_benchmark (baseline
-# abnormality burden).
-#
-# Per_RI's gmm_setpoint() lives in model/baselines/gaussian.py with the other
-# Gaussian estimators (2026-09-08); callers import it from there.
+# The published Pop_RI for a lab and sex, shared by 04_refs (where it builds the `pop` rows),
+# 06_sensitivity (synthetic histories) and 16_benchmark (baseline abnormality burden).
 
 def sex_key(sex):
-    """Normalise any sex encoding used in this codebase to "M" / "F".
-
-    The cohorts disagree: eICU/INSPIRE carry int 0/1 (0 = male), the processed
-    frames carry "M"/"F", and some raw sources carry "Male"/"Female". The old
-    implementation was `"M" if sex == "Male" else "F"`, so every caller that
-    passed "M" or 0 silently got the FEMALE interval for the five sex-specific
-    analytes (HCT, HGB, RBC, CRE, GGT).
-    """
+    """Normalise any sex encoding used in this codebase to "M" / "F"."""
     if isinstance(sex, str):
         s = sex.strip()
         if s in ("0", "1"):                      # numeric code stored as text
@@ -65,22 +41,7 @@ def population_reference_range(lab_code, sex):
     return low, high
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Metrics for comparing reference-interval methods
-# ═══════════════════════════════════════════════════════════════════════════
-
-# Shared metrics for comparing reference-interval methods.
-#
-# Methods sit at wildly different operating points (native flag rates range from
-# ~3% to ~66%), so raw PPV / sensitivity are not comparable between them: a method
-# looks precise simply by flagging less. Everything here is built on a
-# threshold-free deviation score instead:
-#
-#     z = |value - centre| / halfwidth,   centre = (low + high) / 2
-#
-# which equals 1 exactly at that method's own flag boundary. Ranking patients by
-# the patient-level max of z is independent of where a method puts its cut, so
-# AUROC of z, and PPV at a matched alert budget, compare like with like.
 
 def method_prefix(method):
     """Display method name -> its ri_low/ri_high column prefix."""
@@ -88,11 +49,7 @@ def method_prefix(method):
 
 
 def deviation_z(df, method):
-    """|value - centre| / halfwidth for one method; NaN where bounds are missing.
-
-    07_classify stores this as `<method>_z`, so prefer the stored column and only
-    recompute from the bounds for older classification files that predate it.
-    """
+    """|value - centre| / halfwidth for one method; NaN where bounds are missing."""
     stored = f"{method}_z"
     if stored in df.columns:
         return pd.to_numeric(df[stored], errors="coerce")
@@ -141,11 +98,7 @@ def auroc(score, label):
 
 
 def ppv_at_budget(score, label, budget):
-    """PPV when the top `budget` fraction of patients is flagged.
-
-    Ties at the cut are all included, so the realised rate can exceed the budget;
-    it is returned alongside so the comparison can be reported honestly.
-    """
+    """PPV when the top `budget` fraction of patients is flagged."""
     score = np.asarray(score, dtype=float)
     label = np.asarray(label, dtype=float)
     ok = np.isfinite(score) & np.isfinite(label)
@@ -168,12 +121,7 @@ def _clean(score, label):
 
 
 def operating_point(score, label, thresh):
-    """Confusion-derived metrics when every patient with score >= thresh is flagged.
-
-    Returns flag_rate, sensitivity, specificity, ppv, npv, lift (ppv / event rate)
-    and the counts; NaN where a denominator is empty. The realised flag rate is
-    returned so a matched comparison can be reported honestly when ties or a
-    saturated score keep it from hitting the requested rate exactly."""
+    """Confusion-derived metrics when every patient with score >= thresh is flagged."""
     score, label = _clean(score, label)
     n = len(score)
     if n == 0 or not np.isfinite(thresh):
@@ -281,29 +229,15 @@ def deviates_toward_bound(df, method):
     Pop_RI bound (sign(zs) == pop_side) rather than back toward the population
     centre. DIRECTION ONLY -- how far the value is from the centre is the caller's
     business (a z threshold, or z > 1 for the method's own interval).
-
-    Combining this with a magnitude rule makes a flag directional. A non-directional
-    "outside the interval" flag averages two opposite signals: an exit toward the
-    bound predicts a later Pop_RI crossing, an exit toward the centre predicts
-    reversion (eICU, 2026-09-03: NORMA RR 1.26 vs 0.50). Cohen et al. 2021 define
-    abnormality per test as high OR low, so their positives are directional by
-    construction; this is the interval analogue."""
+    """
     zs = signed_z(df, method).to_numpy(float)
     side = pop_side(df).to_numpy()
     return np.isfinite(zs) & (np.sign(zs) == side) & (side != 0)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # DeLong's test for two correlated ROC curves
-# ═══════════════════════════════════════════════════════════════════════════
 
 # DeLong's test for two correlated ROC curves (Sun & Xu 2014 fast version).
-#
-# Comparing two reference-interval methods means comparing two AUCs computed on
-# the SAME patients, so the two estimates are correlated and an unpaired test
-# would be wrong. DeLong gives the covariance of the AUC estimates in closed form,
-# which is both correct and far cheaper than bootstrapping every analyte x outcome
-# x method-pair.
 
 def _midrank(x):
     """Midranks of x (ties share the average rank)."""
@@ -324,18 +258,13 @@ def _midrank(x):
 
 
 def delong_auc_cov(scores, labels):
-    """AUCs and their covariance matrix for k methods scored on the same samples.
-
-    scores : (k, n) array of scores, higher = more likely positive
-    labels : (n,) array of 0/1
-    Returns (aucs (k,), cov (k, k)).
-    """
+    """AUCs and their covariance matrix for k methods scored on the same samples."""
     scores = np.asarray(scores, dtype=float)
     labels = np.asarray(labels, dtype=float)
     finite = np.isfinite(labels) & np.isfinite(scores).all(axis=0)
     if not finite.all():
-        # NaN labels would otherwise be counted as negatives, and NaN scores sort
-        # to the end and take the highest midranks, inflating the AUC.
+        # NaN labels would otherwise be counted as negatives, and NaN scores sort to the end and
+        # take the highest midranks, inflating the AUC.
         scores, labels = scores[:, finite], labels[finite]
     pos = labels == 1
     neg = ~pos
@@ -364,10 +293,7 @@ def delong_auc_cov(scores, labels):
 
 
 def delong_test(scores_a, scores_b, labels):
-    """Two-sided DeLong test of AUC(a) - AUC(b) on paired samples.
-
-    Returns dict with auc_a, auc_b, delta, se, z, p, and a 95% CI for delta.
-    """
+    """Two-sided DeLong test of AUC(a) - AUC(b) on paired samples."""
     aucs, cov = delong_auc_cov(np.vstack([scores_a, scores_b]), labels)
     if not np.all(np.isfinite(aucs)):
         return dict(auc_a=np.nan, auc_b=np.nan, delta=np.nan, se=np.nan,
@@ -375,10 +301,8 @@ def delong_test(scores_a, scores_b, labels):
     delta = float(aucs[0] - aucs[1])
     var = float(cov[0, 0] + cov[1, 1] - 2 * cov[0, 1])
     if not np.isfinite(var) or var <= 0:
-        # np.cov returns NaN when a class has a single member (ddof=1), and the
-        # variance is genuinely 0 only when the two scores are identical. Either
-        # way there is no evidence here: reporting p = 0 turned a one-non-event
-        # analyte into a maximally significant "win" with a zero-width CI.
+        # np.cov returns NaN when a class has a single member (ddof=1), and the variance is
+        # genuinely 0 only when the two scores are identical.
         p = 1.0 if delta == 0 else np.nan
         return dict(auc_a=float(aucs[0]), auc_b=float(aucs[1]), delta=delta,
                     se=np.nan, z=np.nan, p=p, ci_low=np.nan, ci_high=np.nan)
@@ -389,18 +313,10 @@ def delong_test(scores_a, scores_b, labels):
                 ci_low=delta - 1.96 * se, ci_high=delta + 1.96 * se)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Flag rules shared by 11_lead_time and 17_outcomes
-# ═══════════════════════════════════════════════════════════════════════════
 
-# Flag rules shared by 11_lead_time and 17_outcomes: how a method's deviation score
-# becomes a yes/no flag on a comparable footing.
-#
-#     jitter                      deterministic tie-breaking before any quantile cutoff
-#     cut_at_sensitivity          the cutoff reaching a target sensitivity
-#     matched_sensitivity_flags   the same per stratum (Cohen: 10-year age band x sex)
-#     threshold_at_rate           the cutoff flagging a target fraction of all measurements
-#     hours                       outcome times to hours
+# Flag rules shared by 11_lead_time and 17_outcomes: how a method's deviation score becomes a
+# yes/no flag on a comparable footing.
 
 MIN_STRATUM = 20       # age band x sex strata below this use the pooled cutoff
 TO_HOURS = {"hours": 1.0, "minutes": 1.0 / 60.0, "days": 24.0}
@@ -492,37 +408,7 @@ def threshold_at_rate(z, rate):
     return float(np.sort(z[eligible])[::-1][k - 1])
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Which index measurement represents a stay (exposure)
-# ═══════════════════════════════════════════════════════════════════════════
-
-# Which index measurement represents a stay.
-#
-# 07_classify classifies every measurement in the index split. The downstream
-# outcome analyses need ONE exposure per stay x analyte, defined without looking
-# past the moment the flag is raised. This module marks the candidates once, at
-# classification time, so 13_cox / 14_patient_level read the same definition:
-#
-#     exp_first          the first index measurement of the stay
-#     exp_window         every index measurement within WINDOW_HOURS of that first one
-#     exp_window_worst   the one of those with the largest Pop_RI-standardised deviation
-#                        |x - Pop_RI midpoint| / Pop_RI halfwidth  (max for "high"
-#                        analytes, min for "low" ones, without a per-lab direction table)
-#
-#     t0_hours           hours from admission of the first index measurement
-#     t_hours            hours from admission of the measurement itself
-#
-# Exposure definitions and the follow-up clock:
-#     first          exposure = exp_first row;            follow-up starts at t0
-#     window_worst   exposure = exp_window_worst row;     follow-up starts at t0 + window
-#     window_any     exposure = any flag among exp_window; follow-up starts at t0 + window
-# Events (or censoring) at or before the start of follow-up are excluded, which is
-# what `exclude_col` in the outcome configs was meant to do.
-#
-# No measurement is excluded up front (Aashna, 2026-08-28): a lab taken after the
-# event or after discharge simply gives that stay a non-positive follow-up and it
-# drops out of the model for that outcome. In INSPIRE 64% of index measurements
-# post-date discharge, so its in-hospital outcomes lose most stays this way.
 
 WINDOW_HOURS = 48
 EXPOSURES = ("first", "window_worst", "window_any")
@@ -587,24 +473,9 @@ def exposure_rows(df, exposure, window_hours=WINDOW_HOURS):
     raise ValueError(exposure)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Forecasting targets shared by 04_refs (norma step) and 05_forecasting
-# ═══════════════════════════════════════════════════════════════════════════
 
 # Forecasting targets shared by 04_refs.py (norma step) and 05_forecasting.py.
-#
-# One record per target.  For every patient-analyte pair in index_labs the BASELINE
-# measurements are the history and the first INDEX measurement is the target
-# (`target='all'`: every index measurement, each with everything before it as
-# history).  Times are days from the first history measurement — the convention
-# NORMA was trained on (process/process_data.py: time_delta = seconds / 86400).
-#
-# Baseline history is de-duplicated on timestamp (first value kept), exactly as
-# the baselines step of 04_refs.py does for the interval methods, so NORMA, the history-only baselines
-# and the reference-interval fits all see the same history.
-#
-# The record's `target_idx` (0 = first index measurement) plus (patient_id, analyte)
-# is the key every downstream file joins on.
 
 STATE_NAMES = {0: 'low', 1: 'normal', 2: 'high'}
 TARGET_KEYS = ['patient_id', 'analyte', 'target_idx']
@@ -641,18 +512,6 @@ def subsample_patients(df, max_patients, seed=42, pid_col='patient_id'):
 def build_pairs(df, time_unit, target='first', max_hist=128, exclude=(), covariates=()):
     """One record per forecasting target: history arrays + target, times in days
     from the first history measurement.
-
-    `covariates` (any of 'age', 'setting', 'co') adds the per-measurement inputs
-    of the NORMA2 covariate arms (model/run_covariate_ablation.sh):
-      'age'      age_h / age_next — age at each draw, = age + t/365.25
-      'setting'  setting_h / setting_next from the df's `setting` column
-                 (process/covariates.SETTING_VOCAB codes, icu NOT yet collapsed)
-      'co'       draw_idx into a same-draw co-analyte panel; the function then
-                 returns (recs, panel) where panel is float16 (n_draws, K),
-                 PopRI-normalised (x-low)/(high-low) clipped to ±5, NaN = not
-                 drawn — the process/covariates.py recipe. The panel is built
-                 BEFORE the `exclude` filter (excluded analytes are still
-                 informative as inputs), exactly as in training.
     """
     want_co = 'co' in covariates
     cols = ['patient_id', 'analyte', 'timestamp', 'value', 'sex', 'age', 'split']
@@ -727,9 +586,9 @@ def build_pairs(df, time_unit, target='first', max_hist=128, exclude=(), covaria
                 'x_next': float(v[j]), 's_next': int(state[j]), 's_last': int(state[hist[-1]]),
             }
             if 'age' in covariates:
-                # `age` is the pair's static age column; the per-draw age drifts with
-                # the anchored time axis (exact for cohorts whose age is at first draw,
-                # off by <= the stay length for admission-anchored ages).
+                # `age` is the pair's static age column; the per-draw age drifts with the
+                # anchored time axis (exact for cohorts whose age is at first draw, off by <= the
+                # stay length for admission-anchored ages).
                 r['age_h'] = (r['age'] + r['t_h'] / 365.25).astype(np.float32)
                 r['age_next'] = float(r['age'] + r['t_next'] / 365.25)
             if setting is not None:

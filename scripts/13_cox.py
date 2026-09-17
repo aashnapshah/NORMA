@@ -1,45 +1,8 @@
 #!/usr/bin/env python
 """Landmark Cox PH models per (outcome, analyte, RI method), one row per stay.
 
-  exposure   which index measurement represents the stay (lib/metrics.py):
-               first          the first index measurement;   follow-up from it
-               window_worst   the most Pop_RI-deviant one within --window_hours of it;
-                              follow-up from the end of the window
-               window_any     every measurement in that window (flag = any abnormal,
-                              z = max, category = of the most deviant)
-  encoding   binary (outside the interval), z (|x - centre| / halfwidth, clipped at
-             10), category (low / high vs normal)
-  follow-up  event or censoring time minus the landmark, in hours; stays whose event
-             or censoring is at/before the landmark are excluded
-  patients   restricted, per analyte, to stays every method can score
-  subsets    all; pop_normal = the exposure measurement is inside Pop_RI
-  fitting    HR and CI on all stays (age + sex + exposure), BH-FDR within (outcome,
-             exposure, encoding) and globally.  Minimum 3 events.  Outcomes whose
-             label is defined by the follow-up time (prolonged stay) are skipped --
-             they stay binary outcomes in 12_eval.
-  -> 13_cox.csv (long format: subset x exposure x encoding x level; subset "all"
-     is every stay, "pop_normal" only those inside the population interval)
-
 Usage:
     python 13_cox.py --dataset eicu --n_jobs 8
-
-Figures and tables
-------------------
-Every figure is one file for all cohorts: rows = eICU / INSPIRE / CHS (VAL_COHORTS), and
-a cohort whose results are missing renders as a pending row.  13_cox.csv is long format
-(exposure x encoding x level, see 13_cox.py); cox and methods_all show the primary
-definition (first index measurement, binary flag).
-  cox            rows = cohort, columns = outcome: hazard ratio of the abnormal flag
-                 (95% CI) per analyte, one marker per RI method; only FDR-significant
-                 estimates are drawn, a row is an analyte where a majority of the drawn
-                 methods have one, and each panel keeps the MAX_ANALYTES analytes with the
-                 largest NORMA hazard ratio
-  cox_mortality  the mortality column of cox, the three cohorts side by side
-  sensitivity    median HR across analytes per method under every exposure definition (x)
-                 and encoding (columns), one row per cohort x outcome
-  methods_all    within Pop_RI-normal tests: fraction of analytes with a significant
-                 HR > 1 per method (bar = pooled, markers = per outcome), one panel per cohort
-  *_norma        the same with the NORMA covariate arms instead of the RI methods
 """
 import bootstrap  # noqa: F401
 
@@ -65,9 +28,7 @@ Z_CLIP = 10.0
 MIN_COX_EVENTS = 3
 
 
-# =============================================================================
 # stay-level exposure table
-# =============================================================================
 
 def method_z(df, method):
     """The stored deviation score, or |x - centre| / halfwidth from the bounds."""
@@ -82,9 +43,8 @@ def method_z(df, method):
     return z.replace([np.inf, -np.inf], np.nan)
 
 
-# Why a stay table can come out empty, kept per (exposure, outcome) so the "no models"
-# message can say which it was.  This used to be silent: CHS dropped every row and the
-# only clue was a message about follow-up that was true of nothing in particular.
+# Why a stay table can come out empty, kept per (exposure, outcome) so the "no models" message
+# can say which it was.
 DROPS = {}
 
 
@@ -120,13 +80,8 @@ def stay_table(rows, landmark, methods, outcome_cfg, unit, shift_hours=0.0, drop
 
     table = table.reset_index()
     end = np.where(table["event"] == 1, table["t_event"], table["t_censor"])
-    # The landmark is hours from the patient's FIRST HISTORY measurement, counted on the
-    # cohort's own timestamp epoch (lib/metrics exposure_rows -> t0_hours).  The outcome
-    # columns are counted from a different date: CHS builds death_days / followup_days
-    # relative to 2015-01-01 while its timestamps run from 2005-01-01, so subtracting the
-    # two raw put every patient ~3652 days in the past and the `> 0` filter emptied the
-    # cohort.  shift_hours rebases the landmark onto the outcome clock; it is 0 for a
-    # cohort whose two clocks already agree, which is every other cohort here.
+    # The landmark is hours from the patient's FIRST HISTORY measurement, counted on the cohort's
+    # own timestamp epoch (lib/metrics exposure_rows -> t0_hours).
     table["duration"] = end - (table["landmark"] - shift_hours)
     table["age"] = pd.to_numeric(table["age"], errors="coerce")
     table["sex"] = pd.to_numeric(table["sex"], errors="coerce")
@@ -143,11 +98,8 @@ def stay_table(rows, landmark, methods, outcome_cfg, unit, shift_hours=0.0, drop
     return out
 
 
-# ── per-chunk stay tables (chunked cohorts) ────────────────────────────────
-# The models need one row per (patient, analyte), not every draw, and that reduction is
-# chunk-local -- a patient's measurements never span chunks.  So each chunk is reduced
-# once, cached beside it, and the fits read one analyte at a time across the caches.
-# The reduction is `stay_table`, the same function the unchunked path calls.
+# ── per-chunk stay tables (chunked cohorts) ──────────────────────────────── The models need one
+# row per (patient, analyte), not every draw, and that reduction is chunk-local -- a patient's...
 COX_CACHE = "13_stay_tables"           # a directory: one parquet per analyte
 
 
@@ -175,9 +127,8 @@ def chunk_stay_tables(ds, args, unit, shift_hours=0.0):
         if "exp_first" not in df.columns:
             df = mark_exposures(df, ds.time_unit, args.window_hours)
         # Every time-to-event outcome the cohort defines, not just those whose columns the
-        # classification frame happens to carry: a frame written by an older run has the
-        # outcomes of that run (has_t2d, has_ckd) and would silently drop one added since
-        # (has_anemia_unspecified) before attach_outcomes could supply it.
+        # classification frame happens to carry: a frame written by an older run has the outcomes
+        # of that run (has_t2d,...
         outcomes = survival_outcomes(sub_ds)
         if any(cfg["event_col"] not in df.columns for _, cfg in outcomes):
             df = sub_ds.attach_outcomes(df)
@@ -378,11 +329,7 @@ def apply_fdr(df):
 
 
 def done_slices(results_dir, force):
-    """(outcome, exposure) pairs already in cox.csv, so an interrupted run resumes.
-
-    The fitting is the long half of this stage and it used to write nothing until every
-    outcome was done; a crash at 90% left nothing behind.  Each (exposure, outcome) slice
-    is now written as it finishes, and a rerun skips what is already there."""
+    """(outcome, exposure) pairs already in cox.csv, so an interrupted run resumes."""
     if force:
         return set()
     path = datasets.find_in(results_dir, "cox.csv")
@@ -436,9 +383,8 @@ def run_models(ds, df, methods, analytes, unit, args, results_dir, shift_hours=0
                 continue
             results = {s: [] for s in args.subsets}      # this slice only
             if chunked:
-                # one analyte's table at a time out of the per-chunk caches; the fitting
-                # itself is unchanged, and the rows it sees are the same rows.  The read is
-                # serial (it is I/O over the chunk files) and the fits are parallel.
+                # one analyte's table at a time out of the per-chunk caches; the fitting itself
+                # is unchanged, and the rows it sees are the same rows.
                 per_analyte = []
                 for a in analytes:
                     table = cached_analyte_table(ds, a, exposure, outcome)
@@ -487,9 +433,7 @@ def run_models(ds, df, methods, analytes, unit, args, results_dir, shift_hours=0
     refresh_global_fdr(results_dir, args.dry_run)
 
 
-# =============================================================================
 # main
-# =============================================================================
 
 def load_classified(ds, window_hours):
     df = ds.load_classification()
@@ -553,9 +497,7 @@ def main():
     run_models(ds, df, methods, analytes, unit, args, results_dir, shift_hours)
 
 
-# ═════════════════════════════════════════════════════════════════════════
 # Figures and tables
-# ═════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 from matplotlib.ticker import FixedLocator, NullFormatter
@@ -571,9 +513,7 @@ _ENC_LEVELS = [("binary", "abnormal", "Outside interval"), ("z", "z", "Per unit 
 _EXPOSURE_LABEL = {"first": "First\nindex", "window_worst": "Worst\nin 48 h", "window_any": "Any\nin 48 h"}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # shared
-# ─────────────────────────────────────────────────────────────────────────────
 def _load_cox(ds, subset="all", primary=True):
     df = load_result(ds, "cox.csv")
     if df is None or len(df) == 0:
@@ -630,9 +570,7 @@ def _top_legend(fig, methods, H):
                handlelength=1.2, handletextpad=0.4, columnspacing=1.2)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # cox: rows = cohorts, columns = outcomes, HR forest per analyte
-# ─────────────────────────────────────────────────────────────────────────────
 def _plain_log_ticks(axis, ticks):
     """Plain-number ticks (1, 2, 5) on a log axis instead of 2 x 10^0."""
     lo, hi = axis.get_view_interval()
@@ -774,9 +712,7 @@ def fig_cox_mortality():
     return {None: fig}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # sensitivity: rows = cohort x outcome, columns = encoding, x = exposure definition
-# ─────────────────────────────────────────────────────────────────────────────
 def _sensitivity_panel(ax, sub, exposures, methods):
     """Median HR across analytes per method and exposure; thin line = IQR across analytes."""
     step = 0.8 / max(len(methods) - 1, 1)
@@ -837,9 +773,7 @@ def fig_sensitivity():
     return {None: fig}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # methods_all: one panel per cohort, fraction of analytes with a significant HR > 1
-# ─────────────────────────────────────────────────────────────────────────────
 def _significant_fraction(ax, cox, outcomes, methods):
     """Bar per method: fraction of analytes with FDR < 0.05 and HR > 1 (pooled), markers
     per outcome."""
@@ -886,9 +820,7 @@ FIGURES = [
 ]
 
 
-# ══════════════════════════════════════════════════════════════════════════
 # Tables — 13_cox: table_* definitions and registry slice.
-# ══════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 from figlib import RI_LABELS, _BM_SUPP, _bm_method

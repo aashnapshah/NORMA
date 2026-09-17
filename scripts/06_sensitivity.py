@@ -1,57 +1,8 @@
 #!/usr/bin/env python
 """Sensitivity of every reference-interval method to the history it is given.
 
-Every method sees the SAME synthetic histories — a 50-year-old male with n
-measurements BASELINE_SPACING days apart drawn from N(Pop_RI midpoint, sd) —
-and returns its interval for the next value.  Three sweeps, the ones the
-NORMA-only model/sensitivity_analysis.py reports:
-
-    history_length   n = 2 ... 300 at sd = BASE_SD x Pop_RI width
-    horizon          7 ... 3650 days ahead.  Only NORMA sees the horizon; the
-                     other methods return the same interval whatever it is,
-                     so their curves are flat by construction
-    history_std      sd = 0 ... 0.3 x Pop_RI width (0 = perfectly flat history)
-
-Methods, keyed as in the figure code (_BM_SUPP):
-    PopRI           the population interval, constant
-    PerRI           GMM setpoint +/- 2 SD of the whole history (lib/metrics.py,
-                    the estimator 04_refs uses)
-    Gaussian_mle / Gaussian_trunc / Gaussian_eb
-                    fits to the Pop_RI-normal values of the history, EB with the
-                    dev-cohort prior (model/baselines/gaussian.py); histories
-                    with too few normal values fall back to Pop_RI, as in 04_refs
-    Cohen_m4        dev-trained model applied through cohen.apply_dev_cohen on a
-                    synthetic split_df.  build_pair_table's min_bl is lowered
-                    from 5 to 1 here so histories shorter than the pipeline's
-                    minimum are still scored
-    NORMA           queried with state = normal (the interval used to flag);
-                    covariate-ablation arms as NORMA_<arm> (--norma_runs)
-
-Widths are the 95% interval as % of the Pop_RI width; the centre shift is the
-interval centre relative to the Pop_RI midpoint the histories are drawn around.
-N_DRAWS histories per (analyte, sweep value), averaged.  ci_norm_lo/hi are the
-2.5/97.5 percentiles across those draws, which at this N_DRAWS is the min/max --
-they are kept for schema compatibility with model/sensitivity_analysis.py and are
-not a 95% interval.  Nothing reads them; the figures plot ci_norm_mean.
-
-Needs the Cohen artifact and the dev EB prior in artifacts/, not ref_intervals.
-Output: results/raw/dev/06_sensitivity_methods.csv, one row per
-model x analyte x feature x value, with the column names of sensitivity.csv so
-fig_sensitivity in figures.py can read either.
-
+Usage:
     python 06_sensitivity.py [--norma_runs q_age 334f7e21] [--analytes HGB NA]
-
-Figures and tables
-------------------
-    sensitivity.pdf           one panel per sweep, every method overlaid: CI width vs
-                              history length / horizon / within-person SD.  The
-                              across-analyte spread is in the sensitivity_summary table.
-    sensitivity_norma.pdf     the same three sweeps for the NORMA covariate-ablation arms
-                              only (baseline vs + age / setting / co-analytes); empty
-                              until the arms are swept with --norma_runs.
-
-Stage 06 has two scripts and both write to the 06_calibration folder, so these land
-in results/figures/<tag>/ beside the calibration figures (both 06_ prefixed).
 """
 import bootstrap
 
@@ -72,8 +23,8 @@ def _load(name, path):
     return mod
 
 
-# the model code and its baselines import each other by bare name, and
-# `import config` has to reach process/config.py there
+# the model code and its baselines import each other by bare name, and `import config` has to
+# reach process/config.py there
 import importlib.util as _ilu
 import sys as _sys
 for _p in (os.path.join(bootstrap.MODEL_DIR, "baselines"), bootstrap.MODEL_DIR,
@@ -89,11 +40,7 @@ NORMA_CHECKPOINT, NORMA_RUN_ID = _VCFG.NORMA_CHECKPOINT, _VCFG.NORMA_RUN_ID
 NORMA_ABLATION_RUN_IDS = getattr(_VCFG, "NORMA_ABLATION_RUN_IDS", [])
 
 BASE_SD = 0.10        # history noise sd as a fraction of the Pop_RI width (= history_std value 1.0)
-# Draws per (analyte, sweep value). They only feed ci_norm_mean -- ci_norm_lo/hi are
-# written but read by nothing -- so the question is the standard error of one plotted
-# point against the range its curve traverses. At 8 draws that is 3-5% of the range
-# on all three sweeps (history_length 2.2/64.6, history_std 4.5/131.7, horizon
-# 3.5/66.2), invisible on a smooth trend read across 12-17 x-values. It was 20.
+# Draws per (analyte, sweep value).
 N_DRAWS = 8
 PER_N_STD = 2         # PerRI = setpoint +/- 2 SD (04_refs --gmm_n_std default)
 Z = 1.96
@@ -116,9 +63,9 @@ def make_histories(labs, features, n_draws, seed):
                     horizon = float(v)
                 elif feat == "history_std":
                     sd = float(v) * span / 10.0
-                # sd = 0 is make_flat_history, which is deterministic: every draw is
-                # the same history and the same prediction (verified: the across-draw
-                # spread of every sd=0 row is exactly 0). One draw, not n_draws.
+                # sd = 0 is make_flat_history, which is deterministic: every draw is the same
+                # history and the same prediction (verified: the across-draw spread of every sd=0
+                # row is exactly 0).
                 draws = n_draws if sd > 0 else 1
                 for i in range(draws):
                     rng = np.random.default_rng([seed, i, labs.index(lab), n_hist])
@@ -130,8 +77,9 @@ def make_histories(labs, features, n_draws, seed):
                     recs.append(dict(lab=lab, feature=feat, value=float(v), draw=i, t=t_h, x=x_h,
                                      horizon=horizon, low=low, high=high, mid=mid, span=span,
                                      key=f"{lab}|{feat}|{float(v)}|{i}",
-                                     # the n=10 history-length record with the same draw: identical
-                                     # history, which the horizon sweep reuses for horizon-blind methods
+                                     # the n=10 history-length record with the same draw:
+                                     # identical history, which the horizon sweep reuses for
+                                     # horizon-blind methods
                                      base_key=f"{lab}|history_length|{float(SA.BASELINE_N_HIST)}|{i}"))
     return recs
 
@@ -143,13 +91,7 @@ def norma_intervals(recs, run_id, checkpoint):
     from utils import load_checkpoint, create_model, uses_covariates
     from data import TEST_VOCAB
     device = torch.device("cpu")
-    # One thread, deliberately. Every call here is a batch of one with ~12 tokens at
-    # d_model 64, so splitting each matmul across threads costs more in barrier
-    # synchronisation than the arithmetic it saves -- and on a shared node (load
-    # average 33 on 4 usable cores when this was measured) a descheduled worker
-    # leaves the others spinning. Measured on q_age_set, history of 10: 165 ms/call
-    # at 4 threads against 8.7 ms/call at 1, a 19x difference that put the 13-arm
-    # sweep at 5-6 hours instead of ~1.
+    # One thread, deliberately.
     torch.set_num_threads(1)
     ckpt, hparams = load_checkpoint(MODEL_LOG_DIR, run_id, best=(checkpoint == "best"),
                                     device=device, quiet=True)
@@ -206,8 +148,8 @@ def cohen_intervals(recs):
     import cohen
     with open(cohen.DEFAULT_ARTIFACT, "rb") as f:
         artifact = pickle.load(f)
-    # _VAL_DIR was the validation/ tree removed on 2026-09-08; the repo root is
-    # what makes this path readable now.
+    # _VAL_DIR was the validation/ tree removed on 2026-09-08; the repo root is what makes this
+    # path readable now.
     print(f"  Cohen artifact {os.path.relpath(cohen.DEFAULT_ARTIFACT, bootstrap.BASE_DIR)}: {artifact['meta']}")
     rows = []
     for r in recs:
@@ -288,8 +230,8 @@ def main():
     if "Cohen_m4" in args.methods:
         intervals["Cohen_m4"] = cohen_intervals(recs)
     if "NORMA" in args.methods:
-        # baseline keeps the bare "NORMA" label; arms are NORMA_<arm> so the figure code
-        # can pick them out without a second registry
+        # baseline keeps the bare "NORMA" label; arms are NORMA_<arm> so the figure code can pick
+        # them out without a second registry
         arms = args.norma_runs if args.norma_runs is not None else list(NORMA_ABLATION_RUN_IDS)
         for run in [args.run_id] + [a for a in arms if a != args.run_id]:
             label = "NORMA" if run == args.run_id else f"NORMA_{run}"
@@ -305,9 +247,7 @@ def main():
     print(f"Wrote {args.out} ({len(df)} rows)")
 
 
-# ═════════════════════════════════════════════════════════════════════════
 # Figures and tables
-# ═════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 from datasets import dev_results_dir
@@ -328,8 +268,8 @@ def _load_sensitivity():
     path = find_in(dev_results_dir("06_calibration"), "sensitivity_methods.csv")
     if os.path.exists(path):
         df = pd.read_csv(path, keep_default_na=False, na_values=[""])
-        # Pop_RI is constant across every sweep, so its row is omitted; the dashed
-        # line at 100% marks its width in the remaining rows.
+        # Pop_RI is constant across every sweep, so its row is omitted; the dashed line at 100%
+        # marks its width in the remaining rows.
         methods = [m for m in _BM_SUPP if m != "PopRI" and m in set(df["model"])]
     else:
         df = load_prediction("sensitivity.csv")
@@ -341,8 +281,8 @@ def _load_sensitivity():
     return (df, methods) if len(df) else (None, [])
 
 
-# The three Gaussian variants are steps on one indigo ramp (OKLab separation 12-14, under the
-# 15 floor), so linestyle carries the variant and hue carries the family.
+# The three Gaussian variants are steps on one indigo ramp (OKLab separation 12-14, under the 15
+# floor), so linestyle carries the variant and hue carries the family.
 _SENS_LINESTYLE = METHOD_LINESTYLE   # lib/models.py, via figlib
 
 
@@ -360,14 +300,7 @@ def _sens_panel(ax, fsub, ycol, use_log, color, linestyle="-", label=None, lw=1.
 
 
 def _sens_ylim(ax, curves):
-    """Scale to the plotted curves rather than anchoring at zero.
-
-    These are ratios on a line chart, not bars: the meaningful anchor is the Pop_RI width at
-    100%, and forcing a zero floor squeezes a 37-62% band into a quarter of the panel. The
-    100% line is drawn only when it falls inside the data range -- the y label already gives
-    the unit, so a reference line off in empty space would just cost height. The within-person
-    SD sweep does start at zero (a flat history has no spread), and that comes out of the data.
-    """
+    """Scale to the plotted curves rather than anchoring at zero."""
     lo = min(float(c.min()) for c in curves)
     hi = max(float(c.max()) for c in curves)
     pad = 0.08 * (hi - lo or 1)
@@ -402,8 +335,8 @@ def fig_sensitivity():
             _sens_ylim(ax, curves)
         # no panel title: the x label already names the sweep
         style_axes(ax, xlabel, None)
-    # on the left axes rather than fig.supylabel, which sits too far left and centres
-    # on the figure (including the legend strip) instead of on the plot area
+    # on the left axes rather than fig.supylabel, which sits too far left and centres on the
+    # figure (including the legend strip) instead of on the plot area
     axes[0, 0].set_ylabel(_SENS_YLABEL, fontsize=FONT_AXIS)
     handles, labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, frameon=False, fontsize=FONT_LEGEND, ncol=len(labels),
@@ -419,18 +352,13 @@ def fig_sensitivity_norma():
     patient-split family. Each arm is queried on a history of the one analyte, so the
     setting is 'unknown' and the co-analyte panel is empty -- the arms are being asked
     what they do with a lone analyte, not what their extra inputs buy on real panels.
-
-    Unlike the paired forecasting figures, the patient-split arms belong here: every arm
-    is given the SAME synthetic histories, so nothing depends on which test rows an arm
-    was trained away from, and no shared test split is needed to put them on one axis."""
+    """
     df, _ = _load_sensitivity()
     if df is None:
         return {}
     # The sweep labels whichever run is the main model as bare "NORMA" (the arms are
-    # NORMA_<run>), so without this the main model is absent from the one figure that
-    # compares the arms with each other -- and arm_notes reports it as "not run here"
-    # while its curve sits in the file under another name. Map the row rather than
-    # sweeping the same checkpoint twice under both names.
+    # NORMA_<run>), so without this the main model is absent from the one figure that compares
+    # the arms with each other --...
     main_arm = f"NORMA_{NORMA_RUN_ID}"
     row_key = {m: m for m in ALL_ARM_METHODS}
     present = set(df["model"])
@@ -440,12 +368,12 @@ def fig_sensitivity_norma():
     arms = [m for m in ALL_ARM_METHODS if m in present]
     if len(arms) < 2:          # nothing to compare until the arms have been swept
         return {}
-    # A curve cannot be drawn for an arm with no sweep, so the arms that are
-    # absent are named underneath instead of being left unmentioned.
+    # A curve cannot be drawn for an arm with no sweep, so the arms that are absent are named
+    # underneath instead of being left unmentioned.
     notes = arm_notes(present)
-    # The legend is planned before the figure exists: with every trained arm shown
-    # it wraps to several rows, and a figure sized for a one-row legend would give
-    # those rows the panels' space instead of its own.
+    # The legend is planned before the figure exists: with every trained arm shown it wraps to
+    # several rows, and a figure sized for a one-row legend would give those rows the panels'
+    # space instead of...
     arm_labels = [ALL_ARM_LABELS.get(m, m) for m in arms]
     _, legend_in = plan_legend(arm_labels, 7.2)
     fig, axes = plt.subplots(1, len(_SENS_PANELS), figsize=(7.2, 2.3 + legend_in),
@@ -486,9 +414,7 @@ FIGURES = [
 ]
 
 
-# ══════════════════════════════════════════════════════════════════════════
 # Tables — sensitivity: table_* definitions and registry slice.
-# ══════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 from figlib import RI_LABELS, _BM_SUPP, ABLATION_LABELS
@@ -497,19 +423,14 @@ from figlib import RI_LABELS, _BM_SUPP, ABLATION_LABELS
 def table_sensitivity_summary():
     """Endpoint contrast per method x sweep: interval width at each end of the sweep and the
     paired change, as median [IQR] across analytes.
-
-    A paired per-analyte difference, not a fitted slope: the curves saturate (history length)
-    or are flat by construction (every method but NORMA against the horizon), so a linear fit
-    would misdescribe them, and the spread across analytes is real heterogeneity rather than
-    sampling noise -- hence an IQR and no standard error.
     """
     path = find_in(dev_results_dir("06_calibration"), "sensitivity_methods.csv")
     if not os.path.exists(path):
         return []
     df = pd.read_csv(path, keep_default_na=False, na_values=[""])
     df = to_numeric(df[~df["test_name"].isin(EXCLUDE_ANALYTES)].copy())
-    # Pop_RI is constant by construction and omitted, as in sensitivity.pdf; the
-    # covariate-ablation arms follow the canonical methods when they have been swept
+    # Pop_RI is constant by construction and omitted, as in sensitivity.pdf; the covariate-
+    # ablation arms follow the canonical methods when they have been swept
     present = set(df["model"])
     methods = ([m for m in _BM_SUPP if m != "PopRI" and m in present]
                + [m for m in ABLATION_LABELS if m != "NORMA" and m in present])

@@ -55,10 +55,9 @@ def compute_age_ri(ref_df, n_sample=2000, seed=42, exclude_analytes=None):
                 if np.isnan(lo) or np.isnan(hi):
                     continue
 
-                # Map method names for output
-                # 'norma_<primary>' is the canonical NORMA; the covariate-ablation arms
-                # keep their own names so they stay separable downstream (collapsing
-                # every norma_* to "NORMA" silently stacked all arms into one series).
+                # Map method names for output 'norma_<primary>' is the canonical NORMA; the
+                # covariate-ablation arms keep their own names so they stay separable downstream
+                # (collapsing every norma_* to "NORMA"...
                 if method.startswith('norma_'):
                     rid = method[len('norma_'):]
                     method_label = 'NORMA' if rid == NORMA_RUN_ID else f'NORMA_{rid}'
@@ -98,9 +97,7 @@ def main():
     print(f"\n  Saved {len(age_df)} rows to {out_path}")
 
 
-# ═════════════════════════════════════════════════════════════════════════
 # Figures and tables
-# ═════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 
@@ -146,10 +143,7 @@ def fig_age_ri():
     return {"": fig}
 
 def fig_age_ri_norma(ds):
-    """Same age-vs-midpoint grid as fig_age_ri, one line per NORMA covariate arm.
-
-    Per cohort rather than per dataset-overlay: colour is spent on the ablation
-    arms here, so each cohort needs its own file."""
+    """Same age-vs-midpoint grid as fig_age_ri, one line per NORMA covariate arm."""
     df = load_result(ds, "age_ri.csv")
     if df is None or len(df) == 0 or "method" not in df.columns:
         return {}

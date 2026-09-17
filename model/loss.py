@@ -33,12 +33,11 @@ class QuantileLoss(nn.Module):
         self.register_buffer('quantiles', torch.tensor(quantiles, dtype=torch.float32))
 
     def forward(self, q_pred, y_true):
-        """
-        Args:
-            q_pred: (B, n_quantiles) predicted quantile values
-            y_true: (B, 1) ground-truth values
+        """Args:
+        q_pred: (B, n_quantiles) predicted quantile values
+        y_true: (B, 1) ground-truth values
         Returns:
-            scalar loss (mean pinball loss across quantiles and batch)
+        scalar loss (mean pinball loss across quantiles and batch)
         """
         tau = self.quantiles.to(q_pred.device)
         y = y_true.expand_as(q_pred)  # (B, n_quantiles)
@@ -123,13 +122,8 @@ class NORMALoss(nn.Module):
         return (divergence * kl_weight[abnormal_mask]).mean()
 
 
-
 def effective_n(n_hist, t_h=None, t_next=None, pad_mask=None, tau=None):
-    """History length, optionally decayed with elapsed time.
-
-    tau (same units as t) gives n_eff = sum_i exp(-(t_query - t_i) / tau): the
-    information an observation still carries under a setpoint that drifts as an
-    Ornstein-Uhlenbeck process with time constant tau. tau=None -> the plain count."""
+    """History length, optionally decayed with elapsed time."""
     n = n_hist.float().view(-1, 1)
     if tau is None or t_h is None:
         return n
@@ -149,34 +143,7 @@ class StudentTNLLLoss(nn.Module):
 
 
 class QuantilePriorLoss(nn.Module):
-    """Pinball loss plus a population-prior term whose weight decays with history length.
-
-    The pinball loss alone learns the dev-cohort conditional quantiles and nothing
-    pulls the interval toward the population reference when the history is short or
-    flat (model/logs/ablation: 95% intervals cover ~77% on test, and the synthetic
-    sweep gives ~half the Pop_RI width from two draws and zero width from a flat
-    history). This loss adds prior pseudo-observations:
-
-        L = pinball(q, y) + lambda * w(n) * prior(q)        w(n) = k / (n + k)
-
-    n = number of target-analyte observations in the history, k = prior strength in
-    "observations" (k = 5: a 5-draw history is weighted 50/50 with the prior; two
-    draws ~70% prior; 50 draws ~10%).
-
-    mode='anchor'  prior(q) = E_{Y~N(m, s)}[pinball(q, Y)], closed form, with m the
-                   Pop_RI midpoint and s = width / 3.92 (Pop_RI = central 95%).
-                   Minimised when q equals the prior quantiles, so it is exactly
-                   "train on a k/(n+k) mixture of real targets and draws from the
-                   population prior" without sampling. Applied to queries conditioned
-                   on the normal state only (the reference-interval use case); the
-                   prior for an abnormal query is not the population interval.
-    mode='floor'   prior(q) = relu(width_pop - (q975 - q025)): a soft floor on the
-                   interval width that decays with n, every state. Weaker: it does
-                   not pull the centre, only stops collapse.
-
-    Both terms are in the analyte's units, like the pinball loss, so lambda is a
-    ratio of the two (lambda = 1: a prior pseudo-draw counts as much as a real one).
-    """
+    """Pinball loss plus a population-prior term whose weight decays with history length."""
 
     def __init__(self, quantiles=(0.025, 0.25, 0.50, 0.75, 0.975), lambda_prior=1.0,
                  k=5.0, mode='anchor', normal_state=1, tau=None):
@@ -206,11 +173,7 @@ class QuantilePriorLoss(nn.Module):
         n_eff = effective_n(n_hist, t_h, t_next, pad_mask, self.tau)
         w = self.k / (n_eff + self.k)                                 # (B, 1)
         if self.mode == 'gate':
-            # q_pred is already g * own + (1 - g) * prior; the pinball scores that
-            # combination. Pull the learned gate toward the conjugate weight
-            # n / (n + k) with a Bernoulli KL, so it departs from the Bayesian
-            # answer only where the data say the patient is more (or less)
-            # trustworthy than its history length implies.
+            # q_pred is already g * own + (1 - g) * prior; the pinball scores that combination.
             g0 = (1 - w).clamp(1e-4, 1 - 1e-4)
             g = gate.clamp(1e-4, 1 - 1e-4)
             kl = g * torch.log(g / g0) + (1 - g) * torch.log((1 - g) / (1 - g0))

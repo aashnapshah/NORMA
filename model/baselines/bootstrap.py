@@ -1,14 +1,4 @@
-"""Put the pipeline's import roots on sys.path, from inside model/baselines/.
-
-The same one-line rule holds everywhere in the repo -- a module starts with
-
-    import bootstrap  # noqa: F401
-
-and Python resolves it to the shim for its own folder. This one exists because
-model/ is not on sys.path when a baseline runs as a script from here
-(`python cohen.py`), so `import bootstrap` would otherwise miss
-model/bootstrap.py, which owns the delegation to scripts/bootstrap.py.
-"""
+"""Put the pipeline's import roots on sys.path, from inside model/baselines/."""
 import importlib.util
 import os
 import sys

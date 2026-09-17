@@ -1,61 +1,5 @@
 #!/usr/bin/env python
-"""Gaussian reference intervals estimated from a patient's own history.
-
-Every method here fits a Gaussian to the patient's baseline values; they differ
-in which values they keep and what they shrink toward.
-
-The Per_RI setpoint stands slightly apart from the other three -- it takes the
-history as it comes and lets a mixture decide which mode is the patient's
-normal:
-
-  setpoint  gmm_setpoint(): dominant component of a 1-3 component Gaussian
-            mixture over the raw baseline values, AIC-selected. The Per_RI of
-            the paper; the interval is setpoint +/- n_std * SD (04_refs
-            --gmm_n_std, default 2). Method key in ref_intervals: per.
-
-The other three share NORMA's estimand -- the individual's distribution in the
-population-defined normal state -- but reach it by *filtering* the baseline
-history to values inside the population reference interval (PopRI) rather than
-by conditioning on a queried state:
-
-  mle    Gaussian fit to the PopRI-normal baseline values:
-         mean +/- z * SD (SD with ddof=1).
-  trunc  Truncated-Gaussian fit to the same values: maximum-likelihood
-         (mu, sigma) of a normal truncated to [PopRI_low, PopRI_high], which
-         corrects the SD deflation caused by the filtering; the interval is
-         mu +/- z * sigma of the untruncated latent normal.
-  eb     Empirical-Bayes Gaussian on the same values. Per analyte and sex:
-             theta_i ~ N(mu, tau^2),  y_ij | theta_i ~ N(theta_i, sigma_i^2),
-             sigma_i^2 ~ Scaled-Inv-chi2(nu0, s0^2).
-         Hyperparameters are estimated by maximising the marginal likelihood
-         (type-II ML) over the patient-analyte histories being shrunk:
-           * (nu0, s0^2) from the sample variances, using the exact marginal
-             s_i^2 / s0^2 ~ F(n_i - 1, nu0);
-           * (mu, tau^2) from the sample means, using
-             ybar_i ~ N(mu, tau^2 + sigma_hat_i^2 / n_i)
-             with sigma_hat_i^2 the posterior-shrunk within-patient variance.
-         prior_source="popri" (the benchmark's definition since 2026-09-03):
-         the MEAN prior is the published population reference interval --
-         mu = PopRI midpoint, tau = half-width / z -- so the method shrinks
-         each patient's history toward the population range and no patient
-         data enters the mean prior; the variance prior (nu0, s0^2) comes
-         from the dev-cohort type-II ML fit (cached, transferred like NORMA
-         and Cohen). "cohort" and "dev" estimate (mu, tau^2) by type-II ML
-         from other patients' histories instead (in-cohort / transferred).
-         The interval is the plug-in posterior-predictive band
-             theta_hat +/- z * sqrt(sigma_hat^2 + V),
-         with sigma_hat^2 = (nu0 s0^2 + (n-1) s^2) / (nu0 + n - 1),
-         precision = 1/tau^2 + n/sigma_hat^2, theta_hat the precision-
-         weighted mean of mu and ybar, V = 1/precision.
-
-Fallback: pairs with fewer PopRI-normal baseline values than a method needs
-(mle/trunc: 2; eb: none -- its prior predictive is a complete interval) receive
-the PopRI interval itself. Fallback rows are
-marked by ri_mean = ri_std = NaN, so they remain distinguishable in
-ref_intervals. Pairs whose PopRI is undefined get NaN intervals.
-
-Method keys in ref_intervals: per / gaussian_mle / gaussian_trunc / gaussian_eb.
-"""
+"""Gaussian reference intervals estimated from a patient's own history."""
 import os
 import sys
 import warnings
@@ -66,15 +10,13 @@ from common import REFERENCE_INTERVALS, detect_cols, sex_key
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(os.path.dirname(_BASE_DIR))   # norma root
-# The processed dev cohort (EHRSHOT + MIMIC-IV) lives outside the repo because
-# both sources are access-controlled; point NORMA_DATA_DIR at your own copy.
+# The processed dev cohort (EHRSHOT + MIMIC-IV) lives outside the repo because both sources are
+# access-controlled; point NORMA_DATA_DIR at your own copy.
 DEFAULT_DEV_DIR = os.environ.get(
     "NORMA_DATA_DIR", os.path.join(os.path.dirname(ROOT_DIR), "data", "processed"))
 # model/logs/baselines/ here and inside Clalit (jobs/run_clalit.py --pack_bundle carries it in)
 DEFAULT_PRIOR_PATH = os.path.join(ROOT_DIR, "model", "logs", "baselines", "gaussian_eb_prior_dev.pkl")
-# Text twin of the pickle, checked into the repo.  The dev fit contributes only
-# nu0 and s02 per (analyte, sex) -- 60 keys of six numbers -- and a pickle cannot
-# be carried into Clalit, so the prior travels as JSON and the loader prefers it.
+# Text twin of the pickle, checked into the repo.
 DEFAULT_PRIOR_JSON = os.path.splitext(DEFAULT_PRIOR_PATH)[0] + ".json"
 
 
@@ -94,13 +36,8 @@ MIN_N = {"mle": 2, "trunc": 2, "eb": 2}   # eb needs s^2 from the patient
 NU0_BOUNDS = (2.1, 500.0)
 
 
-# ---------------------------------------------------------------------------
-# Per_RI setpoint (Gaussian mixture over the raw history)
-# ---------------------------------------------------------------------------
-# The one estimator here that does not filter to the PopRI-normal values. Shared
-# by 04_refs (the `per` rows), 06_sensitivity (synthetic histories) and the web
-# app; it was in scripts/lib/metrics.py until the 2026-09-08 cleanup, which put
-# every Gaussian method in this file.
+# Per_RI setpoint (Gaussian mixture over the raw history) The one estimator here that does not
+# filter to the PopRI-normal values.
 
 GMM_WEIGHT_THRESHOLDS = {2: 0.70, 3: 0.45}   # dominant component must carry this much
 
@@ -145,9 +82,7 @@ def gmm_setpoint(values, max_components=3):
     return mean_1, np.sqrt(var_1)
 
 
-# ---------------------------------------------------------------------------
 # Per-pair estimators (PopRI-normal history)
-# ---------------------------------------------------------------------------
 
 def fit_mle(v):
     """(mean, SD ddof=1) of v; requires len(v) >= 2."""
@@ -156,11 +91,7 @@ def fit_mle(v):
 
 
 def fit_trunc(v, a, b):
-    """MLE (mu, sigma) of a normal truncated to [a, b] given values v in [a, b].
-
-    Falls back to the plain Gaussian fit when the SD is zero, the bounds are
-    not finite, or the optimiser fails.
-    """
+    """MLE (mu, sigma) of a normal truncated to [a, b] given values v in [a, b]."""
     from scipy.optimize import minimize
     from scipy.special import ndtr
 
@@ -195,25 +126,7 @@ def _shrunk_var(n, s2, nu0, s02):
 
 
 def eb_posterior(v, prior, low=None, high=None):
-    """Plug-in posterior predictive (mean, SD), or (nan, nan) when n < 2.
-
-    Normal-normal empirical Bayes: the prior gives (mu, tau^2), the patient's
-    own values give their latent (mean, variance) and n, and theta_hat is the
-    precision-weighted mean of the two.  The band is the posterior predictive,
-    theta_hat +/- z*sqrt(sigma^2 + V) with V = 1/precision.
-
-    The patient's values are the ones inside the PopRI, so their sample mean and
-    variance describe a *truncated* normal and both are biased -- the variance
-    downward, which is what fit_trunc exists to correct.  Given the bounds, the
-    latent (mu_i, sigma_i) therefore come from the truncated-normal MLE, so this
-    is trunc with shrinkage toward the population rather than mle with
-    shrinkage.  Without bounds it falls back to the plain sample moments.
-
-    A prior carrying (nu0, s0^2) -- prior_source "cohort" or "dev" -- shrinks
-    the variance toward s0^2 first and can answer at any n, including 0.  The
-    PopRI prior has no such term, so n < 2 has no within-person variance and the
-    caller falls back to the PopRI itself, as mle and trunc do.
-    """
+    """Plug-in posterior predictive (mean, SD), or (nan, nan) when n < 2."""
     v = np.asarray(v, dtype=float)
     n = len(v)
     mu, tau2 = prior["mu"], prior["tau2"]
@@ -226,12 +139,9 @@ def eb_posterior(v, prior, low=None, high=None):
             return np.nan, np.nan
         ybar, sig = fit_trunc(v, low, high) if bounded else fit_mle(v)
         sig2 = sig ** 2
-        # The truncated MLE is unidentified when the values fill the window:
-        # a very wide latent normal is almost flat over [low, high] and fits
-        # them just as well, so sigma runs away (hundreds, for a PopRI 29 wide).
-        # Cap the within-person variance at the population variance -- an
-        # individual's own spread cannot exceed the population's, and at the cap
-        # the personalised band is simply no narrower than the PopRI.
+        # The truncated MLE is unidentified when the values fill the window: a very wide latent
+        # normal is almost flat over [low, high] and fits them just as well, so sigma runs away
+        # (hundreds, for a PopRI...
         if not np.isfinite(sig2) or sig2 > tau2:
             sig2 = min(float(np.var(v, ddof=1)), tau2)
             ybar = float(v.mean())
@@ -248,9 +158,7 @@ def eb_posterior(v, prior, low=None, high=None):
     return theta, float(np.sqrt(sig2 + 1.0 / prec))
 
 
-# ---------------------------------------------------------------------------
 # Empirical-Bayes hyperparameter estimation (type-II maximum likelihood)
-# ---------------------------------------------------------------------------
 
 def _fit_variance_prior(n, s2):
     """Type-II ML of (nu0, s0^2) from sample variances via s2/s0^2 ~ F(n-1, nu0)."""
@@ -306,13 +214,7 @@ def _fit_mean_prior(ybar, var_i):
 
 
 def estimate_eb_prior(stats, min_patients=20):
-    """Empirical-Bayes hyperparameters per (analyte, sex_key).
-
-    stats: DataFrame with columns analyte, sex_key, n, ybar, s2 -- one row per
-    patient-analyte history restricted to PopRI-normal values (n >= 1; s2 is
-    NaN when n == 1). Histories with n >= 2 inform the variance prior; all
-    histories inform the mean prior.
-    """
+    """Empirical-Bayes hyperparameters per (analyte, sex_key)."""
     prior = {}
     for (analyte, sk), g in stats.groupby(["analyte", "sex_key"]):
         n = g["n"].values.astype(float)
@@ -353,11 +255,7 @@ def _print_prior(prior):
 
 def build_dev_prior(dev_dir=DEFAULT_DEV_DIR, source="combined",
                     train_sources=("mimiciv", "ehrshot"), min_patients=20):
-    """Estimate the EB prior from NORMA's dev train split (transfer setting).
-
-    Uses every unique (patient, analyte, time) history point of the train
-    sequences (target excluded), keeping only values inside the PopRI.
-    """
+    """Estimate the EB prior from NORMA's dev train split (transfer setting)."""
     from cohen import load_dev_sequences
     ri = REFERENCE_INTERVALS
     train_seq, _, _ = load_dev_sequences(dev_dir, source=source)
@@ -402,20 +300,7 @@ def build_cohort_prior(pair_vals, min_patients=20):
 
 
 def build_popri_prior(z=1.96):
-    """EB prior from the published population reference interval and nothing else.
-
-    Per (analyte, sex), read straight out of process.config.REFERENCE_INTERVALS --
-    the same table the `pop` method uses -- so the prior differs by analyte and
-    sex exactly as the reference interval does:
-
-        mu    = PopRI midpoint
-        tau^2 = (PopRI half-width / z)^2
-
-    That is the whole prior.  The within-person variance comes from the
-    patient's own values (s^2), not from a prior on it, so nothing has to split
-    the population spread into within- and between-person parts -- the quantity
-    a reference interval cannot supply and a fitted artifact used to.
-    """
+    """EB prior from the published population reference interval and nothing else."""
     ri = REFERENCE_INTERVALS
     prior = {}
     for analyte, by_sex in ri.items():
@@ -450,9 +335,7 @@ def load_or_build_prior(prior_source="cohort", prior_path=None, rebuild=False,
         return _read_prior_json(json_path)
     if not os.path.isdir(dev_dir):
         # Inside Clalit there are no dev cohorts: estimating the prior needs
-        # combined_sequences_v2.pkl, NORMA's training data, which is not carried
-        # in.  Note prior_source="popri" reaches here too -- it takes its
-        # variance prior from the dev fit -- so this fires on the default path.
+        # combined_sequences_v2.pkl, NORMA's training data, which is not carried in.
         raise SystemExit(
             f"\n  No EB prior at {prior_path} and no dev cohort at {dev_dir}.\n"
             f"  The prior is estimated on MIMIC/EHRSHOT and carried in, not fitted here.\n"
@@ -468,15 +351,11 @@ def load_or_build_prior(prior_source="cohort", prior_path=None, rebuild=False,
     return artifact
 
 
-# ---------------------------------------------------------------------------
 # Cohort application
-# ---------------------------------------------------------------------------
 
 def build_pair_values(split_df, pop_rows):
     """For each pop row (one per patient-analyte pair), collect PopRI-normal
     baseline values.
-
-    Returns list of (row_dict, analyte, sex_key, normal_values, pop_low, pop_high).
     """
     c = detect_cols(split_df)
     df = split_df[split_df["split"] == "baseline"].dropna(subset=[c["value"]])
@@ -559,11 +438,7 @@ def compute_gaussian_refs(pair_vals, methods=METHODS, z=1.96, prior=None, n_jobs
 def augment_gaussian(ref_df, split_df, methods=METHODS, z=1.96, prior_source="cohort",
                      prior_path=None, rebuild_prior=False, dev_dir=None,
                      train_sources=("mimiciv", "ehrshot"), force=False):
-    """Append gaussian_* rows to an existing ref_df (called from 04_compute_refs.py).
-
-    Pairs are those already covered by the 'pop' method; the PopRI bounds are
-    taken from those rows so the normal filter matches the pipeline exactly.
-    """
+    """Append gaussian_* rows to an existing ref_df (called from 04_compute_refs.py)."""
     wanted = {f"gaussian_{m}" for m in methods}
     existing = set(ref_df["method"].unique()) & wanted
     if existing and not force:

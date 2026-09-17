@@ -10,7 +10,7 @@ from pathlib import Path
 import torch
 # Co-analyte batches carry extra tensors per item; with the default "file_descriptor" sharing
 # strategy the 4 workers exhausted fds ("received 0 items of ancdata", q_co / q_age_set_co
-# 2026-08-28). file_system sharing uses shm names instead.
+# 2026-08-28).
 torch.multiprocessing.set_sharing_strategy("file_system")
 import torch.nn as nn
 import torch.optim as optim
@@ -167,20 +167,16 @@ class NORMATrainer:
         print('=' * 90)
         
         # print(f'Performing Counterfactual Prediction on {self.args.test.title()}...')
-        # counterfactual_predictions_df = predict_cf(self.model, self.device, train_loader, val_loader, test_loader, normalize=self.args.normalize)
-        # counterfactual_predictions_df.to_csv(os.path.join(self.args.log_dir, self.run_id, f"counterfactual_predictions_{self.args.test.lower()}.csv"), index=False)
-        # print(f"Counterfactual predictions saved to {os.path.join(self.args.log_dir, self.run_id, f'counterfactual_predictions_{self.args.test.lower()}.csv')}")
-        # print('=' * 90)
+        # counterfactual_predictions_df = predict_cf(self.model, self.device, train_loader,
+        # val_loader, test_loader,...
   
-    # def _edit(self):
-    #     train_seq, val_seq, test_seq = load_and_split_data(self.args.data_dir, self.args.test, self.args.sample, print_info=False, nstates=getattr(self.args, 'nstates', 2))
-    #     train_loader, val_loader, test_loader = create_dataloaders(train_seq, val_seq, test_seq, getattr(self.args, 'nstates', 2), batch_size=self.args.batch_size, random_state=self.args.seed)
+    # def _edit(self): train_seq, val_seq, test_seq = load_and_split_data(self.args.data_dir,
+    # self.args.test, self.args.sample, print_info=False, nstates=getattr(self.args, 'nstates',
+    # 2)) train_loader,...
         
-    #     print(f'Performing Counterfactual Prediction on {self.args.test.title()}...')
-    #     counterfactual_predictions_df = predict_cf(self.model, self.device, train_loader, val_loader, test_loader)
-    #     counterfactual_predictions_df.to_csv(os.path.join(self.args.log_dir, self.run_id, f"counterfactual_predictions_{self.args.test.lower()}.csv"), index=False)
-    #     print(f"Counterfactual predictions saved to {os.path.join(self.args.log_dir, self.run_id, f'counterfactual_predictions_{self.args.test.lower()}.csv')}")
-    #     print('=' * 90)
+    # print(f'Performing Counterfactual Prediction on {self.args.test.title()}...')
+    # counterfactual_predictions_df = predict_cf(self.model, self.device, train_loader,
+    # val_loader, test_loader)...
         
     def _evaluate(self):
         print(f'Performing Evaluation...')
@@ -260,9 +256,9 @@ class NORMATrainer:
         if self.args.run_id and self.args.resume:
             self._load_model(best=False)
         elif self.args.run_id and not self.args.resume:
-            # Eval-only rerun: default to checkpoint_latest — a completed run evaluates the
-            # in-memory model after the last trained epoch, which IS checkpoint_latest
-            # (and the published 334f7e21 predictions are latest too).
+            # Eval-only rerun: default to checkpoint_latest — a completed run evaluates the in-
+            # memory model after the last trained epoch, which IS checkpoint_latest (and the
+            # published 334f7e21 predictions are...
             self._load_model(best=(getattr(self.args, 'eval_checkpoint', 'latest') == 'best'))
             self.args.resume = False
         else:
@@ -315,8 +311,8 @@ class NORMATrainer:
         self._set_up_model()
         if self.args.resume:
             # Loaders live only while training: _predict() reloads the data itself, and two
-            # copies of the v3 sequences + two sets of persistent workers exceed 128G
-            # (q_age 51580118 / q_co 51683437 OOM-killed in the final eval, MaxRSS 133.5G).
+            # copies of the v3 sequences + two sets of persistent workers exceed 128G (q_age
+            # 51580118 / q_co 51683437 OOM-killed in...
             train_loader, val_loader, test_loader = self._load_data(self.args.train)
             setup_logging(self.args, self.run_id)
             print('=' * 90)
@@ -443,17 +439,12 @@ def parse_args():
     parser.add_argument('--wandb_tags', type=str, nargs='*', default=None)
     args = parser.parse_args()
     if getattr(args, 'use_full_panel', False):
-        # full-panel tokens carry the co-analyte block, so co_proj must exist. This has
-        # to happen before _set_up_model() -> create_model(), which train() calls ahead
-        # of _load_data(); setting it later builds a model with no co_proj and silently
-        # drops co_h in NORMA2.forward.
+        # full-panel tokens carry the co-analyte block, so co_proj must exist.
         args.use_coanalytes = True
         if getattr(args, 'use_setting', False):
-            # data.py rebuilds age_h on the panel clock (age at the query less the
-            # elapsed years) but cannot do the same for the care setting: drawmeta
-            # carries row_time only, and a setting is not a function of time. Left
-            # unguarded this trains on a silently dropped setting embedding, since
-            # NORMA2.forward skips it when setting_h is None.
+            # data.py rebuilds age_h on the panel clock (age at the query less the elapsed years)
+            # but cannot do the same for the care setting: drawmeta carries row_time only, and a
+            # setting is not a function of...
             raise SystemExit(
                 '--use_setting is not supported with --use_full_panel: the setting of a '
                 'panel row is not in drawmeta (scripts/process/draw_meta.py would have to '

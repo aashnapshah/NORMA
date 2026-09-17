@@ -1,37 +1,5 @@
 """Point-forecast baselines: mean / last / ARIMA, plain and state-informed.
 
-  mean, last, arima          history only
-  mean_state, last_state     same statistics restricted to history values whose
-                             population-defined state equals the realized future
-                             state (fallback to the plain version if none)
-  arimax                     ARIMA(1,1,1) with one-hot state as exogenous
-                             regressors, forecast with the realized future state
-                             (fallback to plain arima if the history has a single
-                             state or the fit fails)
-
-The state-informed variants are handed the realized future state so they sit on
-matched inputs with the oracle NORMA evaluation (Referee 3, minor 1).
-
-Two callers, two entry points:
-
-  forecast_pair()   one (history, next value) pair.  scripts/05_forecasting.py
-                    loads this module by file path for the external cohorts, so
-                    everything above __main__ stays free of project imports --
-                    numpy only, statsmodels lazily.
-  __main__          the development test split, from NORMA's own sequences.
-                    Its `from data import ...` lives inside main() for the same
-                    reason.  Predictions are raw results, so it writes
-                    results/raw/<cohort>/forecast_baselines.parquet -- the same
-                    basename, shape and per-cohort folder 05_forecasting uses
-                    for the external cohorts, one column per model.
-
-                    The `combined` development split pools two cohorts, so it
-                    is SPLIT BY SOURCE on the way out: one parquet under
-                    results/raw/ehrshot/ and one under results/raw/mimiciv/,
-                    never a pooled `dev` file.  Each sequence carries its own
-                    source, so this needs no pid lookup.  Read back by
-                    model/evaluate.py via baselines_path() / read_baselines().
-
 Usage:
     python forecast.py --split test --workers 16 --with_state
     python forecast.py --split test --max_sequences 3000 --suffix _smoke
@@ -47,19 +15,10 @@ PLAIN = ['mean', 'last', 'arima', 'arima_raw']
 STATE_INFORMED = ['mean_state', 'last_state', 'arimax', 'arimax_raw']
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # Estimators
-# ═══════════════════════════════════════════════════════════════════════════
 
 def arima_forecast(x, exog_h=None, exog_next=None, order=ORDER):
-    """One-step ARIMA forecast, or NaN.
-
-    The fit is wrapped in catch_warnings because a 4-5 point lab history routinely
-    fails to converge and statsmodels emits a ConvergenceWarning per fit -- hundreds
-    of thousands of them on a real cohort, which on a remote console costs more time
-    than the fitting.  The module-level filterwarnings does not hold: statsmodels
-    resets the filters itself during the fit.  A non-converged fit is not an error
-    here; `_sane` already rejects the forecasts that come back divergent."""
+    """One-step ARIMA forecast, or NaN."""
     from statsmodels.tsa.arima.model import ARIMA
     if len(x) < sum(order):
         return np.nan
@@ -89,11 +48,7 @@ def _sane(pred, x_h):
 
 
 def forecast_pair(x_h, s_h, s_next, with_state=False, skip_arima=False):
-    """x_h: history values; s_h: history states in {0,1,2}; s_next: realized future state.
-
-    'arima' is the guarded forecast (raw if sane, else last value); 'arima_raw'
-    and 'arima_fallback' make the guard transparent.  Same for 'arimax', which
-    falls back to the guarded 'arima'."""
+    """x_h: history values; s_h: history states in {0,1,2}; s_next: realized future state."""
     x_h = np.asarray(x_h, dtype=float)
     s_h = np.asarray(s_h, dtype=int)
     out = {
@@ -124,12 +79,7 @@ def forecast_pair(x_h, s_h, s_next, with_state=False, skip_arima=False):
     return out
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# Development split runner
-# ═══════════════════════════════════════════════════════════════════════════
-# Scores NORMA's own three-state test split.  The archived Nov-2025 predictions
-# (_archive/baselines_legacy_2026-09-08/) used the two-state split over a
-# per-analyte subsample, so their test rows were not NORMA's test rows.
+# Development split runner Scores NORMA's own three-state test split.
 
 import os   # noqa: E402  runner-only; forecast_pair above needs neither
 import sys  # noqa: E402
@@ -138,14 +88,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.dirname(HERE)
 ROOT_DIR = os.path.dirname(MODEL_DIR)
 RAW_RESULTS_DIR = os.path.join(ROOT_DIR, 'results', 'raw')
-# The stage prefix is baked in rather than taken from datasets.stage_file(): this
-# is stage 05's analysis run on the dev split, and it must land on exactly the
-# name 05_forecasting.py's result_path() produces for the external cohorts.
+# The stage prefix is baked in rather than taken from datasets.stage_file(): this is stage 05's
+# analysis run on the dev split, and it must land on exactly the name 05_forecasting.py's
+# result_path()...
 BASELINES_FILE = '05_forecast_baselines.parquet'
 EXCLUDE_CODES = {'CRP', 'GGT', 'LDH', 'PT'}   # too sparse in the dev split to summarise
 
-# The cohorts the `combined` development split pools, as `source` is spelled in
-# the sequences pickle -- and, since 2026-09-08, as results/raw/ is keyed.
+# The cohorts the `combined` development split pools, as `source` is spelled in the sequences
+# pickle -- and, since 2026-09-08, as results/raw/ is keyed.
 DEV_COHORTS = ('ehrshot', 'mimiciv')
 
 # One column per model in the parquet, plus these keys.

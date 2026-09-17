@@ -1,11 +1,4 @@
-"""
-Evaluate NORMA forecasting performance.
-
-Two modes:
-  1. Called from train.py during training → saves per-run metrics to logs/
-  2. Standalone → compares NORMA runs + baselines → results/raw/dev/
-     (driven by scripts/jobs/run_eval_forecasting.sh and
-     model/jobs/run_eval_cohorts_common.sh; the stage scripts do not call it)
+"""Evaluate NORMA forecasting performance.
 
 Usage:
     python evaluate.py
@@ -58,7 +51,6 @@ NORMA_RUNS = {
 }
 
 # Leak-free forecasting variants produced by predict_states.py (Referee 3, minor 1).
-# 'oracle' is the original predictions_combined.csv, query = realized future state.
 STATE_VARIANTS = {
     'oracle':        ('oracle',        'predictions_combined.csv'),
     'normal':        ('normal-fixed',  'predictions_combined_normal.csv'),
@@ -66,11 +58,8 @@ STATE_VARIANTS = {
     'marginal_freq': ('marginal-freq', 'predictions_combined_marginal_freq.csv'),
 }
 
-# Baselines built on NORMA's three-state split by baselines/forecast.py, which
-# writes results/raw/<cohort>/forecast_baselines.parquet -- one file per cohort,
-# one column per model.  The archived Nov-2025 files
-# (_archive/baselines_legacy_2026-09-08/) used a different split and a
-# per-analyte subsample, so their test rows were not NORMA's test rows.
+# Baselines built on NORMA's three-state split by baselines/forecast.py, which writes
+# results/raw/<cohort>/forecast_baselines.parquet -- one file per cohort, one column per model.
 from baselines.forecast import read_baselines, DEV_COHORTS   # noqa: E402
 
 BASELINE_FILES = {          # display name -> the model's column
@@ -89,9 +78,9 @@ STATE_BASELINE_FILES = {
 
 CID_TO_CODE = {i: name for i, name in enumerate(REFERENCE_INTERVALS.keys())}
 
-# The development split pools two sources (EHRSHOT and MIMIC-IV); the prediction
-# files only carry pid, so the source is recovered from the sequences pickle and
-# cached here (pids do not overlap between the two sources).
+# The development split pools two sources (EHRSHOT and MIMIC-IV); the prediction files only carry
+# pid, so the source is recovered from the sequences pickle and cached here (pids do not
+# overlap...
 PID_SOURCE_CACHE = os.path.join(ROOTDIR, 'model', 'predictions', 'pid_source.csv')
 SEQUENCES_PKL = os.path.join(ROOTDIR, '..', 'data', 'processed', 'combined_sequences_v2.pkl')
 SOURCE_SPLIT = {'ehrshot': 'ehrshot', 'mimiciv': 'mimiciv'}   # source in pickle -> split label
@@ -223,23 +212,16 @@ def evaluate_and_save_metrics(predictions_df, run_id, exclude=None,
     return overall
 
 
-# --- Calibration of the predicted conditional distributions ---
-#
-# Referee 1 asked whether the 95% interval really covers 95% of realized values,
-# whether the predicted quantiles are calibrated, how wide the intervals are, and
-# whether the normal-conditioned interval agrees with the population interval.
-# Everything below is computed per analyte and per queried future state.
+# --- Calibration of the predicted conditional distributions --- Referee 1 asked whether the 95%
+# interval really covers 95% of realized values, whether the predicted quantiles are calibrated,
+# how...
 
 STATE_NAMES = {0: 'low', 1: 'normal', 2: 'high'}
 NOMINAL_QUANTILES = {'q025': 0.025, 'q25': 0.25, 'q50': 0.50, 'q75': 0.75, 'q975': 0.975}
 
 
 def pop_ri_bounds(code):
-    """Population reference interval for an analyte.
-
-    predictions_combined.csv carries no sex column, so where male and female
-    bounds differ we use their midpoint. Affects HGB, HCT, RBC and CRE.
-    """
+    """Population reference interval for an analyte."""
     ref = REFERENCE_INTERVALS.get(CODE_TO_TEST_NAME.get(code, code))
     if ref is None:
         return None, None
@@ -257,14 +239,7 @@ def interval_bounds(df, is_quantile):
 
 
 def calibration_by_analyte(df, is_quantile, exclude=None, split='test'):
-    """One row per (analyte, queried state).
-
-    coverage95  fraction of realized values inside the 95% interval (nominal 0.95)
-    width       mean interval width
-    width_rel   mean width divided by the population reference interval width
-    inside_pop  fraction of the interval that falls within the population interval
-    q*_emp      fraction of realized values below each predicted quantile
-    """
+    """One row per (analyte, queried state)."""
     exclude = exclude or EXCLUDE_CODES
     d = df[(df['split'] == split) & (~df['code'].isin(exclude))].copy()
     lo, hi = interval_bounds(d, is_quantile)
@@ -306,14 +281,7 @@ def calibration_summary(by_analyte):
 
 
 def cross_state_coverage(run_id, max_sequences=None, split='test', exclude=None, seed=42):
-    """Coverage of the s-conditioned interval for values whose realized state is s'.
-
-    In deployment the future state is unknown, so NORMA_RI always queries "normal".
-    The diagonal of this table is ordinary calibration; the off-diagonal says whether
-    a normal-conditioned interval correctly excludes values that turn out abnormal.
-
-    Returns a tidy frame with one row per (queried state, realized state).
-    """
+    """Coverage of the s-conditioned interval for values whose realized state is s'."""
     import torch
     from utils import load_checkpoint, create_model, run_model
     from data import load_and_split_data, load_panel, TimeSeriesDataset, collate_fn
@@ -442,7 +410,6 @@ def load_baseline_predictions(name):
     return 'x_next', pred_col, df
 
 
-
 def evaluate_all(run_ids, output_dir, n_bootstrap=1000, exclude=None, suffix=None,
                  metrics_to_agg=None, skip_baselines=False, variants=('oracle',),
                  by_state=False, state_baselines=False, common_rows=False, by_source=False):
@@ -486,8 +453,8 @@ def evaluate_all(run_ids, output_dir, n_bootstrap=1000, exclude=None, suffix=Non
                 b.insert(0, 'model', label)
                 all_by_analyte.append(b)
         if by_state and 's_next' in df.columns:
-            # split the analysis by the realized future state so the reader can see
-            # where a normal-fixed query is *meant* to miss
+            # split the analysis by the realized future state so the reader can see where a
+            # normal-fixed query is *meant* to miss
             for state, g in df.groupby('s_next'):
                 b = bootstrap_metrics_df(
                     g, y_col=y_col, pred_col=pred_col, exclude=exclude,

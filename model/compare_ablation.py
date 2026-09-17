@@ -1,20 +1,7 @@
 #!/usr/bin/env python
 """Compare the covariate-ablation arms against the quantile baseline.
 
-For every run that has predictions_combined.csv it computes, on the test split:
-  * per-analyte MAE / R2 of the median, and the 95%-interval coverage, relative
-    width and overlap with the population interval (calibration_by_analyte)
-  * the same restricted to queries conditioned on the *normal* state (the
-    reference-interval use case)
-and reports each arm as absolute values and as deltas vs the baseline.
-
-Outputs (logs/ablation/):
-  summary.csv        one row per arm (medians across analytes + n analytes improved)
-  by_analyte.csv     one row per (arm, analyte)
-  *.png              MAE / coverage / width bars, per-analyte delta heatmap
-and, unless --no_wandb, a W&B run "ablation-summary" in group covariate-ablation
-with the tables and figures so the arms can be browsed next to their training curves.
-
+Usage:
     python compare_ablation.py                       # all arms present
     python compare_ablation.py --runs q_age q_age_set
 """

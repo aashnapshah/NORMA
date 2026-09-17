@@ -1,21 +1,5 @@
 """Run a NORMA checkpoint over a dataloader and build a prediction frame.
 
-Two entry points, one pass over the batch:
-
-  get_predictions()     query token = the realized future state, one row per
-                        (patient, analyte, draw). What train.py writes as
-                        predictions_{source}.csv after the last epoch.
-  predict_all_states()  query token set to EVERY state, one column block per
-                        state. Referee 3 (minor 1) observed that the oracle
-                        query above uses a state the baselines never see;
-                        derive_variants() turns this into the leak-free
-                        variants (normal-fixed and two marginalisations).
-
-Was predict.py and predict_states.py, which carried two implementations of the
-same batch-to-frame loop -- the first row by row through a per-scalar
-`float(x[i].item() if hasattr(x[i], "item") else x[i])` idiom repeated thirteen
-times, the second vectorised.
-
 Usage:
     python inference.py --run_id q_age_set                  # all states + variants
     python inference.py --run_id q_age_set --derive_only
@@ -46,28 +30,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 def head_outputs(model, batch, is_quantile, s_next=None, span=None, ref_low=None,
                  denorm_quantiles=True):
-    """Model outputs for one queried state, as flat numpy arrays.
-
-    s_next=None queries the realized state carried in the batch. span/ref_low
-    denormalise back to the analyte's units when the model was trained with
-    --normalize.
-
-    denorm_quantiles exists only to preserve a divergence between the two
-    callers this module merged: get_predictions() denormalised the Gaussian
-    head but not the quantile head, while the all-states path denormalised
-    both. Every run in model/logs/ has normalize=False, so the two agree on
-    every published number; kept explicit rather than silently picking one.
-    """
+    """Model outputs for one queried state, as flat numpy arrays."""
     out = run_model(model, batch, s_next=s_next)
     if is_quantile:
         arr = out.cpu().numpy().astype(float)                    # (B, 5)
         if span is not None and denorm_quantiles:
             arr = arr * span[:, None] + ref_low[:, None]
         # sigma ~ (q97.5 - q2.5) / 3.92, the normal-quantile width.
-        # Computed in float64 (arr is widened above). get_predictions used to do
-        # this in the tensor's float32, so a regenerated predictions_*.csv has
-        # log_var differing by <5e-7 -- a 2e-7 relative change in sigma. mu, the
-        # five quantiles and x_next are bit-identical: they involve no arithmetic.
         res = {'mu': arr[:, 2],
                'log_var': 2.0 * np.log((arr[:, 4] - arr[:, 0]) / 3.92 + 1e-8)}
         res.update({col: arr[:, k] for k, col in enumerate(QUANTILE_COLS)})
@@ -88,9 +57,7 @@ def _denorm_factors(batch, normalize):
     return batch['ref_high'].view(-1).cpu().numpy() - ref_low, ref_low
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Oracle query: the realized future state (training-time predictions)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def get_predictions(model, device, loader, split_name, normalize=False):
     """One row per query, with the query token at the realized future state."""
@@ -147,11 +114,7 @@ def predict(model, device, train_loader, val_loader, test_loader, normalize=Fals
 
 
 def load_predictions(run_ids, base, source):
-    """(path, target col, prediction col) per run_id, for interactive comparison.
-
-    `base` is a cohort key for the forecasting baselines: they live in
-    results/raw/<cohort>/05_forecast_baselines.parquet, one column per model
-    (model/baselines/forecast.py)."""
+    """(path, target col, prediction col) per run_id, for interactive comparison."""
     outputs = {}
     for run_id in run_ids:
         if run_id in ['Mean', 'ARIMA', 'last']:
@@ -168,9 +131,7 @@ def load_predictions(run_ids, base, source):
     return outputs
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Every-state query: the leak-free variants
-# ─────────────────────────────────────────────────────────────────────────────
 
 class LengthBucketSampler(Sampler):
     """Batch sequences of similar length together so padding stays cheap."""
@@ -193,8 +154,8 @@ def predict_all_states(run_id, split='test', source='combined', max_sequences=No
     """Query the model at every state; returns (frame, is_quantile, nstates)."""
     log_dir = log_dir or os.path.join(HERE, 'logs')
     device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # Use the weights behind the published predictions file (see
-    # states.PUBLISHED_CHECKPOINT) so the oracle variant reproduces it.
+    # Use the weights behind the published predictions file (see states.PUBLISHED_CHECKPOINT) so
+    # the oracle variant reproduces it.
     ckpt, hp = load_checkpoint(log_dir, run_id, best=(checkpoint == 'best'),
                                device='cpu', quiet=True)
     print(f'{run_id}: checkpoint_{checkpoint} (epoch {ckpt.get("epoch")})')

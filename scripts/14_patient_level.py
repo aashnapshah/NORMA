@@ -5,51 +5,9 @@ each analyte's abnormal flag under one RI method (first measurement within
 and sex.  Two designs answer "does a personalised interval improve patient-level
 risk stratification?":
 
-  refit   a penalised Cox model (and optionally a gradient-boosted survival model)
-          is trained PER METHOD on that method's flags, per outcome x panel; C-index
-          with bootstrap CI and IPCW / cumulative-dynamic AUC at the cohort's eval
-          windows, on all test patients and on the Pop_RI-normal ones; per-feature
-          HRs (BH-FDR); NRI of each method against Pop_RI from the two models' risk
-          scores (high risk = above the Pop_RI model's median)
-          -> 14_concordance.csv (model_type: penalized_cox | swap),
-             14_multi_analyte_importance.csv, 14_nri.csv
-             (design = refit | swap),
-             14_multi_analyte_predictions.csv
-
-  swap    the model is held FIXED: one Cox trained on Pop_RI flags, scored with each
-          method's flags swapped in (same patients, same weights), so only the
-          classification changes; C-index per method and a continuous NRI on the
-          number of flagged analytes
-          -> 14_concordance.csv rows with model_type="swap" (NRI rows go to 14_nri.csv,
-             design="swap")
-
---common-analytes restricts both to analytes every method covers (Cohen skips
-analytes with too little healthy training data); --min-coverage 0.75 is what the
-pipeline uses (requiring 100% of the panel within 48 h leaves zero eICU patients).
-
 Usage:
     python 14_patient_level.py --dataset eicu --panels all --no-gbm --no-bootstrap --common-analytes
     python 14_patient_level.py --dataset eicu --only swap --common-analytes
-
-Figures and tables
-------------------
-Patient-level models that use ALL of a patient's abnormal flags at once, per
-reference-interval method. Two designs answer two questions:
-
-  refit   (14_patient_level.py, refit step)  a penalised Cox model is trained per method on that
-                            method's flags — does the method's flag set carry
-                            more prognostic information?
-  swap    (14_patient_level.py, swap step)   one Cox model is trained on Pop_RI flags and scored
-                            with each method's flags — holding the model fixed,
-                            do the reclassified patients move in the right direction?
-
-Both figures are cohort composites: one row per validation cohort, one column
-per design. A cohort whose results are not in yet renders as a pending row.
-
-  cindex        C-index per outcome and method: refit | swap | refit scored on
-                patients whose index values are inside Pop_RI
-  nri           net reclassification improvement vs Pop_RI per outcome: refit | swap
-  *_norma       the same with the NORMA covariate arms as the methods
 """
 import bootstrap  # noqa: F401
 
@@ -70,11 +28,7 @@ from datasets import already_done, EXCLUDE_LABS, PANELS, add_dataset_args, get_d
 
 
 def import_sksurv():
-    """Bind the survival-forest names the refit and swap steps use.
-
-    make_figures.py imports this file for its FIGURES registry, and the plotting
-    environment has no sksurv -- only the analysis needs it -- so the import
-    happens when the analysis runs (main()), not when the module is loaded."""
+    """Bind the survival-forest names the refit and swap steps use."""
     global GradientBoostingSurvivalAnalysis, concordance_index_censored
     global concordance_index_ipcw, cumulative_dynamic_auc
     from sksurv.ensemble import GradientBoostingSurvivalAnalysis
@@ -84,8 +38,8 @@ from metrics import hours_from_admit
 
 warnings.filterwarnings("ignore")
 
-# Reuse is keyed on these: a step whose files are all present is skipped
-# unless --force (datasets.already_done).
+# Reuse is keyed on these: a step whose files are all present is skipped unless --force
+# (datasets.already_done).
 STEP_OUTPUTS = {
     "refit": ["nri.csv"],
     "swap": ["concordance.csv"],
@@ -94,9 +48,7 @@ STEPS = ("refit", "swap")
 REF_METHOD = "PopRI"
 
 
-# =============================================================================
 # shared: patient-wide frames, splits, survival helpers
-# =============================================================================
 
 def common_analytes(classified, analytes, methods):
     """Analytes for which EVERY method produced intervals.  Patient-level models pool
@@ -293,9 +245,7 @@ def load_classified(ds, args):
     return classified, analytes
 
 
-# =============================================================================
 # refit
-# =============================================================================
 
 def fit_gbm(train_df, test_df, features, eval_windows):
     """GradientBoostingSurvivalAnalysis -> (metrics, importances, window_metrics) or Nones."""
@@ -558,8 +508,8 @@ def refit_models(ds, classified, analytes, args, results_dir):
                                   if f"abnormal_{a}" in patients.columns)
                 if len(abn_cols) < 2:
                     continue
-                # unmeasured analytes (allowed by --min-coverage < 1) enter as "not flagged",
-                # as in the swap design; lifelines rejects NaN features
+                # unmeasured analytes (allowed by --min-coverage < 1) enter as "not flagged", as
+                # in the swap design; lifelines rejects NaN features
                 train_df = train_df.copy()
                 test_df = test_df.copy()
                 train_df[abn_cols] = train_df[abn_cols].fillna(0)
@@ -597,9 +547,9 @@ def refit_models(ds, classified, analytes, args, results_dir):
 
 
 def run_refit(ds, classified, analytes, args, results_dir):
-    # The models are refit only when there are no saved predictions to score, or
-    # --force asks for it: retraining every panel to write back predictions that
-    # are already on disk is the expensive half of this stage.
+    # The models are refit only when there are no saved predictions to score, or --force asks for
+    # it: retraining every panel to write back predictions that are already on disk is the
+    # expensive half of...
     path = datasets.stage_path(results_dir, "multi_analyte_predictions.csv", "14_patient_level")
     if not args.force and os.path.exists(path):
         preds = pd.read_csv(path)
@@ -617,9 +567,7 @@ def run_refit(ds, classified, analytes, args, results_dir):
     print(f"\n  Saved {len(nri)} NRI rows -> {path}")
 
 
-# =============================================================================
 # swap
-# =============================================================================
 
 def count_nri(ref_counts, new_counts, events, bootstrap=True):
     """Continuous NRI on abnormal-analyte counts: up = the new method flags MORE
@@ -768,9 +716,7 @@ def run_swap(ds, classified, analytes, args, results_dir):
         print("\n  No NRI results produced")
 
 
-# =============================================================================
 # main
-# =============================================================================
 
 def main():
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -793,8 +739,6 @@ def main():
     ds = get_dataset(args)
     results_dir = ds.setup_output()
     # Reuse is the default: drop any step whose output is already written.
-    # This runs BEFORE the classification is loaded, so a fully-cached run
-    # costs nothing rather than paying the read and then skipping.
     todo = [s for s in args.only
             if not already_done(args, results_dir, *STEP_OUTPUTS[s], label=s)]
     if not todo:
@@ -808,9 +752,7 @@ def main():
         run_swap(ds, classified, analytes, args, results_dir)
 
 
-# ═════════════════════════════════════════════════════════════════════════
 # Figures and tables
-# ═════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 
@@ -841,9 +783,7 @@ def _top_legend(fig, handles, H):
                handlelength=1.2, handletextpad=0.4, columnspacing=1.2)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # loading
-# ─────────────────────────────────────────────────────────────────────────────
 def _refit_cindex(ds, subset):
     """Penalised Cox on the full panel, all follow-up. subset 'all' = scored on
     every test patient; 'all_eval_pop_normal' = scored only on patients whose
@@ -915,9 +855,7 @@ def _outcomes_present(ds, frames):
     return [o for o in OUTCOMES.get(ds, []) if o in have]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # cindex: rows = cohorts, columns = refit | swap | refit scored inside Pop_RI
-# ─────────────────────────────────────────────────────────────────────────────
 def _cindex_bars(ax, sub, outcomes, methods):
     x = np.arange(len(outcomes))
     n_m = len(methods)
@@ -991,9 +929,7 @@ def fig_cindex():
     return {None: fig}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # nri: rows = cohorts, columns = refit | swap
-# ─────────────────────────────────────────────────────────────────────────────
 def _nri_dots(ax, sub, outcomes, methods):
     n_m = len(methods)
     step = 0.7 / max(n_m - 1, 1)
@@ -1071,17 +1007,13 @@ FIGURES = [
 ]
 
 
-# ══════════════════════════════════════════════════════════════════════════
 # Tables — 14_patient_level: table_* definitions and registry slice.
-# ══════════════════════════════════════════════════════════════════════════
 
 from figlib import *  # noqa: F401,F403
 from figlib import RI_LABELS, _bm_method
 
-# save_table()'s first argument is the folder the table is written into,
-# so it must match this directory name. Keeping the literal here (rather
-# than only in the TableSpec) is what drifted during the restructure.  # noqa: F401,F403
-
+# save_table()'s first argument is the folder the table is written into, so it must match this
+# directory name.
 
 def table_nri():
     """Both designs of nri.csv: Cox refit per method ("refit", Per_RI-normal
