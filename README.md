@@ -13,6 +13,7 @@ To promote transparency, we publicly release the model, code, and an interactive
 - Interactive web app: [norma-tpy0.onrender.com](https://norma-tpy0.onrender.com/)
 - Model weights: [huggingface.co/aashnaps/NORMA](https://huggingface.co/aashnaps/NORMA)
 - The full paper is available at [arXiv:2605.18701](https://arxiv.org/abs/2605.18701).
+- Maintained by [Aashna P. Shah](https://aashna-shah.com/)
 
 ## 1. System requirements
 
